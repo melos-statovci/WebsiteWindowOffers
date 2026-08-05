@@ -18,6 +18,57 @@ export interface Client {
 
 export type OfferStatus = "Draft" | "Dërguar" | "Pranuar" | "Refuzuar";
 
+export type ProductType =
+  | "Dritare"
+  | "Derë Hyrje"
+  | "Derë"
+  | "Rreshqitëse"
+  | "Roletë";
+
+export type ModelType =
+  | "custom"
+  | "njeshe"
+  | "dyshe-v"
+  | "treshe-v"
+  | "katershe-v"
+  | "transom-top-1-1"
+  | "transom-top-1-2"
+  | "transom-top-2-2"
+  | "transom-top-1-3"
+  | "transom-top-3-3"
+  | "transom-bot-1-1"
+  | "transom-bot-2-1"
+  | "transom-bot-2-2"
+  | "transom-bot-3-1"
+  | "transom-bot-3-3"
+  | "trekendesh"
+  | "trapez"
+  | "pesekendesh"
+  | "hark";
+
+export type ProfileColor = "white" | "white_color" | "color_color";
+
+export interface Shtese {
+  id: string;
+  side: "Majtas" | "Djathtas" | "Lart" | "Poshtë";
+  widthMm: number;
+}
+
+export interface WindowConfig {
+  productType: ProductType;
+  modelType: ModelType;
+  widthMm: number;
+  heightMm: number;
+  systemId: string;
+  color: ProfileColor;
+  mechanismId: string;
+  glassId: string;
+  glassDesc?: string;
+  roleta: boolean;
+  roletaBoxMm?: number;
+  shtesa: Shtese[];
+}
+
 export interface OfferItem {
   id: string;
   kind: "Dritare" | "Derë" | "Rrëshqitëse" | "Roletë";
@@ -26,6 +77,8 @@ export interface OfferItem {
   heightMm: number;
   qty: number;
   unitPrice: number;
+  /** Full window-configurator state (present for configurator-built items). */
+  config?: WindowConfig;
 }
 
 export interface Project {

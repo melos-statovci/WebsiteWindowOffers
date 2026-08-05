@@ -6,7 +6,7 @@ import {
   X, Undo2, Printer, Plus, ArrowLeft, MoreVertical, Copy, Pencil, Trash2, FileDown, Check,
 } from "lucide-react";
 import { Button, Avatar, Toggle, EmptyState, Badge } from "@/components/ui/kit";
-import { ProductModal } from "@/components/projects/product-modal";
+import { ProductConfigurator } from "@/components/projects/product-configurator";
 import { useStore } from "@/lib/store";
 import { eur, initials } from "@/lib/format";
 import { projectNet } from "@/lib/selectors";
@@ -45,10 +45,13 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
   const duplicateItem = useStore((s) => s.duplicateProjectItem);
   const setOption = useStore((s) => s.setProjectOption);
 
+  const pricing = useStore((s) => s.pricing);
   const [step, setStep] = useState<Step>("produkti");
-  const [productOpen, setProductOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<OfferItem | null>(null);
+  const [configuring, setConfiguring] = useState<null | "new" | string>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
+
+  const defaultSystemId =
+    pricing.systems.find((s) => s.name === project?.profileSystem)?.id ?? pricing.systems[0]?.id ?? "s1";
 
   if (!project) {
     return (
@@ -64,12 +67,13 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
   const net = projectNet(project);
   const vat = net * project.vatRate;
 
-  const openAdd = () => { setEditingItem(null); setProductOpen(true); };
-  const openEdit = (it: OfferItem) => { setEditingItem(it); setProductOpen(true); setMenuId(null); };
-  const submitProduct = (data: Omit<OfferItem, "id">) => {
-    if (editingItem) { updateItem(project.id, editingItem.id, data); toast("Produkti u përditësua."); }
+  const editingItem = configuring && configuring !== "new" ? project.items.find((i) => i.id === configuring) ?? null : null;
+  const openAdd = () => { setConfiguring("new"); setMenuId(null); };
+  const openEdit = (it: OfferItem) => { setConfiguring(it.id); setMenuId(null); };
+  const saveProduct = (data: Omit<OfferItem, "id">, id?: string) => {
+    if (id) { updateItem(project.id, id, data); toast("Produkti u përditësua."); }
     else { addItem(project.id, data); toast("Produkti u shtua."); }
-    setProductOpen(false);
+    setConfiguring(null);
   };
   const removeProduct = async (it: OfferItem) => {
     setMenuId(null);
@@ -94,14 +98,16 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
 
         <div className="flex items-center gap-2">
           {step === "produkti" ? (
-            <button onClick={openAdd} className="grid size-9 place-items-center rounded-full bg-indigo-600 text-white hover:bg-indigo-500" aria-label="Shto produkt"><Plus className="size-5" /></button>
+            !configuring && (
+              <button onClick={openAdd} className="grid size-9 place-items-center rounded-full bg-indigo-600 text-white hover:bg-indigo-500" aria-label="Shto produkt"><Plus className="size-5" /></button>
+            )
           ) : (
             <button onClick={() => printOffer(project, company)} className="grid size-9 place-items-center rounded-full bg-slate-200/70 text-slate-700 hover:bg-slate-300" aria-label="Printo ofertën"><Printer className="size-5" /></button>
           )}
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-2xl px-4 pb-16">
+      <div className={cn("mx-auto w-full px-4 pb-16", step === "produkti" && configuring ? "max-w-6xl" : "max-w-2xl")}>
         {step === "detajet" && (
           <div className="space-y-4">
             <button onClick={() => setStep("produkti")} className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900">
@@ -139,7 +145,14 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
         )}
 
         {step === "produkti" && (
-          project.items.length === 0 ? (
+          configuring ? (
+            <ProductConfigurator
+              initial={editingItem}
+              defaultSystemId={defaultSystemId}
+              onSave={saveProduct}
+              onCancel={() => setConfiguring(null)}
+            />
+          ) : project.items.length === 0 ? (
             <div className="rounded-2xl border border-slate-200 bg-slate-100">
               <EmptyState icon={Plus} title="Asnjë produkt ende" description="Shtoni produktin e parë në ofertë."
                 action={<Button onClick={openAdd}><Plus className="size-4" /> Shto produkt</Button>} />
@@ -215,8 +228,6 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
           </div>
         )}
       </div>
-
-      <ProductModal open={productOpen} onClose={() => setProductOpen(false)} onSubmit={submitProduct} initial={editingItem} />
     </div>
   );
 }
