@@ -2,16 +2,21 @@ import type {
   Client,
   Project,
   Invoice,
+  Payment,
+  Note,
+  User,
+  AppNotification,
   Device,
   LoginEvent,
   PricingSystem,
   CatalogRow,
+  CompanyProfile,
 } from "@/types";
 
 // ---------------------------------------------------------------------------
 // Company / account (fictional — no real PII from the source account)
 // ---------------------------------------------------------------------------
-export const company = {
+export const company: CompanyProfile = {
   name: "Proferto Production sh.p.k.",
   address: "Zona Industriale, 10000 Prishtinë",
   phone: "+383 49 123 456",
@@ -25,6 +30,9 @@ export const company = {
   iban: "XK05 1100 0000 0012 3456",
   marginDefault: 25,
   vatDefault: 18,
+};
+
+export const account = {
   plan: "SOLO" as const,
   trialEndsAt: "2026-08-16",
   trialDaysLeft: 11,
@@ -38,23 +46,15 @@ export const currentUser = {
   sidebarRole: "Operator",
 };
 
+export const users: User[] = [
+  { id: "u1", name: "Milaim Hasani", email: "milaim@proferto-demo.io", role: "PRONAR" },
+];
+
 // ---------------------------------------------------------------------------
-// Clients
+// Clients (identity only — financials derived from projects/invoices/payments)
 // ---------------------------------------------------------------------------
 export const clients: Client[] = [
-  {
-    id: "xtlaj7yzg",
-    name: "test",
-    type: "Privat",
-    createdAt: "2026-08-02",
-    totalValue: 398.25,
-    paid: 563.93,
-    debt: 0,
-    offersTotal: 1,
-    offersAccepted: 1,
-    offersRejected: 0,
-    paymentsCount: 1,
-  },
+  { id: "xtlaj7yzg", name: "test", type: "Privat", createdAt: "2026-08-02" },
   {
     id: "arbenkrq1",
     name: "Arben Krasniqi",
@@ -62,14 +62,8 @@ export const clients: Client[] = [
     phone: "+383 44 765 432",
     email: "arben.krasniqi@gmail.com",
     address: "Rr. Bill Clinton 24, Prishtinë",
+    city: "Prishtinë",
     createdAt: "2026-06-10",
-    totalValue: 4248.0,
-    paid: 2124.0,
-    debt: 2124.0,
-    offersTotal: 2,
-    offersAccepted: 1,
-    offersRejected: 0,
-    paymentsCount: 1,
   },
   {
     id: "ndertimic2",
@@ -78,15 +72,9 @@ export const clients: Client[] = [
     phone: "+383 45 220 110",
     email: "zyra@beqiri-ndertim.com",
     address: "Rr. Ukshin Hoti 10, Ferizaj",
+    city: "Ferizaj",
     nui: "810998877",
     createdAt: "2026-05-21",
-    totalValue: 12850.0,
-    paid: 9850.0,
-    debt: 3000.0,
-    offersTotal: 5,
-    offersAccepted: 4,
-    offersRejected: 1,
-    paymentsCount: 6,
   },
   {
     id: "lumturije3",
@@ -95,14 +83,8 @@ export const clients: Client[] = [
     phone: "+383 49 887 221",
     email: "l.gashi@hotmail.com",
     address: "Lagjja Kalabria, Prishtinë",
+    city: "Prishtinë",
     createdAt: "2026-07-14",
-    totalValue: 1890.0,
-    paid: 1890.0,
-    debt: 0,
-    offersTotal: 1,
-    offersAccepted: 1,
-    offersRejected: 0,
-    paymentsCount: 2,
   },
   {
     id: "eurohome4",
@@ -111,20 +93,14 @@ export const clients: Client[] = [
     phone: "+383 38 601 550",
     email: "sales@eurohome.io",
     address: "Rr. Nëna Terezë 2, Gjilan",
+    city: "Gjilan",
     nui: "811556677",
     createdAt: "2026-04-03",
-    totalValue: 7420.0,
-    paid: 3710.0,
-    debt: 3710.0,
-    offersTotal: 3,
-    offersAccepted: 2,
-    offersRejected: 0,
-    paymentsCount: 3,
   },
 ];
 
 // ---------------------------------------------------------------------------
-// Projects / offers
+// Projects / offers (total derived from items via selectors)
 // ---------------------------------------------------------------------------
 export const projects: Project[] = [
   {
@@ -134,7 +110,6 @@ export const projects: Project[] = [
     clientId: "xtlaj7yzg",
     clientName: "test",
     createdAt: "2026-08-02",
-    total: 398.25,
     status: "Pranuar",
     archived: false,
     profileSystem: "Dritare PVC 70 mm (shembull)",
@@ -153,7 +128,6 @@ export const projects: Project[] = [
     clientId: "arbenkrq1",
     clientName: "Arben Krasniqi",
     createdAt: "2026-06-10",
-    total: 4248.0,
     status: "Pranuar",
     archived: false,
     profileSystem: "Dritare PVC 82 mm premium (shembull)",
@@ -174,7 +148,6 @@ export const projects: Project[] = [
     clientId: "ndertimic2",
     clientName: "Ndërtimi Beqiri SH.P.K.",
     createdAt: "2026-05-21",
-    total: 6820.5,
     status: "Dërguar",
     archived: false,
     profileSystem: "Dritare/Derë ALU 70 me urë termike (shembull)",
@@ -192,14 +165,13 @@ export const projects: Project[] = [
     clientId: "lumturije3",
     clientName: "Lumturije Gashi",
     createdAt: "2026-07-14",
-    total: 1890.0,
     status: "Pranuar",
     archived: false,
     profileSystem: "Rrëshqitëse Smart-Slide (shembull)",
     profileColor: "Bardhë - Bardhë",
     vatRate: 0.18,
     items: [
-      { id: "c1", kind: "Rrëshqitëse", label: "Rrëshqitëse Smart-Slide", widthMm: 3000, heightMm: 2300, qty: 1, unitPrice: 1890.0 },
+      { id: "c1", kind: "Rrëshqitëse", label: "Rrëshqitëse Smart-Slide", widthMm: 3000, heightMm: 2300, qty: 1, unitPrice: 1601.69 },
     ],
   },
   {
@@ -209,20 +181,19 @@ export const projects: Project[] = [
     clientId: "eurohome4",
     clientName: "Euro Home Interiors",
     createdAt: "2026-03-19",
-    total: 2210.0,
     status: "Refuzuar",
     archived: true,
     profileSystem: "Derë PVC 70 mm (shembull)",
     profileColor: "Bardhë - Bardhë",
     vatRate: 0.18,
     items: [
-      { id: "d1", kind: "Derë", label: "Derë banjo", widthMm: 700, heightMm: 2000, qty: 5, unitPrice: 442.0 },
+      { id: "d1", kind: "Derë", label: "Derë banjo", widthMm: 700, heightMm: 2000, qty: 5, unitPrice: 374.58 },
     ],
   },
 ];
 
 // ---------------------------------------------------------------------------
-// Invoices (source list was empty; local mocks demonstrate the detail route)
+// Invoices
 // ---------------------------------------------------------------------------
 export const invoices: Invoice[] = [
   {
@@ -281,10 +252,27 @@ export const invoices: Invoice[] = [
     dueAt: "2026-07-30",
     status: "Draft",
     vatRate: 0.18,
-    lines: [
-      { description: "Rrëshqitëse Smart-Slide", qty: 1, unitPrice: 1890.0 },
-    ],
+    lines: [{ description: "Rrëshqitëse Smart-Slide", qty: 1, unitPrice: 1890.0 }],
   },
+];
+
+// ---------------------------------------------------------------------------
+// Payments (make derived client/dashboard finances coherent)
+// ---------------------------------------------------------------------------
+export const payments: Payment[] = [
+  { id: "pay1", clientId: "xtlaj7yzg", amount: 398.25, date: "2026-08-03", method: "Para në dorë" },
+  { id: "pay2", clientId: "arbenkrq1", invoiceId: "fat-2026-001", amount: 2124.0, date: "2026-06-13", method: "Transfertë bankare" },
+  { id: "pay3", clientId: "lumturije3", amount: 1890.0, date: "2026-07-16", method: "Kartelë" },
+];
+
+export const notes: Note[] = [
+  { id: "n1", clientId: "arbenkrq1", text: "Kërkoi ofertë të re për ballkonin. Preferon ngjyrën antracit.", at: "2026-06-11" },
+];
+
+export const notifications: AppNotification[] = [
+  { id: "nt1", title: "Ofertë e pranuar", body: "Arben Krasniqi pranoi ofertën OF-2026-0142.", at: "2026-06-11", read: false, href: "/clients/arbenkrq1" },
+  { id: "nt2", title: "Faturë në vonesë", body: "FAT-2026-003 (Euro Home Interiors) kaloi afatin e pagesës.", at: "2026-07-17", read: false, href: "/invoices/fat-2026-003" },
+  { id: "nt3", title: "Pagesë e re", body: "U regjistrua një pagesë prej €1.890,00 nga Lumturije Gashi.", at: "2026-07-16", read: true, href: "/clients/lumturije3" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -306,7 +294,7 @@ export const loginHistory: LoginEvent[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Pricing catalogs
+// Pricing catalogs (editable seed)
 // ---------------------------------------------------------------------------
 export const pricingSystems: PricingSystem[] = [
   { id: "s1", name: "Dritare PVC 70 mm (shembull)", brand: "Aluplast", material: "PVC", badges: ["PVC"], category: "Dritare" },
@@ -318,10 +306,10 @@ export const pricingSystems: PricingSystem[] = [
 ];
 
 export const profilePriceRows = [
-  { profile: "Ram (Kasa)", code: "RAM-70", white: 6.2, whiteColor: 8.1, colorColor: 9.4 },
-  { profile: "Krah", code: "KRH-70", white: 7.0, whiteColor: 9.2, colorColor: 10.8 },
-  { profile: "T-Shtyllë", code: "TSH-70", white: 7.6, whiteColor: 9.9, colorColor: 11.5 },
-  { profile: "Adapter", code: "ADP-70", white: 3.1, whiteColor: 4.0, colorColor: 4.7 },
+  { id: "pp1", profile: "Ram (Kasa)", code: "RAM-70", white: 6.2, whiteColor: 8.1, colorColor: 9.4 },
+  { id: "pp2", profile: "Krah", code: "KRH-70", white: 7.0, whiteColor: 9.2, colorColor: 10.8 },
+  { id: "pp3", profile: "T-Shtyllë", code: "TSH-70", white: 7.6, whiteColor: 9.9, colorColor: 11.5 },
+  { id: "pp4", profile: "Adapter", code: "ADP-70", white: 3.1, whiteColor: 4.0, colorColor: 4.7 },
 ];
 
 export const metals: CatalogRow[] = [
@@ -331,10 +319,10 @@ export const metals: CatalogRow[] = [
 ];
 
 export const armingRows = [
-  { component: "Armim Ram", code: "AR-RAM", price: 3.2 },
-  { component: "Armim Krah", code: "AR-KRH", price: 3.6 },
-  { component: "Armim T-Shtyllë", code: "AR-TSH", price: 4.1 },
-  { component: "Armim Adapter", code: "AR-ADP", price: 1.9 },
+  { id: "ar1", component: "Armim Ram", code: "AR-RAM", price: 3.2 },
+  { id: "ar2", component: "Armim Krah", code: "AR-KRH", price: 3.6 },
+  { id: "ar3", component: "Armim T-Shtyllë", code: "AR-TSH", price: 4.1 },
+  { id: "ar4", component: "Armim Adapter", code: "AR-ADP", price: 1.9 },
 ];
 
 export const glass: CatalogRow[] = [
@@ -362,6 +350,31 @@ export const doorModels = [
   { id: "dm2", name: "Model Onyx", mode: "TABELË" as const, basePrice: 780.0 },
   { id: "dm3", name: "Model Terra", mode: "FIKS" as const, basePrice: 540.0 },
 ];
+
+export const accessoryParams: Record<string, string> = {
+  "Dorezë (copë) — vetëm dritare": "4.50",
+  "Llajsne bardhë (€/m)": "0.80",
+  "Llajsne color (€/m)": "1.20",
+  "Lidhëse T-shtylle (copë)": "2.10",
+  "Pragu (copë)": "18.00",
+  "Doreza (copë)": "12.50",
+  "Bravë / mekanizmi i mbylljes (copë)": "22.00",
+  "Menteshat (për copë)": "3.40",
+};
+
+export const productionParams: Record<string, string> = {
+  "Humbja e saldimit në çmim (%)": "3",
+  "Humbja e prerjes ALU (%)": "",
+  "Gjatësia e profilit (m)": "6.5",
+  "Gjatësia e metalit (m)": "6",
+  "Shtesa e saldimit për skaj (mm)": "3",
+  "Trashësia e diskut të sharrës (mm)": "4",
+  "Pastrim skajesh për shufër (mm)": "10",
+  "Mbetja min. e shfrytëzueshme (mm)": "300",
+  "Tarifa e punës (€/h)": "12",
+  "Minuta pune për element (min)": "25",
+  "Shpenzimet e përgjithshme (%)": "8",
+};
 
 // Sample offer used for the "Dizajni i Ofertës" PDF previews
 export const sampleOffer = {

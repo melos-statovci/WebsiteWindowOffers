@@ -1,4 +1,6 @@
 // Domain types for the local Proferto clone. All data is local/mock.
+// Financial aggregates (client value/paid/debt, project total) are DERIVED via
+// src/lib/selectors.ts, not stored — so relationships stay consistent.
 
 export type ClientType = "Privat" | "Biznes";
 
@@ -9,16 +11,9 @@ export interface Client {
   phone?: string;
   email?: string;
   address?: string;
+  city?: string;
   nui?: string;
   createdAt: string; // ISO date
-  totalValue: number;
-  paid: number;
-  debt: number;
-  offersTotal: number;
-  offersAccepted: number;
-  offersRejected: number;
-  paymentsCount: number;
-  notes?: string;
 }
 
 export type OfferStatus = "Draft" | "Dërguar" | "Pranuar" | "Refuzuar";
@@ -40,13 +35,13 @@ export interface Project {
   clientId: string;
   clientName: string;
   createdAt: string;
-  total: number;
   status: OfferStatus;
   archived: boolean;
   items: OfferItem[];
   profileSystem: string;
   profileColor: string;
   vatRate: number; // 0..1
+  options?: Record<string, boolean>; // Marzha, Zbritje, TVSH, Montimi, …
 }
 
 export type InvoiceStatus =
@@ -73,6 +68,56 @@ export interface Invoice {
   status: InvoiceStatus;
   lines: InvoiceLine[];
   vatRate: number;
+}
+
+export interface Payment {
+  id: string;
+  clientId: string;
+  invoiceId?: string;
+  amount: number;
+  date: string;
+  method: string; // Para në dorë, Transfertë bankare, Kartelë
+  note?: string;
+}
+
+export interface Note {
+  id: string;
+  clientId: string;
+  text: string;
+  at: string;
+}
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  body: string;
+  at: string;
+  read: boolean;
+  href?: string;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
+export interface CompanyProfile {
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  nui: string;
+  vatNo: string;
+  postalCode: string;
+  city: string;
+  bank: string;
+  swift: string;
+  iban: string;
+  marginDefault: number;
+  vatDefault: number;
+  logoDataUrl?: string;
 }
 
 export interface Device {

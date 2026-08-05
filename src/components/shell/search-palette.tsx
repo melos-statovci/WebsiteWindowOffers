@@ -3,16 +3,13 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Search,
-  FolderKanban,
-  Users,
-  ReceiptText,
-  ArrowRight,
+  Search, FolderKanban, Users, ReceiptText, ArrowRight, Tags, Settings, LifeBuoy,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useApp } from "@/components/providers/providers";
 import { navGroups } from "@/lib/nav";
-import { projects, clients, invoices } from "@/lib/mock/data";
+import { useStore } from "@/lib/store";
+import { faqItems } from "@/lib/plan";
 import { cn } from "@/lib/utils";
 
 interface Result {
@@ -20,18 +17,27 @@ interface Result {
   sub: string;
   href: string;
   icon: LucideIcon;
+  action?: () => void;
 }
+
+const pricingTabs = [
+  ["Metalet", "metals"], ["Mekanizmat", "mechanisms"], ["Xhamat", "glass"],
+  ["Panelet", "door-panels"], ["Shtesat", "expansion-profiles"], ["Aksesorët", "accessories"],
+  ["Parametrat", "production"], ["Roletat", "roleta"], ["Dyer të Hyrjes", "doors"],
+] as const;
 
 export function SearchPalette() {
   const { overlay, setOverlay } = useApp();
   const router = useRouter();
+  const clients = useStore((s) => s.clients);
+  const projects = useStore((s) => s.projects);
+  const invoices = useStore((s) => s.invoices);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const open = overlay === "search";
 
-  // Reset query + focus the field each time the palette opens.
   useEffect(() => {
     if (open) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -43,74 +49,54 @@ export function SearchPalette() {
 
   const results = useMemo<Result[]>(() => {
     const pages: Result[] = navGroups.flatMap((g) =>
-      g.items.map((i) => ({
-        label: i.label,
-        sub: "Faqe",
-        href: i.href,
-        icon: i.icon,
-      })),
+      g.items.map((i) => ({ label: i.label, sub: "Faqe", href: i.href, icon: i.icon })),
     );
     const projectResults: Result[] = projects.map((p) => ({
-      label: `${p.number} · ${p.title}`,
-      sub: "Projekt",
-      href: `/projects/${p.id}/configure`,
-      icon: FolderKanban,
+      label: `${p.number} · ${p.title}`, sub: "Projekt", href: `/projects/${p.id}/configure`, icon: FolderKanban,
     }));
     const clientResults: Result[] = clients.map((c) => ({
-      label: c.name,
-      sub: "Klient",
-      href: `/clients/${c.id}`,
-      icon: Users,
+      label: c.name, sub: "Klient", href: `/clients/${c.id}`, icon: Users,
     }));
     const invoiceResults: Result[] = invoices.map((inv) => ({
-      label: `${inv.number} · ${inv.clientName}`,
-      sub: "Faturë",
-      href: `/invoices/${inv.id}`,
-      icon: ReceiptText,
+      label: `${inv.number} · ${inv.clientName}`, sub: "Faturë", href: `/invoices/${inv.id}`, icon: ReceiptText,
+    }));
+    const pricingResults: Result[] = [
+      { label: "Sistemet", sub: "Çmimet", href: "/pricing", icon: Tags },
+      ...pricingTabs.map(([label, tab]) => ({ label, sub: "Çmimet", href: `/pricing?tab=${tab}`, icon: Tags })),
+    ];
+    const settingsResults: Result[] = [
+      { label: "Profili i Kompanisë", sub: "Cilësimet", href: "/settings", icon: Settings },
+      { label: "Përdoruesit", sub: "Cilësimet", href: "/settings", icon: Settings },
+      { label: "Abonimi", sub: "Cilësimet", href: "/settings", icon: Settings },
+      { label: "Backup & Eksport", sub: "Cilësimet", href: "/settings", icon: Settings },
+    ];
+    const helpResults: Result[] = faqItems.slice(0, 6).map((f) => ({
+      label: f, sub: "Ndihmë", href: "#help", icon: LifeBuoy, action: () => setOverlay("help"),
     }));
 
-    const all = [
-      ...pages,
-      ...projectResults,
-      ...clientResults,
-      ...invoiceResults,
-    ];
+    const all = [...pages, ...clientResults, ...projectResults, ...invoiceResults, ...pricingResults, ...settingsResults, ...helpResults];
     const query = q.trim().toLowerCase();
     if (!query) return all.slice(0, 8);
-    return all
-      .filter(
-        (r) =>
-          r.label.toLowerCase().includes(query) ||
-          r.sub.toLowerCase().includes(query),
-      )
-      .slice(0, 12);
-  }, [q]);
+    return all.filter((r) => r.label.toLowerCase().includes(query) || r.sub.toLowerCase().includes(query)).slice(0, 14);
+  }, [q, clients, projects, invoices, setOverlay]);
 
   if (!open) return null;
 
-  const go = (href: string) => {
+  const go = (r: Result) => {
     setOverlay(null);
-    router.push(href);
+    if (r.action) r.action();
+    else router.push(r.href);
   };
 
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 pt-[12vh]">
-      <div
-        className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
-        onClick={() => setOverlay(null)}
-      />
+      <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setOverlay(null)} />
       <div
         className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-2xl"
         onKeyDown={(e) => {
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            setActive((a) => Math.min(a + 1, results.length - 1));
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            setActive((a) => Math.max(a - 1, 0));
-          } else if (e.key === "Enter" && results[active]) {
-            go(results[active].href);
-          }
+          if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, results.length - 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+          else if (e.key === "Enter" && results[active]) go(results[active]);
         }}
       >
         <div className="flex items-center gap-3 border-b border-slate-200 px-4">
@@ -118,45 +104,31 @@ export function SearchPalette() {
           <input
             ref={inputRef}
             value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setActive(0);
-            }}
-            placeholder="Kërko faqe, projekte, klientë, fatura…"
+            onChange={(e) => { setQ(e.target.value); setActive(0); }}
+            placeholder="Kërko faqe, klientë, projekte, fatura, çmime…"
             className="h-14 flex-1 bg-transparent text-base text-slate-900 placeholder:text-slate-400 outline-none"
           />
-          <kbd className="rounded border border-slate-200 bg-slate-200/60 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
-            ESC
-          </kbd>
+          <kbd className="rounded border border-slate-200 bg-slate-200/60 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">ESC</kbd>
         </div>
         <ul className="max-h-[50vh] overflow-y-auto p-2">
           {results.length === 0 && (
-            <li className="px-4 py-6 text-center text-sm text-slate-400">
-              Asnjë rezultat për “{q}”.
-            </li>
+            <li className="px-4 py-6 text-center text-sm text-slate-400">Asnjë rezultat për “{q}”.</li>
           )}
           {results.map((r, i) => {
             const Icon = r.icon;
             return (
-              <li key={r.href + r.label}>
+              <li key={r.href + r.label + i}>
                 <button
                   onMouseEnter={() => setActive(i)}
-                  onClick={() => go(r.href)}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left",
-                    active === i ? "bg-slate-200/60" : "hover:bg-slate-200/40",
-                  )}
+                  onClick={() => go(r)}
+                  className={cn("flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left", active === i ? "bg-slate-200/60" : "hover:bg-slate-200/40")}
                 >
-                  <span className="grid size-8 place-items-center rounded-lg bg-slate-200 text-slate-500">
-                    <Icon className="size-4" />
-                  </span>
-                  <span className="flex-1">
-                    <span className="block text-sm font-semibold text-slate-900">
-                      {r.label}
-                    </span>
+                  <span className="grid size-8 place-items-center rounded-lg bg-slate-200 text-slate-500"><Icon className="size-4" /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-slate-900">{r.label}</span>
                     <span className="block text-xs text-slate-400">{r.sub}</span>
                   </span>
-                  <ArrowRight className="size-4 text-slate-400" />
+                  <ArrowRight className="size-4 shrink-0 text-slate-400" />
                 </button>
               </li>
             );

@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { routeTitles } from "@/lib/nav";
 import { useApp } from "@/components/providers/providers";
+import { useStore } from "@/lib/store";
+import { shortDate } from "@/lib/format";
 
 function pageTitle(pathname: string): string {
   const base = "/" + (pathname.split("/")[1] ?? "");
@@ -31,6 +33,10 @@ export function Topbar() {
     notificationsOpen,
     setNotificationsOpen,
   } = useApp();
+  const notifications = useStore((s) => s.notifications);
+  const markRead = useStore((s) => s.markNotificationRead);
+  const markAllRead = useStore((s) => s.markAllNotificationsRead);
+  const unread = notifications.filter((n) => !n.read).length;
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center gap-2 border-b border-slate-200 bg-slate-100/80 px-3 backdrop-blur-md sm:px-5">
@@ -87,33 +93,58 @@ export function Topbar() {
         <div className="relative">
           <button
             onClick={() => setNotificationsOpen(!notificationsOpen)}
-            className="grid size-9 place-items-center rounded-lg text-slate-500 hover:bg-slate-200/60 hover:text-slate-900"
+            className="relative grid size-9 place-items-center rounded-lg text-slate-500 hover:bg-slate-200/60 hover:text-slate-900"
             aria-label="Njoftimet"
           >
             <Bell className="size-5" />
+            {unread > 0 && (
+              <span className="absolute top-1.5 right-1.5 grid min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                {unread}
+              </span>
+            )}
           </button>
           {notificationsOpen && (
             <>
-              <div
-                className="fixed inset-0 z-10"
-                onClick={() => setNotificationsOpen(false)}
-              />
-              <div className="absolute right-0 z-20 mt-2 w-72 rounded-2xl border border-slate-200 bg-slate-100 p-4 shadow-xl">
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="font-heading font-semibold text-slate-900">
-                    Njoftimet
-                  </span>
-                  <button
-                    onClick={() => setNotificationsOpen(false)}
-                    className="text-slate-400 hover:text-slate-700"
-                    aria-label="Mbyll"
-                  >
-                    <X className="size-4" />
-                  </button>
+              <div className="fixed inset-0 z-10" onClick={() => setNotificationsOpen(false)} />
+              <div className="absolute right-0 z-20 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-xl">
+                <div className="flex items-center justify-between border-b border-slate-200 p-4">
+                  <span className="font-heading font-semibold text-slate-900">Njoftimet</span>
+                  <div className="flex items-center gap-2">
+                    {unread > 0 && (
+                      <button onClick={() => markAllRead()} className="text-xs font-semibold text-indigo-400 hover:underline">
+                        Shëno të gjitha
+                      </button>
+                    )}
+                    <button onClick={() => setNotificationsOpen(false)} className="text-slate-400 hover:text-slate-700" aria-label="Mbyll">
+                      <X className="size-4" />
+                    </button>
+                  </div>
                 </div>
-                <p className="py-4 text-center text-sm text-slate-400">
-                  Asnjë njoftim. Gjithçka në rregull.
-                </p>
+                {notifications.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-slate-400">Asnjë njoftim. Gjithçka në rregull.</p>
+                ) : (
+                  <ul className="max-h-80 divide-y divide-slate-200 overflow-y-auto">
+                    {notifications.map((n) => (
+                      <li key={n.id}>
+                        <button
+                          onClick={() => {
+                            markRead(n.id);
+                            setNotificationsOpen(false);
+                            if (n.href) router.push(n.href);
+                          }}
+                          className="flex w-full gap-3 px-4 py-3 text-left hover:bg-slate-200/40"
+                        >
+                          <span className={`mt-1.5 size-2 shrink-0 rounded-full ${n.read ? "bg-transparent" : "bg-indigo-500"}`} />
+                          <span className="min-w-0 flex-1">
+                            <span className={`block text-sm ${n.read ? "font-medium text-slate-500" : "font-semibold text-slate-900"}`}>{n.title}</span>
+                            <span className="block text-xs text-slate-400">{n.body}</span>
+                            <span className="mt-0.5 block text-[11px] text-slate-400">{shortDate(n.at)}</span>
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </>
           )}

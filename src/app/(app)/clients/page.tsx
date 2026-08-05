@@ -4,24 +4,32 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Search, ChevronRight, Pencil, Trash2, Users } from "lucide-react";
 import { PageHeader, Button, Card, Badge, Avatar, EmptyState } from "@/components/ui/kit";
-import { clients } from "@/lib/mock/data";
+import { ClientFormModal, type ClientDraft } from "@/components/clients/client-form-modal";
+import { useStore } from "@/lib/store";
 import { initials } from "@/lib/format";
 import { useApp } from "@/components/providers/providers";
-import type { ClientType } from "@/types";
+import type { Client, ClientType } from "@/types";
 
 type Filter = "Të gjithë" | ClientType;
 type Sort = "Emri (A-Z)" | "Emri (Z-A)" | "Më të rejat";
 
 export default function ClientsPage() {
   const router = useRouter();
-  const { toast } = useApp();
+  const { toast, confirm } = useApp();
+  const clients = useStore((s) => s.clients);
+  const addClient = useStore((s) => s.addClient);
+  const updateClient = useStore((s) => s.updateClient);
+  const deleteClient = useStore((s) => s.deleteClient);
+
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("Të gjithë");
   const [sort, setSort] = useState<Sort>("Emri (A-Z)");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Client | null>(null);
 
   const rows = useMemo(() => {
     const query = q.trim().toLowerCase();
-    let list = clients.filter((c) => {
+    const list = clients.filter((c) => {
       if (filter !== "Të gjithë" && c.type !== filter) return false;
       if (!query) return true;
       return (
@@ -31,12 +39,54 @@ export default function ClientsPage() {
         (c.nui ?? "").toLowerCase().includes(query)
       );
     });
-    list = [...list];
-    if (sort === "Emri (A-Z)") list.sort((a, b) => a.name.localeCompare(b.name));
-    else if (sort === "Emri (Z-A)") list.sort((a, b) => b.name.localeCompare(a.name));
-    else list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    return list;
-  }, [q, filter, sort]);
+    const sorted = [...list];
+    if (sort === "Emri (A-Z)") sorted.sort((a, b) => a.name.localeCompare(b.name));
+    else if (sort === "Emri (Z-A)") sorted.sort((a, b) => b.name.localeCompare(a.name));
+    else sorted.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return sorted;
+  }, [clients, q, filter, sort]);
+
+  const openAdd = () => {
+    setEditing(null);
+    setModalOpen(true);
+  };
+  const openEdit = (c: Client) => {
+    setEditing(c);
+    setModalOpen(true);
+  };
+
+  const submit = (draft: ClientDraft) => {
+    const patch = {
+      name: draft.name,
+      type: draft.type,
+      phone: draft.phone || undefined,
+      email: draft.email || undefined,
+      address: draft.address || undefined,
+      city: draft.city || undefined,
+      nui: draft.nui || undefined,
+    };
+    if (editing) {
+      updateClient(editing.id, patch);
+      toast("Klienti u përditësua.");
+    } else {
+      addClient(patch);
+      toast("Klienti u shtua.");
+    }
+    setModalOpen(false);
+  };
+
+  const remove = async (c: Client) => {
+    const ok = await confirm({
+      title: "Fshi klientin?",
+      message: `“${c.name}” dhe të gjitha projektet, faturat e pagesat e lidhura do të fshihen lokalisht. Ky veprim nuk kthehet.`,
+      confirmLabel: "Fshi",
+      danger: true,
+    });
+    if (ok) {
+      deleteClient(c.id);
+      toast("Klienti u fshi.");
+    }
+  };
 
   return (
     <div>
@@ -44,7 +94,7 @@ export default function ClientsPage() {
         title="Klientët"
         subtitle={`${rows.length} klientë · kliko një rresht për të hapur kartelën`}
         actions={
-          <Button onClick={() => toast("Shto Klient — demo lokale.")}>
+          <Button onClick={openAdd}>
             <Plus className="size-4" /> Shto Klient
           </Button>
         }
@@ -82,7 +132,18 @@ export default function ClientsPage() {
 
       <Card className="overflow-hidden">
         {rows.length === 0 ? (
-          <EmptyState icon={Users} title="Asnjë klient" description="Provoni një kërkim tjetër." />
+          <EmptyState
+            icon={Users}
+            title="Asnjë klient"
+            description={q ? "Provoni një kërkim tjetër." : "Shtoni klientin tuaj të parë."}
+            action={
+              !q ? (
+                <Button onClick={openAdd}>
+                  <Plus className="size-4" /> Shto Klient
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-sm">
@@ -109,33 +170,24 @@ export default function ClientsPage() {
                       </div>
                     </td>
                     <td className="px-5 py-4">
-                      <Badge tone={c.type === "Biznes" ? "indigo" : "neutral"}>
-                        {c.type}
-                      </Badge>
+                      <Badge tone={c.type === "Biznes" ? "indigo" : "neutral"}>{c.type}</Badge>
                     </td>
                     <td className="px-5 py-4 text-slate-500">{c.phone ?? "—"}</td>
                     <td className="px-5 py-4 text-slate-500">{c.address ?? "—"}</td>
                     <td className="px-5 py-4">
-                      <div
-                        className="flex items-center justify-end gap-1"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => router.push(`/clients/${c.id}`)}
-                        >
+                      <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                        <Button size="sm" variant="outline" onClick={() => router.push(`/clients/${c.id}`)}>
                           Hap kartelën <ChevronRight className="size-3.5" />
                         </Button>
                         <button
-                          onClick={() => toast("Ndrysho klientin — demo lokale.")}
+                          onClick={() => openEdit(c)}
                           className="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-200/60 hover:text-slate-900"
                           aria-label="Ndrysho"
                         >
                           <Pencil className="size-4" />
                         </button>
                         <button
-                          onClick={() => toast("Fshi klientin — demo lokale.")}
+                          onClick={() => remove(c)}
                           className="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-400"
                           aria-label="Fshi"
                         >
@@ -150,6 +202,13 @@ export default function ClientsPage() {
           </div>
         )}
       </Card>
+
+      <ClientFormModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSubmit={submit}
+        initial={editing}
+      />
     </div>
   );
 }

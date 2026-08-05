@@ -8,6 +8,8 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useStore } from "@/lib/store";
+import { ConfirmDialog, type ConfirmOptions } from "@/components/ui/overlay";
 
 type Theme = "dark" | "light";
 type Overlay = null | "help" | "config" | "search";
@@ -30,6 +32,7 @@ interface AppState {
   setNotificationsOpen: (v: boolean) => void;
   toasts: Toast[];
   toast: (message: string) => void;
+  confirm: (options: ConfirmOptions) => Promise<boolean>;
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -47,6 +50,32 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [confirmState, setConfirmState] = useState<{
+    options: ConfirmOptions | null;
+    resolve: ((v: boolean) => void) | null;
+  }>({ options: null, resolve: null });
+
+  const confirm = useCallback(
+    (options: ConfirmOptions) =>
+      new Promise<boolean>((resolve) => {
+        setConfirmState({ options, resolve });
+      }),
+    [],
+  );
+
+  const resolveConfirm = useCallback(
+    (v: boolean) => {
+      confirmState.resolve?.(v);
+      setConfirmState({ options: null, resolve: null });
+    },
+    [confirmState],
+  );
+
+  // Rehydrate the persisted app store on the client (skipHydration is set on
+  // the store to avoid SSR mismatches).
+  useEffect(() => {
+    useStore.persist.rehydrate();
+  }, []);
 
   // Hydrate persisted prefs on mount. Reading from localStorage (an external
   // store) after mount is intentional and avoids SSR hydration mismatches; the
@@ -134,6 +163,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       setNotificationsOpen,
       toasts,
       toast,
+      confirm,
     }),
     [
       theme,
@@ -145,6 +175,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       notificationsOpen,
       toasts,
       toast,
+      confirm,
     ],
   );
 
@@ -152,6 +183,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <Ctx.Provider value={value}>
       {children}
       <Toaster toasts={toasts} />
+      <ConfirmDialog
+        open={!!confirmState.options}
+        options={confirmState.options}
+        onResolve={resolveConfirm}
+      />
     </Ctx.Provider>
   );
 }

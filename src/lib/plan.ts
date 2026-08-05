@@ -84,29 +84,52 @@ export const offerDesigns = [
   { id: "skede", name: "Skedë Teknike", plan: "FABRIKA", active: false },
 ];
 
-// Config guide steps
-export const guideGroups = [
+// Config guide steps. Each step links to a local route so "open the relevant
+// page" works. 12 steps total → matches the original 12/12.
+export interface GuideStep {
+  group: string;
+  label: string;
+  key: string;
+  href: string;
+}
+
+export const guideGroups: { label: string; steps: { label: string; href: string }[] }[] = [
   {
     label: "KOMPANIA",
-    steps: ["Profili i kompanisë dhe logoja", "Dizajni i ofertës"],
+    steps: [
+      { label: "Profili i kompanisë dhe logoja", href: "/settings" },
+      { label: "Dizajni i ofertës", href: "/settings" },
+    ],
   },
   {
     label: "ÇMIMET & SISTEMET",
     steps: [
-      "Brendet e profileve",
-      "Sistemet e profileve",
-      "Çmimet e profileve dhe armimi",
-      "Mekanizmat dhe hardueri",
-      "Xhamat, panelet dhe dyert e hyrjes",
-      "Shtesat, aksesorët dhe roletat",
-      "Parametrat e prodhimit",
+      { label: "Brendet e profileve", href: "/pricing" },
+      { label: "Sistemet e profileve", href: "/pricing" },
+      { label: "Çmimet e profileve dhe armimi", href: "/pricing?tab=metals" },
+      { label: "Mekanizmat dhe hardueri", href: "/pricing?tab=mechanisms" },
+      { label: "Xhamat, panelet dhe dyert e hyrjes", href: "/pricing?tab=glass" },
+      { label: "Shtesat, aksesorët dhe roletat", href: "/pricing?tab=accessories" },
+      { label: "Parametrat e prodhimit", href: "/pricing?tab=production" },
     ],
   },
   {
     label: "PUNA E PARË",
-    steps: ["Klienti dhe projekti i parë", "Oferta e parë"],
+    steps: [
+      { label: "Klienti dhe projekti i parë", href: "/projects" },
+      { label: "Oferta e parë", href: "/invoices" },
+      { label: "Siguria e llogarisë", href: "/security" },
+    ],
   },
 ];
+
+export const guideKey = (group: string, step: string) => `${group}::${step}`;
+
+export const guideSteps: GuideStep[] = guideGroups.flatMap((g) =>
+  g.steps.map((s) => ({ group: g.label, label: s.label, href: s.href, key: guideKey(g.label, s.label) })),
+);
+
+export const guideStepKeys = guideSteps.map((s) => s.key);
 
 export const faqItems = [
   "Si krijoj një ofertë të re?",

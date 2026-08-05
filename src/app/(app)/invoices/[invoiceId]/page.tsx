@@ -2,96 +2,83 @@
 
 import { use } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Printer, FileDown, Check, Receipt, Info } from "lucide-react";
+import { ArrowLeft, Printer, FileDown, Check, Receipt, Trash2 } from "lucide-react";
 import { Button, Card, Badge, EmptyState } from "@/components/ui/kit";
-import { invoices, company } from "@/lib/mock/data";
+import { useStore } from "@/lib/store";
 import { eurAfter, shortDate } from "@/lib/format";
+import { invoiceNet } from "@/lib/selectors";
+import { printInvoice } from "@/lib/print";
 import { useApp } from "@/components/providers/providers";
 import type { InvoiceStatus } from "@/types";
 
 const statusTone: Record<InvoiceStatus, "neutral" | "blue" | "emerald" | "rose" | "amber"> = {
-  Draft: "neutral",
-  Dërguar: "blue",
-  Paguar: "emerald",
-  Vonesë: "rose",
-  Anuluar: "amber",
+  Draft: "neutral", Dërguar: "blue", Paguar: "emerald", Vonesë: "rose", Anuluar: "amber",
 };
 
-export default function InvoiceDetailPage({
-  params,
-}: {
-  params: Promise<{ invoiceId: string }>;
-}) {
+export default function InvoiceDetailPage({ params }: { params: Promise<{ invoiceId: string }> }) {
   const { invoiceId } = use(params);
   const router = useRouter();
-  const { toast } = useApp();
-  const inv = invoices.find((i) => i.id === invoiceId);
+  const { toast, confirm } = useApp();
+  const inv = useStore((s) => s.invoices.find((i) => i.id === invoiceId));
+  const company = useStore((s) => s.company);
+  const setInvoiceStatus = useStore((s) => s.setInvoiceStatus);
+  const deleteInvoice = useStore((s) => s.deleteInvoice);
+  const addPayment = useStore((s) => s.addPayment);
 
   if (!inv) {
     return (
       <div>
         <BackLink onClick={() => router.push("/invoices")} />
         <Card>
-          <EmptyState
-            icon={Receipt}
-            title="Fatura nuk u gjet"
-            description={`Nuk ekziston asnjë faturë me ID “${invoiceId}”.`}
-            action={<Button onClick={() => router.push("/invoices")}>Kthehu te Faturat</Button>}
-          />
+          <EmptyState icon={Receipt} title="Fatura nuk u gjet" description={`Nuk ekziston asnjë faturë me ID “${invoiceId}”.`}
+            action={<Button onClick={() => router.push("/invoices")}>Kthehu te Faturat</Button>} />
         </Card>
       </div>
     );
   }
 
-  const net = inv.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
+  const net = invoiceNet(inv);
   const vat = net * inv.vatRate;
   const total = net + vat;
+
+  const markPaid = () => {
+    setInvoiceStatus(inv.id, "Paguar");
+    addPayment({ clientId: inv.clientId, invoiceId: inv.id, amount: total, date: new Date().toISOString().slice(0, 10), method: "Transfertë bankare", note: `Faturë ${inv.number}` });
+    toast("Fatura u shënua e paguar dhe u regjistrua pagesa.");
+  };
+
+  const remove = async () => {
+    const ok = await confirm({ title: "Fshi faturën?", message: `“${inv.number}” do të fshihet lokalisht.`, confirmLabel: "Fshi", danger: true });
+    if (ok) { deleteInvoice(inv.id); toast("Fatura u fshi."); router.push("/invoices"); }
+  };
 
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <BackLink onClick={() => router.push("/invoices")} />
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => toast("Printim — demo lokale.")}>
-            <Printer className="size-4" /> Printo
-          </Button>
-          <Button variant="outline" onClick={() => toast("PDF — demo lokale.")}>
-            <FileDown className="size-4" /> PDF
-          </Button>
-          {inv.status !== "Paguar" && (
-            <Button onClick={() => toast("Shënuar si e paguar (demo lokale).")}>
-              <Check className="size-4" /> Shëno të paguar
-            </Button>
-          )}
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => printInvoice(inv, company)}><Printer className="size-4" /> Printo</Button>
+          <Button variant="outline" onClick={() => printInvoice(inv, company)}><FileDown className="size-4" /> PDF</Button>
+          {inv.status !== "Paguar" && <Button onClick={markPaid}><Check className="size-4" /> Shëno të paguar</Button>}
+          <button onClick={remove} className="grid size-10 place-items-center rounded-lg border border-slate-200 text-slate-400 hover:bg-rose-500/10 hover:text-rose-400" aria-label="Fshi faturën"><Trash2 className="size-4" /></button>
         </div>
-      </div>
-
-      <div className="mb-4 flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-400">
-        <Info className="mt-0.5 size-4 shrink-0" />
-        <span>
-          Pamje lokale (mock) e faturës — llogaria e vërtetë nuk kishte fatura;
-          kjo faqe demonstron rrugën <code>/invoices/[invoiceId]</code> me të
-          dhëna lokale.
-        </span>
       </div>
 
       <Card className="p-6 sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-6">
           <div>
-            <div className="font-heading text-2xl font-bold text-slate-900">
-              Faturë {inv.number}
-            </div>
-            <div className="mt-1 text-sm text-slate-400">
-              Referencë: {inv.reference ?? "—"}
-            </div>
+            <div className="font-heading text-2xl font-bold text-slate-900">Faturë {inv.number}</div>
+            <div className="mt-1 text-sm text-slate-400">Referencë: {inv.reference ?? "—"}</div>
             <div className="mt-3">
-              <Badge tone={statusTone[inv.status]}>{inv.status}</Badge>
+              <select value={inv.status} onChange={(e) => { setInvoiceStatus(inv.id, e.target.value as InvoiceStatus); toast("Statusi u përditësua."); }}
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-900 outline-none focus:border-indigo-500">
+                {(["Draft", "Dërguar", "Paguar", "Vonesë", "Anuluar"] as InvoiceStatus[]).map((s) => <option key={s}>{s}</option>)}
+              </select>
+              <span className="ml-2 align-middle"><Badge tone={statusTone[inv.status]}>{inv.status}</Badge></span>
             </div>
           </div>
           <div className="text-right text-sm">
-            <div className="font-heading font-semibold text-slate-900">
-              {company.name}
-            </div>
+            <div className="font-heading font-semibold text-slate-900">{company.name}</div>
             <div className="text-slate-400">{company.address}</div>
             <div className="text-slate-400">{company.phone}</div>
             <div className="mt-2 text-slate-400">NUI {company.nui}</div>
@@ -139,8 +126,7 @@ export default function InvoiceDetailPage({
         </div>
 
         <div className="mt-6 border-t border-slate-200 pt-4 text-xs text-slate-400">
-          Pagesa: 50% paradhënie në konfirmim, 50% para montimit. · {company.bank} ·{" "}
-          IBAN {company.iban}
+          Pagesa: 50% paradhënie në konfirmim, 50% para montimit. · {company.bank} · IBAN {company.iban}
         </div>
       </Card>
     </div>
@@ -149,26 +135,19 @@ export default function InvoiceDetailPage({
 
 function BackLink({ onClick }: { onClick: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900"
-    >
+    <button onClick={onClick} className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900">
       <ArrowLeft className="size-4" /> Kthehu te Faturat
     </button>
   );
 }
-
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-xs font-semibold tracking-wide text-slate-400 uppercase">
-        {label}
-      </div>
+      <div className="text-xs font-semibold tracking-wide text-slate-400 uppercase">{label}</div>
       <div className="mt-1 text-sm font-semibold text-slate-900">{value}</div>
     </div>
   );
 }
-
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between px-3">

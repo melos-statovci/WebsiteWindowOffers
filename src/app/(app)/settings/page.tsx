@@ -1,26 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  Building2,
-  Palette,
-  Users,
-  CreditCard,
-  Download,
-  Upload,
-  ChevronRight,
-  ArrowLeft,
-  ImageIcon,
-  Check,
-  TriangleAlert,
+  Building2, Palette, Users, CreditCard, Download, Upload, ChevronRight,
+  ArrowLeft, ImageIcon, Check, TriangleAlert, RotateCcw, Trash2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { Button, Card, Badge, Field, Input, Label, Toggle } from "@/components/ui/kit";
-import { company, currentUser, sampleOffer } from "@/lib/mock/data";
+import { Button, Card, Badge, Field, Input, Label } from "@/components/ui/kit";
+import { Modal } from "@/components/ui/overlay";
+import { useStore } from "@/lib/store";
+import { account, sampleOffer } from "@/lib/mock/data";
 import { plans, offerDesigns } from "@/lib/plan";
 import { eurAfter } from "@/lib/format";
 import { useApp } from "@/components/providers/providers";
 import { cn } from "@/lib/utils";
+import type { CompanyProfile } from "@/types";
 
 type PanelId = "profili" | "dizajni" | "perdoruesit" | "abonimi" | "backup";
 
@@ -35,43 +29,22 @@ const MENU: { id: PanelId; label: string; icon: LucideIcon }[] = [
 export default function SettingsPage() {
   const [active, setActive] = useState<PanelId>("profili");
   const [mobileView, setMobileView] = useState<"menu" | "panel">("menu");
-
   const activeItem = MENU.find((m) => m.id === active)!;
 
   return (
     <div>
-      <h1 className="mb-6 font-heading text-2xl font-bold text-slate-900">
-        Cilësimet
-      </h1>
-
+      <h1 className="mb-6 font-heading text-2xl font-bold text-slate-900">Cilësimet</h1>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-        {/* Secondary sidebar (desktop) / menu (mobile) */}
-        <Card
-          className={cn(
-            "h-fit overflow-hidden p-2",
-            mobileView === "panel" && "hidden lg:block",
-          )}
-        >
-          <div className="px-3 py-2 text-[11px] font-bold tracking-widest text-slate-400 uppercase">
-            Kompania
-          </div>
+        <Card className={cn("h-fit overflow-hidden p-2", mobileView === "panel" && "hidden lg:block")}>
+          <div className="px-3 py-2 text-[11px] font-bold tracking-widest text-slate-400 uppercase">Kompania</div>
           <ul className="space-y-1">
             {MENU.map((m) => {
               const Icon = m.icon;
               return (
                 <li key={m.id}>
-                  <button
-                    onClick={() => {
-                      setActive(m.id);
-                      setMobileView("panel");
-                    }}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
-                      active === m.id
-                        ? "bg-slate-200/70 text-slate-900"
-                        : "text-slate-500 hover:bg-slate-200/40 hover:text-slate-900",
-                    )}
-                  >
+                  <button onClick={() => { setActive(m.id); setMobileView("panel"); }}
+                    className={cn("flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
+                      active === m.id ? "bg-slate-200/70 text-slate-900" : "text-slate-500 hover:bg-slate-200/40 hover:text-slate-900")}>
                     <Icon className="size-4" />
                     <span className="flex-1 text-left">{m.label}</span>
                     <ChevronRight className="size-4 text-slate-400" />
@@ -82,21 +55,14 @@ export default function SettingsPage() {
           </ul>
         </Card>
 
-        {/* Panel */}
         <div className={cn(mobileView === "menu" && "hidden lg:block")}>
-          <button
-            onClick={() => setMobileView("menu")}
-            className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900 lg:hidden"
-          >
+          <button onClick={() => setMobileView("menu")} className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900 lg:hidden">
             <ArrowLeft className="size-4" /> Kthehu te Cilësimet
           </button>
           <div className="mb-4 flex items-center gap-3">
             <activeItem.icon className="size-6 text-indigo-400" />
-            <h2 className="font-heading text-xl font-bold text-slate-900">
-              {activeItem.label}
-            </h2>
+            <h2 className="font-heading text-xl font-bold text-slate-900">{activeItem.label}</h2>
           </div>
-
           {active === "profili" && <ProfiliPanel />}
           {active === "dizajni" && <DizajniPanel />}
           {active === "perdoruesit" && <PerdoruesitPanel />}
@@ -109,79 +75,82 @@ export default function SettingsPage() {
 }
 
 function ProfiliPanel() {
-  const { toast } = useApp();
+  const { toast, confirm } = useApp();
+  const company = useStore((s) => s.company);
+  const updateCompany = useStore((s) => s.updateCompany);
+  const [draft, setDraft] = useState<CompanyProfile>(company);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+   
+  useEffect(() => { setDraft(company); }, [company]);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(company);
+  const set = (k: keyof CompanyProfile, v: string | number) => setDraft((d) => ({ ...d, [k]: v }));
+
+  const onLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast("Ju lutem zgjidhni një skedar imazhi."); return; }
+    const reader = new FileReader();
+    reader.onload = () => setDraft((d) => ({ ...d, logoDataUrl: String(reader.result) }));
+    reader.readAsDataURL(file);
+  };
+  const removeLogo = async () => {
+    const ok = await confirm({ title: "Fshi logon?", message: "Logo do të hiqet nga ofertat dhe dokumentet.", confirmLabel: "Fshi", danger: true });
+    if (ok) setDraft((d) => ({ ...d, logoDataUrl: undefined }));
+  };
+
   return (
     <div className="space-y-5">
       <Card className="p-5">
         <Label>Logo</Label>
         <div className="mt-3 flex flex-wrap items-center gap-4">
-          <div className="grid size-24 place-items-center rounded-xl bg-slate-200/70 text-slate-400">
-            <ImageIcon className="size-8" />
+          <div className="grid size-24 place-items-center overflow-hidden rounded-xl bg-slate-200/70 text-slate-400">
+            {draft.logoDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={draft.logoDataUrl} alt="Logo" className="size-full object-contain" />
+            ) : (
+              <ImageIcon className="size-8" />
+            )}
           </div>
           <div>
-            <div className="text-sm font-semibold text-slate-900">
-              Logo e Kompanisë
+            <div className="text-sm font-semibold text-slate-900">Logo e Kompanisë</div>
+            <p className="max-w-sm text-sm text-slate-400">Kjo logo do të shfaqet në të gjitha ofertat dhe dokumentet zyrtare.</p>
+            <div className="mt-2 flex gap-3">
+              <button onClick={() => fileRef.current?.click()} className="text-xs font-bold text-indigo-400 uppercase hover:underline">Ngarko logo</button>
+              {draft.logoDataUrl && <button onClick={removeLogo} className="text-xs font-bold text-rose-400 uppercase hover:underline">Fshij logon</button>}
             </div>
-            <p className="max-w-sm text-sm text-slate-400">
-              Kjo logo do të shfaqet në të gjitha ofertat dhe dokumentet zyrtare.
-            </p>
-            <button
-              onClick={() => toast("Logo u fshi (demo lokale).")}
-              className="mt-1 text-xs font-bold text-rose-400 uppercase hover:underline"
-            >
-              Fshij logon
-            </button>
-          </div>
-        </div>
-        <div className="mt-5">
-          <Label>Logot e profileve / sistemeve</Label>
-          <p className="mt-1 mb-3 max-w-lg text-sm text-slate-400">
-            Deri në 3 logo opsionale (PNG transparent ose SVG) të markave që
-            përdorni.
-          </p>
-          <div className="grid grid-cols-3 gap-3">
-            {[1, 2, 3].map((n) => (
-              <div
-                key={n}
-                className="grid aspect-video place-items-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-xs font-semibold text-slate-400"
-              >
-                LOGO {n}
-              </div>
-            ))}
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onLogo} />
           </div>
         </div>
       </Card>
 
       <Card className="p-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Emri i kompanisë"><Input defaultValue={company.name} /></Field>
-          <Field label="Adresa"><Input defaultValue={company.address} /></Field>
-          <Field label="Telefoni"><Input defaultValue={company.phone} /></Field>
-          <Field label="Email zyrtar"><Input defaultValue={company.email} /></Field>
-          <Field label="Marzha default (%)"><Input defaultValue={String(company.marginDefault)} /></Field>
-          <Field label="TVSH default (%)"><Input defaultValue={String(company.vatDefault)} /></Field>
+          <Field label="Emri i kompanisë"><Input value={draft.name} onChange={(e) => set("name", e.target.value)} /></Field>
+          <Field label="Adresa"><Input value={draft.address} onChange={(e) => set("address", e.target.value)} /></Field>
+          <Field label="Telefoni"><Input value={draft.phone} onChange={(e) => set("phone", e.target.value)} /></Field>
+          <Field label="Email zyrtar"><Input value={draft.email} onChange={(e) => set("email", e.target.value)} /></Field>
+          <Field label="Marzha default (%)"><Input value={String(draft.marginDefault)} onChange={(e) => set("marginDefault", parseInt(e.target.value) || 0)} inputMode="numeric" /></Field>
+          <Field label="TVSH default (%)"><Input value={String(draft.vatDefault)} onChange={(e) => set("vatDefault", parseInt(e.target.value) || 0)} inputMode="numeric" /></Field>
         </div>
       </Card>
 
       <Card className="p-5">
         <Label>Të dhënat e faturimit</Label>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="NUI / Numri i biznesit"><Input defaultValue={company.nui} /></Field>
-          <Field label="Numri i TVSH-së"><Input defaultValue={company.vatNo} /></Field>
-          <Field label="Kodi postar"><Input defaultValue={company.postalCode} /></Field>
-          <Field label="Qyteti"><Input defaultValue={company.city} /></Field>
-          <Field label="Banka"><Input defaultValue={company.bank} /></Field>
-          <Field label="SWIFT / BIC"><Input defaultValue={company.swift} /></Field>
-          <div className="sm:col-span-2">
-            <Field label="IBAN / Llogaria bankare"><Input defaultValue={company.iban} /></Field>
-          </div>
+          <Field label="NUI / Numri i biznesit"><Input value={draft.nui} onChange={(e) => set("nui", e.target.value)} /></Field>
+          <Field label="Numri i TVSH-së"><Input value={draft.vatNo} onChange={(e) => set("vatNo", e.target.value)} /></Field>
+          <Field label="Kodi postar"><Input value={draft.postalCode} onChange={(e) => set("postalCode", e.target.value)} /></Field>
+          <Field label="Qyteti"><Input value={draft.city} onChange={(e) => set("city", e.target.value)} /></Field>
+          <Field label="Banka"><Input value={draft.bank} onChange={(e) => set("bank", e.target.value)} /></Field>
+          <Field label="SWIFT / BIC"><Input value={draft.swift} onChange={(e) => set("swift", e.target.value)} /></Field>
+          <div className="sm:col-span-2"><Field label="IBAN / Llogaria bankare"><Input value={draft.iban} onChange={(e) => set("iban", e.target.value)} /></Field></div>
         </div>
       </Card>
 
-      <div className="flex justify-end">
-        <Button onClick={() => toast("Ndryshimet u ruajtën (demo lokale).")}>
-          Ruaj Ndryshimet
-        </Button>
+      <div className="flex items-center justify-end gap-2">
+        {dirty && <button onClick={() => setDraft(company)} className="flex items-center gap-1.5 text-sm font-semibold text-slate-400 hover:text-slate-700"><RotateCcw className="size-4" /> Rikthe</button>}
+        <Button disabled={!dirty} onClick={() => { updateCompany(draft); toast("Ndryshimet u ruajtën."); }}>Ruaj Ndryshimet</Button>
       </div>
     </div>
   );
@@ -189,128 +158,115 @@ function ProfiliPanel() {
 
 function DizajniPanel() {
   const { toast } = useApp();
+  const company = useStore((s) => s.company);
+  const selectedId = useStore((s) => s.selectedDesignId);
+  const setDesign = useStore((s) => s.setDesign);
+
   return (
     <div className="space-y-5">
-      <p className="text-sm text-slate-400">
-        Plani juaj (SOLO) ju lejon të zgjidhni nga 1 dizajn nga gjithsej 6.
-        Klikoni një dizajn për ta parë në madhësi të plotë (A4) dhe për ta
-        zgjedhur.
-      </p>
+      <p className="text-sm text-slate-400">Plani juaj (SOLO) ju lejon të zgjidhni nga 1 dizajn nga gjithsej 6. Klikoni një dizajn për ta zgjedhur.</p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {offerDesigns.map((d) => (
-          <Card key={d.id} className="overflow-hidden p-3">
-            <div className="relative mb-3 aspect-[1/1.414] overflow-hidden rounded-lg border border-slate-200 bg-white p-3 text-[6px] leading-tight text-slate-700">
-              <div className="mb-1 font-bold text-indigo-600">{company.name}</div>
-              <div className="mb-2 text-[7px] font-bold">OFERTË {sampleOffer.number}</div>
-              <div className="space-y-0.5">
-                {[1, 2, 3, 4].map((r) => (
-                  <div key={r} className="flex justify-between border-b border-slate-100 pb-0.5">
-                    <span>Pozicioni {r}</span>
-                    <span>€{(r * 111).toFixed(0)}</span>
-                  </div>
-                ))}
+        {offerDesigns.map((d) => {
+          const isActive = selectedId === d.id;
+          const locked = d.plan !== "SOLO";
+          return (
+            <Card key={d.id} className={cn("overflow-hidden p-3", isActive && "ring-2 ring-indigo-500")}>
+              <div className="relative mb-3 aspect-[1/1.414] overflow-hidden rounded-lg border border-slate-200 bg-white p-3 text-[6px] leading-tight text-slate-700">
+                <div className="mb-1 font-bold text-indigo-600">{company.name}</div>
+                <div className="mb-2 text-[7px] font-bold">OFERTË {sampleOffer.number}</div>
+                <div className="space-y-0.5">
+                  {[1, 2, 3, 4].map((r) => (
+                    <div key={r} className="flex justify-between border-b border-slate-100 pb-0.5"><span>Pozicioni {r}</span><span>€{(r * 111).toFixed(0)}</span></div>
+                  ))}
+                </div>
+                <div className="absolute right-2 bottom-2 text-[7px] font-bold">TOTALI {eurAfter(sampleOffer.total)}</div>
               </div>
-              <div className="absolute right-2 bottom-2 text-[7px] font-bold">
-                TOTALI {eurAfter(sampleOffer.total)}
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">{d.name}</div>
+                  <Badge tone={d.plan === "SOLO" ? "emerald" : d.plan === "BIZNES" ? "blue" : "violet"}>{d.plan}</Badge>
+                </div>
+                {isActive ? (
+                  <Badge tone="emerald"><Check className="size-3" /> AKTIV</Badge>
+                ) : (
+                  <Button size="sm" variant="outline"
+                    onClick={() => { if (locked) { toast(`“${d.name}” kërkon planin ${d.plan}.`); } else { setDesign(d.id); toast(`“${d.name}” u zgjodh.`); } }}>
+                    {locked ? "Shiko" : "Zgjidh"}
+                  </Button>
+                )}
               </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold text-slate-900">{d.name}</div>
-                <Badge tone={d.plan === "SOLO" ? "emerald" : d.plan === "BIZNES" ? "blue" : "violet"}>
-                  {d.plan}
-                </Badge>
-              </div>
-              {d.active ? (
-                <Badge tone="emerald">
-                  <Check className="size-3" /> AKTIV
-                </Badge>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    toast(
-                      d.plan === "SOLO"
-                        ? `“${d.name}” u zgjodh (demo lokale).`
-                        : `“${d.name}” kërkon planin ${d.plan}.`,
-                    )
-                  }
-                >
-                  Shiko
-                </Button>
-              )}
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </div>
-
-      <Card className="p-5">
-        <Label>Tekstet e Ofertës</Label>
-        <div className="mt-4 space-y-4">
-          <Field label="Kushtet & vlefshmëria (teksti i fundit)">
-            <textarea
-              defaultValue="Çmimet janë në Euro (€). Matjet finale verifikohen para prodhimit. Garancia: 5 vjet për profilet, 2 vjet për mekanizmat."
-              className="min-h-20 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900 outline-none focus:border-indigo-500"
-            />
-          </Field>
-          <Field label="Mesazhi i falenderimit">
-            <Input defaultValue="Faleminderit për besimin tuaj. Mbetemi në dispozicion për çdo paqartësi." />
-          </Field>
-          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <span className="text-sm font-semibold text-slate-700">
-              Shfaq të dhënat e pagesës në ofertë
-            </span>
-            <Toggle checked onChange={() => {}} />
-          </div>
-        </div>
-        <div className="mt-4 flex justify-end">
-          <Button onClick={() => toast("Tekstet u ruajtën (demo lokale).")}>
-            Ruaj tekstet
-          </Button>
-        </div>
-      </Card>
     </div>
   );
 }
 
 function PerdoruesitPanel() {
+  const { toast, confirm } = useApp();
+  const users = useStore((s) => s.users);
+  const addUser = useStore((s) => s.addUser);
+  const removeUser = useStore((s) => s.removeUser);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const seatLimit = 1;
+  const atLimit = users.length >= seatLimit;
+
+  const submit = () => {
+    if (!name.trim() || !email.trim()) { toast("Plotësoni emrin dhe email-in."); return; }
+    addUser({ name: name.trim(), email: email.trim(), role: "Operator" });
+    setName(""); setEmail(""); setOpen(false);
+    toast("Përdoruesi u shtua (simulim lokal — mbi limitin e planit SOLO).");
+  };
+  const remove = async (id: string, uname: string) => {
+    const ok = await confirm({ title: "Hiq përdoruesin?", message: `“${uname}” do të hiqet.`, confirmLabel: "Hiq", danger: true });
+    if (ok) { removeUser(id); toast("Përdoruesi u hoq."); }
+  };
+
   return (
     <Card className="p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="font-heading font-semibold text-slate-900">
-            Përdoruesit e kompanisë
-          </div>
-          <div className="text-sm text-slate-400">1 / 1 ulëse · Plani SOLO</div>
+          <div className="font-heading font-semibold text-slate-900">Përdoruesit e kompanisë</div>
+          <div className="text-sm text-slate-400">{users.length} / {seatLimit} ulëse · Plani SOLO</div>
         </div>
-        <Button disabled>Shto Përdorues</Button>
+        <Button onClick={() => setOpen(true)}>Shto Përdorues</Button>
       </div>
-      <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-500">
-        <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-        Keni arritur limitin e përdoruesve për planin tuaj (Plani SOLO: 1).
-        Përmirësoni planin ose rritni limitin.
-      </div>
+      {atLimit && (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-500">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+          Keni arritur limitin e përdoruesve për planin tuaj (Plani SOLO: 1). Përmirësoni planin ose shtoni një përdorues si simulim lokal.
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[420px] text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 text-left text-xs font-semibold tracking-wide text-slate-400 uppercase">
-              <th className="py-3 pr-4">Emri</th>
-              <th className="py-3 pr-4">Email</th>
-              <th className="py-3">Roli</th>
-            </tr>
-          </thead>
+          <thead><tr className="border-b border-slate-200 text-left text-xs font-semibold tracking-wide text-slate-400 uppercase"><th className="py-3 pr-4">Emri</th><th className="py-3 pr-4">Email</th><th className="py-3">Roli</th><th /></tr></thead>
           <tbody>
-            <tr className="border-b border-slate-200">
-              <td className="py-3 pr-4 font-semibold text-slate-900">{currentUser.name}</td>
-              <td className="py-3 pr-4 text-slate-500">{currentUser.email}</td>
-              <td className="py-3">
-                <Badge tone="indigo">{currentUser.role}</Badge>
-              </td>
-            </tr>
+            {users.map((u) => (
+              <tr key={u.id} className="border-b border-slate-200">
+                <td className="py-3 pr-4 font-semibold text-slate-900">{u.name}</td>
+                <td className="py-3 pr-4 text-slate-500">{u.email}</td>
+                <td className="py-3"><Badge tone="indigo">{u.role}</Badge></td>
+                <td className="py-3 text-right">
+                  {u.role !== "PRONAR" && (
+                    <button onClick={() => remove(u.id, u.name)} className="text-slate-400 hover:text-rose-400" aria-label="Hiq"><Trash2 className="size-4" /></button>
+                  )}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
+
+      <Modal open={open} onClose={() => setOpen(false)} title="Shto Përdorues" description="Në planin SOLO shtimi bëhet vetëm si simulim lokal."
+        footer={<><Button variant="ghost" onClick={() => setOpen(false)}>Anulo</Button><Button onClick={submit}>Shto (demo)</Button></>}>
+        <div className="space-y-4">
+          <Field label="Emri i plotë"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="P.sh. Arta Berisha" /></Field>
+          <Field label="Email"><Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="P.sh. arta@example.com" /></Field>
+        </div>
+      </Modal>
     </Card>
   );
 }
@@ -318,40 +274,27 @@ function PerdoruesitPanel() {
 function AbonimiPanel() {
   const { toast } = useApp();
   const [yearly, setYearly] = useState(false);
+  const [confirmPlan, setConfirmPlan] = useState<string | null>(null);
   const steps = ["Plani", "Faturimi", "Pagesa", "Konfirmimi"];
+
   return (
     <div className="space-y-5">
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <Badge tone="violet">PROVË</Badge>
-            <div className="mt-2 font-heading text-2xl font-bold text-slate-900">
-              SOLO
-            </div>
-            <div className="text-sm text-slate-400">
-              Për zejtarë dhe instalues të pavarur
-            </div>
+            <div className="mt-2 font-heading text-2xl font-bold text-slate-900">SOLO</div>
+            <div className="text-sm text-slate-400">Për zejtarë dhe instalues të pavarur</div>
           </div>
-          <div className="text-sm text-slate-400">
-            Prova mbaron më {company.trialEndsAt} — edhe {company.trialDaysLeft} ditë
-          </div>
+          <div className="text-sm text-slate-400">Prova mbaron më {account.trialEndsAt} — edhe {account.trialDaysLeft} ditë</div>
         </div>
       </Card>
 
       <div className="flex items-center gap-2">
         {steps.map((s, i) => (
           <div key={s} className="flex items-center gap-2">
-            <span
-              className={cn(
-                "grid size-6 place-items-center rounded-full text-xs font-bold",
-                i === 0 ? "bg-indigo-600 text-white" : "bg-slate-200 text-slate-500",
-              )}
-            >
-              {i + 1}
-            </span>
-            <span className={cn("text-sm", i === 0 ? "font-semibold text-slate-900" : "text-slate-400")}>
-              {s}
-            </span>
+            <span className={cn("grid size-6 place-items-center rounded-full text-xs font-bold", i === 0 ? "bg-indigo-600 text-white" : "bg-slate-200 text-slate-500")}>{i + 1}</span>
+            <span className={cn("text-sm", i === 0 ? "font-semibold text-slate-900" : "text-slate-400")}>{s}</span>
             {i < steps.length - 1 && <span className="mx-1 h-px w-6 bg-slate-200" />}
           </div>
         ))}
@@ -360,75 +303,94 @@ function AbonimiPanel() {
       <div className="flex items-center justify-between">
         <div className="font-heading font-semibold text-slate-900">Zgjidhni planin</div>
         <div className="flex items-center gap-1 rounded-xl bg-slate-200/60 p-1 text-sm font-semibold">
-          <button
-            onClick={() => setYearly(false)}
-            className={cn("rounded-lg px-3 py-1.5", !yearly ? "bg-slate-50 text-slate-900" : "text-slate-400")}
-          >
-            Mujor
-          </button>
-          <button
-            onClick={() => setYearly(true)}
-            className={cn("rounded-lg px-3 py-1.5", yearly ? "bg-slate-50 text-slate-900" : "text-slate-400")}
-          >
-            Vjetor −17%
-          </button>
+          <button onClick={() => setYearly(false)} className={cn("rounded-lg px-3 py-1.5", !yearly ? "bg-slate-50 text-slate-900" : "text-slate-400")}>Mujor</button>
+          <button onClick={() => setYearly(true)} className={cn("rounded-lg px-3 py-1.5", yearly ? "bg-slate-50 text-slate-900" : "text-slate-400")}>Vjetor −17%</button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {plans.map((p) => (
-          <Card key={p.tier} className={cn("p-5", p.current && "ring-2 ring-indigo-500")}>
+          <Card key={p.tier} className={cn("flex flex-col p-5", p.current && "ring-2 ring-indigo-500")}>
             <div className="flex items-center justify-between">
               <div className="font-heading font-bold text-slate-900">{p.name}</div>
               {p.current && <Badge tone="indigo">AKTUAL</Badge>}
             </div>
             <p className="mt-1 text-xs text-slate-400">{p.tagline}</p>
             <div className="mt-4 font-heading text-2xl font-bold text-slate-900">
-              €{p.monthly.toFixed(2)}
-              <span className="text-sm font-normal text-slate-400">/muaj</span>
+              {yearly ? `€${(p.yearly / 12).toFixed(2)}` : `€${p.monthly.toFixed(2)}`}<span className="text-sm font-normal text-slate-400">/muaj</span>
             </div>
             <div className="text-xs text-slate-400">€{p.yearly} në vit</div>
+            {!p.current && (
+              <Button size="sm" className="mt-4" variant="outline" onClick={() => setConfirmPlan(p.name)}>Zgjidh {p.name}</Button>
+            )}
           </Card>
         ))}
       </div>
 
-      <div className="flex justify-end">
-        <Button onClick={() => toast("Vazhdim i abonimit — demo lokale.")}>Vazhdo</Button>
-      </div>
-      <p className="text-xs text-slate-400">
-        Për ndryshim plani, anulim ose çdo pyetje për faturimin, na shkruani te
-        info@arios.systems.
-      </p>
+      <p className="text-xs text-slate-400">Për ndryshim plani, anulim ose çdo pyetje për faturimin, na shkruani te info@arios.systems.</p>
+
+      <Modal open={!!confirmPlan} onClose={() => setConfirmPlan(null)} title={`Kalo në planin ${confirmPlan ?? ""}`}
+        description="Ky është një simulim lokal — nuk kryhet asnjë pagesë reale."
+        footer={<><Button variant="ghost" onClick={() => setConfirmPlan(null)}>Anulo</Button><Button onClick={() => { toast(`Simulim: plani do të kalonte në ${confirmPlan}.`); setConfirmPlan(null); }}>Konfirmo (demo)</Button></>}>
+        <p className="text-sm text-slate-500">Në një mjedis real, këtu do të vazhdohej me faturimin dhe pagesën. Në këtë demo asgjë nuk ndryshohet te llogaria.</p>
+      </Modal>
     </div>
   );
 }
 
 function BackupPanel() {
-  const { toast } = useApp();
+  const { toast, confirm } = useApp();
+  const exportData = useStore((s) => s.exportData);
+  const importData = useStore((s) => s.importData);
+  const resetDemo = useStore((s) => s.resetDemo);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [lastExport, setLastExport] = useState<string | null>(null);
+
+  const doExport = () => {
+    const json = exportData();
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `proferto-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setLastExport(new Date().toLocaleString("sq"));
+    toast("Backup u shkarkua.");
+  };
+  const onImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const ok = await confirm({ title: "Ngarko backup?", message: "Të dhënat aktuale lokale do të zëvendësohen me ato nga skedari.", confirmLabel: "Ngarko" });
+    if (!ok) return;
+    const text = await file.text();
+    const res = importData(text);
+    toast(res.ok ? "Backup u ngarkua me sukses." : res.error ?? "Ngarkimi dështoi.");
+  };
+  const doReset = async () => {
+    const ok = await confirm({ title: "Rikthe të dhënat demo?", message: "Të gjitha ndryshimet lokale do të fshihen dhe të dhënat fillestare do të rikthehen.", confirmLabel: "Rikthe", danger: true });
+    if (ok) { resetDemo(); toast("Të dhënat demo u rikthyen."); }
+  };
+
   return (
     <div className="space-y-5">
       <Card className="p-5">
-        <div className="font-heading font-semibold text-slate-900">
-          Backup i të Dhënave
-        </div>
-        <p className="mt-1 mb-4 max-w-lg text-sm text-slate-400">
-          Shkarkoni të gjitha të dhënat tuaja (përdoruesit, klientët, ofertat,
-          çmimet) në një skedar JSON.
-        </p>
-        <Button onClick={() => toast("Backup u shkarkua (demo lokale).")}>
-          <Download className="size-4" /> Shkarko Backup
-        </Button>
+        <div className="font-heading font-semibold text-slate-900">Backup i të Dhënave</div>
+        <p className="mt-1 mb-4 max-w-lg text-sm text-slate-400">Shkarkoni të gjitha të dhënat tuaja lokale (klientët, projektet, ofertat, çmimet) në një skedar JSON.</p>
+        <Button onClick={doExport}><Download className="size-4" /> Shkarko Backup</Button>
+        {lastExport && <p className="mt-2 text-xs text-slate-400">Eksporti i fundit: {lastExport}</p>}
       </Card>
       <Card className="p-5">
-        <div className="font-heading font-semibold text-slate-900">
-          Rikthimi i të Dhënave (Restore)
-        </div>
-        <p className="mt-1 mb-4 max-w-lg text-sm text-slate-400">
-          Ngarkoni skedarin e backup-it për të rikthyer të dhënat tuaja.
-        </p>
-        <Button variant="outline" onClick={() => toast("Ngarkim backup-i — demo lokale.")}>
-          <Upload className="size-4" /> Ngarko Backup
-        </Button>
+        <div className="font-heading font-semibold text-slate-900">Rikthimi i të Dhënave (Restore)</div>
+        <p className="mt-1 mb-4 max-w-lg text-sm text-slate-400">Ngarkoni skedarin e backup-it për të rikthyer të dhënat tuaja lokale.</p>
+        <Button variant="outline" onClick={() => fileRef.current?.click()}><Upload className="size-4" /> Ngarko Backup</Button>
+        <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={onImport} />
+      </Card>
+      <Card className="p-5">
+        <div className="font-heading font-semibold text-slate-900">Rikthe të dhënat demo</div>
+        <p className="mt-1 mb-4 max-w-lg text-sm text-slate-400">Fshini të gjitha ndryshimet lokale dhe rikthejini të dhënat fillestare demonstruese.</p>
+        <Button variant="danger" onClick={doReset}><RotateCcw className="size-4" /> Reset demo data</Button>
       </Card>
     </div>
   );
