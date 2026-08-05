@@ -6,14 +6,14 @@ import {
   X, Undo2, Printer, Plus, ArrowLeft, MoreVertical, Copy, Pencil, Trash2, FileDown, Check,
 } from "lucide-react";
 import { Button, Avatar, Toggle, EmptyState, Badge } from "@/components/ui/kit";
-import { ProductConfigurator } from "@/components/projects/product-configurator";
+import { ProductConfigurator, PRODUCT_TYPES } from "@/components/projects/product-configurator";
 import { useStore } from "@/lib/store";
 import { eur, initials } from "@/lib/format";
 import { projectNet } from "@/lib/selectors";
 import { printOffer } from "@/lib/print";
 import { useApp } from "@/components/providers/providers";
 import { cn } from "@/lib/utils";
-import type { OfferItem, OfferStatus } from "@/types";
+import type { OfferItem, OfferStatus, ProductType } from "@/types";
 
 type Step = "detajet" | "produkti" | "permbledhje";
 const OPTIONS = ["Marzha", "Zbritje", "TVSH", "Montimi", "Demontimi", "Transporti"];
@@ -45,13 +45,11 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
   const duplicateItem = useStore((s) => s.duplicateProjectItem);
   const setOption = useStore((s) => s.setProjectOption);
 
-  const pricing = useStore((s) => s.pricing);
   const [step, setStep] = useState<Step>("produkti");
   const [configuring, setConfiguring] = useState<null | "new" | string>(null);
+  const [newType, setNewType] = useState<ProductType>("Dritare");
+  const [typeMenu, setTypeMenu] = useState(false);
   const [menuId, setMenuId] = useState<string | null>(null);
-
-  const defaultSystemId =
-    pricing.systems.find((s) => s.name === project?.profileSystem)?.id ?? pricing.systems[0]?.id ?? "s1";
 
   if (!project) {
     return (
@@ -68,7 +66,8 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
   const vat = net * project.vatRate;
 
   const editingItem = configuring && configuring !== "new" ? project.items.find((i) => i.id === configuring) ?? null : null;
-  const openAdd = () => { setConfiguring("new"); setMenuId(null); };
+  const openAdd = () => { setTypeMenu(true); setMenuId(null); };
+  const pickType = (pt: ProductType) => { setNewType(pt); setConfiguring("new"); setTypeMenu(false); };
   const openEdit = (it: OfferItem) => { setConfiguring(it.id); setMenuId(null); };
   const saveProduct = (data: Omit<OfferItem, "id">, id?: string) => {
     if (id) { updateItem(project.id, id, data); toast("Produkti u përditësua."); }
@@ -99,7 +98,10 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
         <div className="flex items-center gap-2">
           {step === "produkti" ? (
             !configuring && (
-              <button onClick={openAdd} className="grid size-9 place-items-center rounded-full bg-indigo-600 text-white hover:bg-indigo-500" aria-label="Shto produkt"><Plus className="size-5" /></button>
+              <div className="relative">
+                <button onClick={() => setTypeMenu((v) => !v)} className="grid size-9 place-items-center rounded-full bg-indigo-600 text-white hover:bg-indigo-500" aria-label="Shto produkt"><Plus className="size-5" /></button>
+                {typeMenu && <ProductTypeMenu onPick={pickType} onClose={() => setTypeMenu(false)} />}
+              </div>
             )
           ) : (
             <button onClick={() => printOffer(project, company)} className="grid size-9 place-items-center rounded-full bg-slate-200/70 text-slate-700 hover:bg-slate-300" aria-label="Printo ofertën"><Printer className="size-5" /></button>
@@ -148,7 +150,7 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
           configuring ? (
             <ProductConfigurator
               initial={editingItem}
-              defaultSystemId={defaultSystemId}
+              initialProductType={newType}
               onSave={saveProduct}
               onCancel={() => setConfiguring(null)}
             />
@@ -229,6 +231,22 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
         )}
       </div>
     </div>
+  );
+}
+
+function ProductTypeMenu({ onPick, onClose }: { onPick: (pt: ProductType) => void; onClose: () => void }) {
+  return (
+    <>
+      <div className="fixed inset-0 z-10" onClick={onClose} />
+      <div className="absolute top-11 right-0 z-20 w-52 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 py-1 shadow-xl">
+        <div className="px-3 py-1.5 text-[10px] font-bold tracking-widest text-slate-400 uppercase">Zgjidh produktin</div>
+        {PRODUCT_TYPES.map(({ type, icon: Icon }) => (
+          <button key={type} onClick={() => onPick(type)} className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-200/60">
+            <Icon className="size-4 text-slate-400" /> {type}
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
 

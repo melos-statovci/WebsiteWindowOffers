@@ -48,11 +48,16 @@ export type ModelType =
 
 export type ProfileColor = "white" | "white_color" | "color_color";
 
+export type ShteseSide = "Majtas" | "Djathtas" | "Lart" | "Poshtë";
+
 export interface Shtese {
   id: string;
-  side: "Majtas" | "Djathtas" | "Lart" | "Poshtë";
+  side: ShteseSide;
   widthMm: number;
 }
+
+/** Per-pane opening: fixed glass, hinged left/right, or tilt-turn. */
+export type OpeningType = "fiks" | "majtas" | "djathtas" | "kip";
 
 export interface WindowConfig {
   productType: ProductType;
@@ -67,6 +72,13 @@ export interface WindowConfig {
   roleta: boolean;
   roletaBoxMm?: number;
   shtesa: Shtese[];
+  /** pane index -> opening type; absent = "fiks" (fixed). */
+  openings: Record<number, OpeningType>;
+  /** door-only */
+  doorModel?: string;
+  sashComposition?: string;
+  /** manual price override in € (0/undefined = auto-calculate). */
+  manualPrice?: number;
 }
 
 export interface OfferItem {

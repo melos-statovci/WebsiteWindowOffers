@@ -3,18 +3,22 @@
 import { useMemo, useState } from "react";
 import {
   Ruler, Layers, Settings2, Square, DoorOpen, DoorClosed, PanelsTopLeft, Rows3,
-  Plus, Minus, ChevronDown, Trash2, Check,
+  Plus, Minus, ChevronDown, Trash2, Check, MoveDiagonal,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/kit";
 import { WindowPreview } from "@/components/projects/window-preview";
 import { useStore, uid } from "@/lib/store";
-import { computeMaterials, computePrice, MODELS } from "@/lib/window-calc";
+import {
+  computeMaterials, computePrice, MODELS, DOOR_MODELS, isDoorProduct, isGlassProduct,
+} from "@/lib/window-calc";
 import { eur } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { ModelType, OfferItem, ProductType, WindowConfig, ProfileColor } from "@/types";
+import type {
+  ModelType, OfferItem, ProductType, WindowConfig, ProfileColor, OpeningType, ShteseSide,
+} from "@/types";
 
-const PRODUCT_TYPES: { type: ProductType; icon: LucideIcon }[] = [
+export const PRODUCT_TYPES: { type: ProductType; icon: LucideIcon }[] = [
   { type: "Dritare", icon: Square },
   { type: "Derë Hyrje", icon: DoorOpen },
   { type: "Derë", icon: DoorClosed },
@@ -34,10 +38,9 @@ const COLORS: { value: ProfileColor; label: string }[] = [
   { value: "white_color", label: "Bardhë - Color" },
   { value: "color_color", label: "Color - Color" },
 ];
-
 const MECHANISMS = ["Roto NX", "Roto Patio", "Vorne Kip"];
-
-const SIDES = ["Majtas", "Djathtas", "Lart", "Poshtë"] as const;
+const SIDES: ShteseSide[] = ["Lart", "Poshtë", "Majtas", "Djathtas"];
+const OPENING_CYCLE: OpeningType[] = ["fiks", "majtas", "djathtas", "kip"];
 
 function kindOf(pt: ProductType): OfferItem["kind"] {
   if (pt === "Dritare") return "Dritare";
@@ -46,61 +49,84 @@ function kindOf(pt: ProductType): OfferItem["kind"] {
   return "Derë";
 }
 
+type SystemLite = { id: string; name: string; brand: string; material: string; category: string };
+function systemsFor(pt: ProductType, systems: SystemLite[]): SystemLite[] {
+  if (isDoorProduct(pt)) return systems.filter((s) => s.category === "Dyer" || s.material.toUpperCase().includes("ALU"));
+  if (pt === "Rreshqitëse") return systems.filter((s) => s.category === "Rrëshq." || s.category === "Dritare");
+  return systems.filter((s) => s.category === "Dritare");
+}
+
+function defaultConfig(pt: ProductType, systems: SystemLite[], glassId: string): WindowConfig {
+  const sys = systemsFor(pt, systems)[0]?.id ?? systems[0]?.id ?? "s1";
+  const base: WindowConfig = {
+    productType: pt, modelType: "njeshe", widthMm: 1000, heightMm: 1200,
+    systemId: sys, color: "white", mechanismId: MECHANISMS[0], glassId,
+    glassDesc: "", roleta: false, shtesa: [], openings: {},
+  };
+  if (isDoorProduct(pt)) return { ...base, heightMm: 2500, doorModel: "ARIES", sashComposition: "panel", manualPrice: 0 };
+  if (pt === "Rreshqitëse") return { ...base, modelType: "dyshe-v", widthMm: 2000, heightMm: 1200, manualPrice: 0 };
+  if (pt === "Roletë") return { ...base, heightMm: 1200 };
+  return base;
+}
+
 export function ProductConfigurator({
   initial,
-  defaultSystemId,
+  initialProductType = "Dritare",
   onSave,
   onCancel,
 }: {
   initial?: OfferItem | null;
-  defaultSystemId: string;
+  initialProductType?: ProductType;
   onSave: (item: Omit<OfferItem, "id">, id?: string) => void;
   onCancel: () => void;
 }) {
   const pricing = useStore((s) => s.pricing);
 
-  const baseCfg: WindowConfig = useMemo(
-    () =>
-      initial?.config ?? {
-        productType: "Dritare",
-        modelType: "njeshe",
-        widthMm: initial?.widthMm ?? 1000,
-        heightMm: initial?.heightMm ?? 1200,
-        systemId: defaultSystemId || pricing.systems[0]?.id || "s1",
-        color: "white",
-        mechanismId: MECHANISMS[0],
-        glassId: pricing.glass[0]?.id ?? "g1",
-        glassDesc: "",
-        roleta: false,
-        shtesa: [],
-      },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+  const [cfg, setCfg] = useState<WindowConfig>(
+    () => initial?.config ?? defaultConfig(initialProductType, pricing.systems, pricing.glass[0]?.id ?? "g1"),
   );
-
-  const [cfg, setCfg] = useState<WindowConfig>(baseCfg);
   const [qty, setQty] = useState(initial?.qty ?? 1);
   const [subtab, setSubtab] = useState<"permasat" | "shtesa" | "mekanizmi">("permasat");
   const [productOpen, setProductOpen] = useState(false);
+  const [shtesaMenu, setShtesaMenu] = useState(false);
 
   const set = <K extends keyof WindowConfig>(k: K, v: WindowConfig[K]) => setCfg((c) => ({ ...c, [k]: v }));
-
-  const materials = useMemo(() => computeMaterials(cfg.modelType, cfg.widthMm, cfg.heightMm), [cfg.modelType, cfg.widthMm, cfg.heightMm]);
+  const materials = useMemo(() => computeMaterials(cfg), [cfg]);
   const price = useMemo(() => computePrice(cfg, pricing), [cfg, pricing]);
 
-  const activeProduct = PRODUCT_TYPES.find((p) => p.type === cfg.productType)!;
+  const pt = cfg.productType;
+  const glass = isGlassProduct(pt);
+  const door = isDoorProduct(pt);
+  const roleta = pt === "Roletë";
+  const activeProduct = PRODUCT_TYPES.find((p) => p.type === pt)!;
+  const sysOptions = systemsFor(pt, pricing.systems);
+
+  const changeType = (newPt: ProductType) => {
+    setProductOpen(false);
+    setCfg(defaultConfig(newPt, pricing.systems, pricing.glass[0]?.id ?? "g1"));
+    setSubtab("permasat");
+  };
+
+  const cyclePane = (i: number) => {
+    setCfg((c) => {
+      const cur = (c.openings?.[i] ?? "fiks") as OpeningType;
+      const next = OPENING_CYCLE[(OPENING_CYCLE.indexOf(cur) + 1) % OPENING_CYCLE.length];
+      const openings = { ...c.openings };
+      if (next === "fiks") delete openings[i]; else openings[i] = next;
+      return { ...c, openings };
+    });
+  };
+
+  const addShtese = (side: ShteseSide) => {
+    setShtesaMenu(false);
+    set("shtesa", [...cfg.shtesa, { id: uid(), side, widthMm: 0 }]);
+  };
 
   const save = () => {
-    const item: Omit<OfferItem, "id"> = {
-      kind: kindOf(cfg.productType),
-      label: cfg.productType,
-      widthMm: cfg.widthMm,
-      heightMm: cfg.heightMm,
-      qty,
-      unitPrice: price,
-      config: cfg,
-    };
-    onSave(item, initial?.id);
+    onSave(
+      { kind: kindOf(pt), label: pt, widthMm: cfg.widthMm, heightMm: cfg.heightMm, qty, unitPrice: price, config: cfg },
+      initial?.id,
+    );
   };
 
   return (
@@ -109,12 +135,9 @@ export function ProductConfigurator({
       <div className="order-2 space-y-4 lg:order-1">
         {/* Product type dropdown */}
         <div className="relative">
-          <button
-            onClick={() => setProductOpen((v) => !v)}
-            className="flex w-full items-center gap-3 rounded-xl border-2 border-indigo-500/60 bg-slate-100 px-4 py-3 text-left"
-          >
+          <button onClick={() => setProductOpen((v) => !v)} className="flex w-full items-center gap-3 rounded-xl border-2 border-indigo-500/60 bg-slate-100 px-4 py-3 text-left">
             <activeProduct.icon className="size-5 text-slate-500" />
-            <span className="flex-1 font-semibold text-slate-900">{cfg.productType}</span>
+            <span className="flex-1 font-semibold text-slate-900">{pt}</span>
             <ChevronDown className={cn("size-4 text-slate-400 transition-transform", productOpen && "rotate-180")} />
           </button>
           {productOpen && (
@@ -122,10 +145,10 @@ export function ProductConfigurator({
               <div className="fixed inset-0 z-10" onClick={() => setProductOpen(false)} />
               <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100 py-1 shadow-xl">
                 {PRODUCT_TYPES.map(({ type, icon: Icon }) => (
-                  <button key={type} onClick={() => { set("productType", type); setProductOpen(false); }}
-                    className={cn("flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-slate-200/60", cfg.productType === type ? "font-semibold text-slate-900" : "text-slate-500")}>
+                  <button key={type} onClick={() => changeType(type)}
+                    className={cn("flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-slate-200/60", pt === type ? "font-semibold text-slate-900" : "text-slate-500")}>
                     <Icon className="size-4" /> {type}
-                    {cfg.productType === type && <Check className="ml-auto size-4 text-indigo-400" />}
+                    {pt === type && <Check className="ml-auto size-4 text-indigo-400" />}
                   </button>
                 ))}
               </div>
@@ -133,51 +156,98 @@ export function ProductConfigurator({
           )}
         </div>
 
-        {/* Sub-tabs */}
-        <div className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1">
-          {([["permasat", "Përmasat", Ruler], ["shtesa", "Shtesa & Roleta", Layers], ["mekanizmi", "Mekanizmi & Xhami", Settings2]] as const).map(([v, label, Icon]) => (
-            <button key={v} onClick={() => setSubtab(v)}
-              className={cn("flex flex-col items-center gap-1 rounded-lg px-2 py-2 text-center text-[11px] font-semibold leading-tight transition-colors",
-                subtab === v ? "bg-indigo-600 text-white" : "text-slate-500 hover:text-slate-900")}>
-              <Icon className="size-4" /> {label}
-            </button>
-          ))}
-        </div>
+        {/* Sub-tabs (roleta has none) */}
+        {!roleta && (
+          <div className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1">
+            {([["permasat", "Përmasat", Ruler], ["shtesa", "Shtesa & Roleta", Layers], ["mekanizmi", "Mekanizmi & Xhami", Settings2]] as const).map(([v, label, Icon]) => (
+              <button key={v} onClick={() => setSubtab(v)}
+                className={cn("flex flex-col items-center gap-1 rounded-lg px-2 py-2 text-center text-[11px] font-semibold leading-tight transition-colors", subtab === v ? "bg-indigo-600 text-white" : "text-slate-500 hover:text-slate-900")}>
+                <Icon className="size-4" /> {label}
+              </button>
+            ))}
+          </div>
+        )}
 
-        {subtab === "permasat" && (
+        {(roleta || subtab === "permasat") && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <DimInput label="Gjerësia (W)" value={cfg.widthMm} onChange={(v) => set("widthMm", v)} />
               <DimInput label="Lartësia (H)" value={cfg.heightMm} onChange={(v) => set("heightMm", v)} />
             </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-100 p-4">
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900"><Layers className="size-4 text-indigo-400" /> Profili & Ngjyra</div>
-              <Field label="Sistemi i profilit">
-                <Select value={cfg.systemId} onChange={(v) => set("systemId", v)} options={pricing.systems.map((s) => ({ value: s.id, label: `${s.name} (${s.brand})` }))} />
+
+            {!roleta && (
+              <div className="rounded-xl border border-slate-200 bg-slate-100 p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900"><Layers className="size-4 text-indigo-400" /> Profili & Ngjyra</div>
+                <Field label="Sistemi i profilit">
+                  <Select value={cfg.systemId} onChange={(v) => set("systemId", v)} options={sysOptions.map((s) => ({ value: s.id, label: `${s.name} (${s.brand})` }))} />
+                </Field>
+                <Field label="Ngjyra e profilit">
+                  <Select value={cfg.color} onChange={(v) => set("color", v as ProfileColor)} options={COLORS} />
+                </Field>
+              </div>
+            )}
+
+            {(door || pt === "Rreshqitëse") && (
+              <Field label="Mbishkrim manual (opsional) — 0 = automatik">
+                <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 focus-within:border-indigo-500">
+                  <input value={String(cfg.manualPrice ?? 0)} onChange={(e) => set("manualPrice", parseFloat(e.target.value.replace(",", ".")) || 0)} inputMode="decimal"
+                    className="h-10 w-full bg-transparent px-3 text-sm font-semibold text-slate-900 outline-none" />
+                  <span className="px-3 text-xs font-semibold text-slate-400">€</span>
+                </div>
               </Field>
-              <Field label="Ngjyra e profilit">
-                <Select value={cfg.color} onChange={(v) => set("color", v as ProfileColor)} options={COLORS} />
-              </Field>
-            </div>
+            )}
+
+            {door && (
+              <>
+                <Field label="Modeli i derës">
+                  <Select value={cfg.doorModel ?? "ARIES"} onChange={(v) => set("doorModel", v)} options={DOOR_MODELS.map((d) => ({ value: d, label: d }))} />
+                </Field>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold tracking-wide text-slate-400 uppercase">Përbërja e krahut</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[["panel", "Panel i plotë", "Krah masiv"], ["glass", pt === "Derë Hyrje" ? "Gjysmë xham" : "Me xham", pt === "Derë Hyrje" ? "Panel + xham lart" : "Krah me xham"]].map(([v, t, sub]) => (
+                      <button key={v} onClick={() => set("sashComposition", v)}
+                        className={cn("rounded-xl border p-3 text-left", cfg.sashComposition === v ? "border-indigo-500 bg-indigo-50/40" : "border-slate-200 hover:bg-slate-200/40")}>
+                        <span className="block text-sm font-semibold text-slate-900">{t}</span>
+                        <span className="block text-xs text-slate-400">{sub}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 
-        {subtab === "shtesa" && (
+        {!roleta && subtab === "shtesa" && (
           <div className="space-y-4">
             <div className="rounded-xl border border-slate-200 bg-slate-100 p-4">
-              <div className="mb-2 flex items-center justify-between">
+              <div className="relative mb-2 flex items-center justify-between">
                 <span className="text-xs font-bold tracking-widest text-slate-400 uppercase">Shtesa</span>
-                <button onClick={() => set("shtesa", [...cfg.shtesa, { id: uid(), side: "Djathtas", widthMm: 40 }])} className="flex items-center gap-1 text-xs font-semibold text-indigo-400 hover:underline"><Plus className="size-3.5" /> Shto shtesë</button>
+                <button onClick={() => setShtesaMenu((v) => !v)} className="flex items-center gap-1 text-xs font-semibold text-indigo-400 hover:underline"><Plus className="size-3.5" /> Shto shtesë</button>
+                {shtesaMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShtesaMenu(false)} />
+                    <div className="absolute top-6 right-0 z-20 w-40 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 py-1 shadow-xl">
+                      <div className="px-3 py-1.5 text-[10px] font-bold tracking-widest text-slate-400 uppercase">Ku ta shtoni?</div>
+                      {SIDES.map((s) => (
+                        <button key={s} onClick={() => addShtese(s)} className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200/60">
+                          <MoveDiagonal className="size-4 text-slate-400" /> {s}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
               {cfg.shtesa.length === 0 ? (
                 <p className="py-2 text-sm text-slate-400">Nuk ka shtesa. Kliko &ldquo;Shto shtesë&rdquo; për të zgjeruar profilin anash.</p>
               ) : (
                 <ul className="space-y-2">
                   {cfg.shtesa.map((sh) => (
-                    <li key={sh.id} className="flex items-center gap-2">
-                      <Select value={sh.side} onChange={(v) => set("shtesa", cfg.shtesa.map((x) => (x.id === sh.id ? { ...x, side: v as typeof sh.side } : x)))} options={SIDES.map((s) => ({ value: s, label: s }))} className="flex-1" />
+                    <li key={sh.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                      <span className="flex-1 text-xs font-bold tracking-wide text-slate-500 uppercase">{sh.side}</span>
                       <input value={String(sh.widthMm)} onChange={(e) => set("shtesa", cfg.shtesa.map((x) => (x.id === sh.id ? { ...x, widthMm: parseInt(e.target.value) || 0 } : x)))}
-                        className="h-9 w-20 rounded-lg border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-indigo-500" inputMode="numeric" />
+                        className="h-8 w-20 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-indigo-500" inputMode="numeric" />
                       <span className="text-xs text-slate-400">mm</span>
                       <button onClick={() => set("shtesa", cfg.shtesa.filter((x) => x.id !== sh.id))} className="text-slate-400 hover:text-rose-400" aria-label="Hiq"><Trash2 className="size-4" /></button>
                     </li>
@@ -192,7 +262,7 @@ export function ProductConfigurator({
           </div>
         )}
 
-        {subtab === "mekanizmi" && (
+        {!roleta && subtab === "mekanizmi" && (
           <div className="space-y-4">
             <Field label="Sistemi i mekanizmit">
               <Select value={cfg.mechanismId} onChange={(v) => set("mechanismId", v)} options={MECHANISMS.map((m) => ({ value: m, label: m }))} />
@@ -210,32 +280,45 @@ export function ProductConfigurator({
 
       {/* RIGHT: preview + summary */}
       <div className="order-1 space-y-4 lg:order-2">
-        {/* window-type toolbar */}
-        <div className="no-scrollbar flex gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-2">
-          {MODEL_ORDER.map((mt) => (
-            <button key={mt} onClick={() => set("modelType", mt)} title={MODELS[mt].label} aria-label={MODELS[mt].label}
-              className={cn("grid size-11 shrink-0 place-items-center rounded-lg border transition-colors",
-                cfg.modelType === mt ? "border-indigo-500 bg-indigo-600/10 text-indigo-400" : "border-slate-200 text-slate-400 hover:text-slate-700")}>
-              <ModelGlyph modelType={mt} />
-            </button>
-          ))}
-        </div>
+        {glass && (
+          <div className="no-scrollbar flex gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-2">
+            {MODEL_ORDER.map((mt) => (
+              <button key={mt} onClick={() => set("modelType", mt)} title={MODELS[mt].label} aria-label={MODELS[mt].label}
+                className={cn("grid size-11 shrink-0 place-items-center rounded-lg border transition-colors", cfg.modelType === mt ? "border-indigo-500 bg-indigo-600/10 text-indigo-400" : "border-slate-200 text-slate-400 hover:text-slate-700")}>
+                <ModelGlyph modelType={mt} />
+              </button>
+            ))}
+          </div>
+        )}
 
-        {/* live preview */}
         <div className="grid min-h-[320px] place-items-center rounded-2xl border border-slate-200 bg-slate-100 p-6 text-slate-500">
-          <WindowPreview modelType={cfg.modelType} widthMm={cfg.widthMm} heightMm={cfg.heightMm} hasRoleta={cfg.roleta} />
+          <WindowPreview config={cfg} onPaneClick={glass ? cyclePane : undefined} />
         </div>
+        {glass && <p className="-mt-2 text-center text-xs text-slate-400">Kliko një sekcion të xhamit për ta bërë hapëse (fiks → majtas → djathtas → kip).</p>}
 
         {/* materials */}
         <div className="rounded-2xl border border-slate-200 bg-slate-100 p-4">
-          <div className="mb-3 flex items-center gap-2 text-xs font-bold tracking-widest text-emerald-500 uppercase">
-            <Check className="size-4" /> Materialet për këtë pozicion
-          </div>
+          <div className="mb-3 flex items-center gap-2 text-xs font-bold tracking-widest text-emerald-500 uppercase"><Check className="size-4" /> Materialet për këtë pozicion</div>
           <div className="flex flex-wrap gap-2 text-sm">
-            <Chip label="Profil Ram" value={`${materials.ramPerimM.toFixed(2)} m`} />
-            {materials.tShtylleM > 0 && <Chip label="T-Shtyllë" value={`${materials.tShtylleM.toFixed(2)} m`} />}
-            <Chip label="Llajsne" value={`${materials.llajsneM.toFixed(2)} m`} />
-            <Chip label="Xham" value={`${materials.glassM2.toFixed(2)} m²`} />
+            {roleta ? (
+              <Chip label="Kutia" value={`${materials.kutiaM.toFixed(2)} m`} />
+            ) : door ? (
+              <>
+                <Chip label="Profil Ram" value={`${materials.ramPerimM.toFixed(2)} m`} />
+                <Chip label="Llajsne" value={`${materials.llajsneM.toFixed(2)} m`} />
+                <Chip label="Panel" value={`${materials.panelM2.toFixed(2)} m²`} />
+              </>
+            ) : (
+              <>
+                <Chip label="Profil Ram" value={`${materials.ramPerimM.toFixed(2)} m`} />
+                {materials.krahM > 0 && <Chip label="Profil Krah" value={`${materials.krahM.toFixed(2)} m`} />}
+                {materials.tShtylleM > 0 && <Chip label="T-Shtyllë" value={`${materials.tShtylleM.toFixed(2)} m`} />}
+                <Chip label="Llajsne" value={`${materials.llajsneM.toFixed(2)} m`} />
+                <Chip label="Xham" value={`${materials.glassM2.toFixed(2)} m²`} />
+                {materials.mechCount > 0 && <Chip label="Mekanizëm single" value={`${materials.mechCount} copë`} />}
+                {materials.handleCount > 0 && <Chip label="Doreza" value={`${materials.handleCount} copë`} />}
+              </>
+            )}
           </div>
         </div>
 
@@ -255,9 +338,7 @@ export function ProductConfigurator({
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={onCancel}>Anulo</Button>
-            <Button className="flex-1" onClick={save}>
-              <Plus className="size-4" /> {initial ? "Ruaj Ndryshimet" : "Shto në Ofertë"}
-            </Button>
+            <Button className="flex-1" onClick={save}><Plus className="size-4" /> {initial ? "Ruaj Ndryshimet" : "Shto në Ofertë"}</Button>
           </div>
         </div>
       </div>
@@ -275,12 +356,7 @@ function Chip({ label, value }: { label: string; value: string }) {
   );
 }
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-3 last:mb-0">
-      <label className="mb-1.5 block text-xs font-semibold tracking-wide text-slate-400 uppercase">{label}</label>
-      {children}
-    </div>
-  );
+  return <div className="mb-3 last:mb-0"><label className="mb-1.5 block text-xs font-semibold tracking-wide text-slate-400 uppercase">{label}</label>{children}</div>;
 }
 function Select({ value, onChange, options, className }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; className?: string }) {
   return (
@@ -295,8 +371,7 @@ function DimInput({ label, value, onChange }: { label: string; value: number; on
     <div>
       <label className="mb-1.5 block text-xs font-semibold tracking-wide text-slate-400 uppercase">{label}</label>
       <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 focus-within:border-indigo-500">
-        <input value={String(value)} onChange={(e) => onChange(parseInt(e.target.value) || 0)} inputMode="numeric"
-          className="h-10 w-full bg-transparent px-3 text-sm font-semibold text-slate-900 outline-none" />
+        <input value={String(value)} onChange={(e) => onChange(parseInt(e.target.value) || 0)} inputMode="numeric" className="h-10 w-full bg-transparent px-3 text-sm font-semibold text-slate-900 outline-none" />
         <span className="px-3 text-xs font-semibold text-slate-400">MM</span>
       </div>
     </div>
@@ -310,8 +385,6 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
     </button>
   );
 }
-
-// Compact schematic glyph for the window-type toolbar.
 function ModelGlyph({ modelType }: { modelType: ModelType }) {
   const def = MODELS[modelType];
   if (modelType === "custom") return <Plus className="size-5" />;
@@ -320,7 +393,6 @@ function ModelGlyph({ modelType }: { modelType: ModelType }) {
     const pts = def.shape === "triangle" ? "12,4 20,20 4,20" : def.shape === "trapez" ? "8,4 16,4 20,20 4,20" : "12,4 20,10 17,20 7,20 4,10";
     return <svg viewBox="0 0 24 24" className="size-6"><polygon points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>;
   }
-  // grid glyph
   const rows = def.rows;
   const R = rows.length;
   return (
@@ -331,10 +403,7 @@ function ModelGlyph({ modelType }: { modelType: ModelType }) {
         let y = 3;
         rows.forEach((row, ri) => {
           const rh = 18 * (row.hf / rows.reduce((s, r) => s + r.hf, 0));
-          for (let c = 1; c < row.cols; c++) {
-            const x = 3 + (18 * c) / row.cols;
-            els.push(<line key={`v${ri}-${c}`} x1={x} y1={y} x2={x} y2={y + rh} stroke="currentColor" strokeWidth="1.2" />);
-          }
+          for (let c = 1; c < row.cols; c++) { const x = 3 + (18 * c) / row.cols; els.push(<line key={`v${ri}-${c}`} x1={x} y1={y} x2={x} y2={y + rh} stroke="currentColor" strokeWidth="1.2" />); }
           y += rh;
           if (ri < R - 1) els.push(<line key={`h${ri}`} x1="3" y1={y} x2="21" y2={y} stroke="currentColor" strokeWidth="1.2" />);
         });

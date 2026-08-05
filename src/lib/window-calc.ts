@@ -1,25 +1,31 @@
 // Parametric window/door configurator engine — pure functions, unit-tested.
-// Geometry model reverse-engineered from app.proferto.io (55mm ram face,
-// 42mm mullion face). Prices integrate with the local pricing store; the
-// per-sash / labour constants are tuned so a single 1000×1200 window ≈ €100
-// and a double ≈ €125 (matching the observed live prices within ~1%).
+// Geometry reverse-engineered from app.proferto.io (55mm ram face, 42mm mullion
+// face). Prices integrate with the local pricing store; per-sash / labour
+// constants are tuned so a fixed single 1000×1200 window ≈ €100 and opening a
+// sash adds KRAH + MEKANIZËM + DOREZA, matching the observed live behaviour.
 
-import type { ModelType, WindowConfig } from "@/types";
+import type { ModelType, ProductType, WindowConfig } from "@/types";
 import type { useStore } from "@/lib/store";
 
 type Pricing = ReturnType<typeof useStore.getState>["pricing"];
 
-export const FRAME_FACE = 55; // mm — ram ballore
-export const MULLION_FACE = 42; // mm — t-shtyllë / transom ballore
+export const FRAME_FACE = 55;
+export const MULLION_FACE = 42;
 
-const MECH_PER_SASH = 8;
-const HANDLE_PER_SASH = 5;
-const LABOR_PER_M = 2.5;
+const LABOR_PER_M = 5.15;
+const MECH_BASE = 15; // € per opening sash (before size)
+const MECH_PER_M = 8; // € per m of sash perimeter
+const HANDLE_PRICE = 8;
+const PANEL_PRICE = 90; // €/m² door panel
+const DOOR_BASE: Record<ProductType, number> = {
+  Dritare: 0,
+  "Derë Hyrje": 60,
+  Derë: 40,
+  Rreshqitëse: 0,
+  Roletë: 0,
+};
 
-interface RowDef {
-  hf: number;
-  cols: number;
-}
+interface RowDef { hf: number; cols: number }
 export interface ModelDef {
   label: string;
   rows: RowDef[];
@@ -48,11 +54,15 @@ export const MODELS: Record<ModelType, ModelDef> = {
   hark: { label: "Hark", rows: [{ hf: 1, cols: 1 }], shape: "arch" },
 };
 
+export const DOOR_MODELS = ["ARIES", "CARINA", "CONNA"] as const;
+export const isGlassProduct = (pt: ProductType) => pt === "Dritare" || pt === "Rreshqitëse";
+export const isDoorProduct = (pt: ProductType) => pt === "Derë Hyrje" || pt === "Derë";
+
 export interface Pane { x: number; y: number; w: number; h: number }
 export interface Layout {
   W: number;
   H: number;
-  panes: Pane[]; // glass panes in mm, full-frame coords
+  panes: Pane[];
   vMullions: { x: number; y: number; h: number }[];
   hMullions: { y: number; x: number; w: number }[];
   mainCols: number;
@@ -88,102 +98,164 @@ export function computeLayout(modelType: ModelType, W: number, H: number): Layou
       x += paneW + MULLION_FACE;
     }
     y += rowH;
-    if (i < R - 1) {
-      hMullions.push({ y, x: innerX, w: innerW });
-      y += MULLION_FACE;
-    }
+    if (i < R - 1) { hMullions.push({ y, x: innerX, w: innerW }); y += MULLION_FACE; }
   });
 
   return { W, H, panes, vMullions, hMullions, mainCols, shape: def.shape };
 }
 
 export interface Materials {
+  productType: ProductType;
   ramPerimM: number;
+  krahM: number;
   tShtylleM: number;
   llajsneM: number;
-  glassM2: number;
+  glassM2: number; // XHAM (window/sliding)
+  panelM2: number; // PANEL (doors)
+  kutiaM: number; // KUTIA (roleta)
+  mechCount: number;
+  handleCount: number;
   paneCount: number;
 }
 
-export function computeMaterials(modelType: ModelType, W: number, H: number): Materials {
-  const def = MODELS[modelType] ?? MODELS.njeshe;
-  const layout = computeLayout(modelType, W, H);
-  const glassM2 = layout.panes.reduce((s, p) => s + (p.w * p.h) / 1e6, 0);
-  const llajsneM = layout.panes.reduce((s, p) => s + (2 * (p.w + p.h)) / 1000, 0);
-  const ramPerimM = (2 * (W + H)) / 1000;
-  const R = def.rows.length;
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+export function openingCount(config: WindowConfig): number {
+  const layout = computeLayout(config.modelType, config.widthMm, config.heightMm);
+  let n = 0;
+  for (let i = 0; i < layout.panes.length; i++) {
+    const t = config.openings?.[i];
+    if (t && t !== "fiks") n++;
+  }
+  return n;
+}
+
+export function computeMaterials(config: WindowConfig): Materials {
+  const { productType, widthMm: W, heightMm: H } = config;
+  const ramPerimM = round2((2 * (W + H)) / 1000);
+
+  if (productType === "Roletë") {
+    return { productType, ramPerimM: 0, krahM: 0, tShtylleM: 0, llajsneM: 0, glassM2: 0, panelM2: 0, kutiaM: round2(W / 1000), mechCount: 0, handleCount: 0, paneCount: 0 };
+  }
+
+  if (isDoorProduct(productType)) {
+    const innerW = Math.max(0, W - 2 * FRAME_FACE);
+    const innerH = Math.max(0, H - 2 * FRAME_FACE);
+    const panelM2 = round2((innerW * innerH) / 1e6);
+    const llajsneM = round2((2 * (innerW + innerH)) / 1000);
+    return { productType, ramPerimM, krahM: 0, tShtylleM: 0, llajsneM, glassM2: 0, panelM2, kutiaM: 0, mechCount: 0, handleCount: 0, paneCount: 1 };
+  }
+
+  // window / sliding
+  const def = MODELS[config.modelType] ?? MODELS.njeshe;
+  const layout = computeLayout(config.modelType, W, H);
+  const glassM2 = round2(layout.panes.reduce((s, p) => s + (p.w * p.h) / 1e6, 0));
+  const llajsneM = round2(layout.panes.reduce((s, p) => s + (2 * (p.w + p.h)) / 1000, 0));
   const totalHf = def.rows.reduce((s, r) => s + r.hf, 0);
   let mullionMm = 0;
-  def.rows.forEach((row) => {
-    const rowFullH = H * (row.hf / totalHf);
-    mullionMm += (row.cols - 1) * rowFullH; // vertical mullions
+  def.rows.forEach((row) => { mullionMm += (row.cols - 1) * (H * (row.hf / totalHf)); });
+  mullionMm += (def.rows.length - 1) * W;
+
+  let krahMm = 0;
+  let mechCount = 0;
+  layout.panes.forEach((p, i) => {
+    const t = config.openings?.[i];
+    if (t && t !== "fiks") { krahMm += 2 * (p.w + p.h); mechCount++; }
   });
-  mullionMm += (R - 1) * W; // horizontal transoms
-  const paneCount = def.rows.reduce((s, r) => s + r.cols, 0);
+
   return {
-    ramPerimM: round2(ramPerimM),
+    productType,
+    ramPerimM,
+    krahM: round2(krahMm / 1000),
     tShtylleM: round2(mullionMm / 1000),
-    llajsneM: round2(llajsneM),
-    glassM2: round2(glassM2),
-    paneCount,
+    llajsneM,
+    glassM2,
+    panelM2: 0,
+    kutiaM: 0,
+    mechCount,
+    handleCount: mechCount,
+    paneCount: layout.panes.length,
   };
 }
 
 function colorKey(color: WindowConfig["color"]): "white" | "whiteColor" | "colorColor" {
   return color === "white" ? "white" : color === "white_color" ? "whiteColor" : "colorColor";
 }
+function num(v: string | undefined, fallback: number): number {
+  const n = parseFloat((v ?? "").replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
 
 export function computePrice(config: WindowConfig, pricing: Pricing): number {
-  const m = computeMaterials(config.modelType, config.widthMm, config.heightMm);
+  if (config.manualPrice && config.manualPrice > 0) return round2(config.manualPrice);
+
+  const m = computeMaterials(config);
   const key = colorKey(config.color);
   const ramRow = pricing.profilePriceRows.find((r) => r.profile.startsWith("Ram")) ?? pricing.profilePriceRows[0];
+  const krahRow = pricing.profilePriceRows.find((r) => r.profile.startsWith("Krah")) ?? ramRow;
   const tRow = pricing.profilePriceRows.find((r) => r.profile.startsWith("T-")) ?? ramRow;
   const ramPrice = ramRow?.[key] ?? 6.2;
+  const krahPrice = krahRow?.[key] ?? 7.0;
   const tPrice = tRow?.[key] ?? 7.6;
-
-  const glass = pricing.glass.find((g) => g.id === config.glassId) ?? pricing.glass[0];
-  const glassPrice = glass?.price ?? 34;
-
-  const llajsnePrice =
-    config.color === "white"
-      ? num(pricing.accessoryParams["Llajsne bardhë (€/m)"], 0.8)
-      : num(pricing.accessoryParams["Llajsne color (€/m)"], 1.2);
-
+  const llajsnePrice = config.color === "white"
+    ? num(pricing.accessoryParams["Llajsne bardhë (€/m)"], 0.8)
+    : num(pricing.accessoryParams["Llajsne color (€/m)"], 1.2);
   const system = pricing.systems.find((s) => s.id === config.systemId);
   const isPVC = (system?.material ?? "PVC").toUpperCase().includes("PVC");
   const armimPrice = pricing.armingRows.find((a) => a.component.startsWith("Armim Ram"))?.price ?? 3.2;
+  const glass = pricing.glass.find((g) => g.id === config.glassId) ?? pricing.glass[0];
+  const glassPrice = glass?.price ?? 34;
 
+  if (config.productType === "Roletë") {
+    const area = (config.widthMm * config.heightMm) / 1e6;
+    const roletaPrice = pricing.roletaVersions[0]?.pricePerM2 ?? 45;
+    return round2(area * roletaPrice + 65 + (config.widthMm / 1000) * 14);
+  }
+
+  if (isDoorProduct(config.productType)) {
+    let price =
+      m.ramPerimM * ramPrice +
+      m.llajsneM * llajsnePrice +
+      m.panelM2 * PANEL_PRICE +
+      (isPVC ? m.ramPerimM * armimPrice : 0) +
+      m.ramPerimM * LABOR_PER_M +
+      DOOR_BASE[config.productType];
+    if (config.sashComposition === "glass") price += m.panelM2 * (glassPrice - PANEL_PRICE) * 0.5;
+    for (const sh of config.shtesa) {
+      const sideLenMm = sh.side === "Lart" || sh.side === "Poshtë" ? config.widthMm : config.heightMm;
+      price += (sideLenMm / 1000) * (pricing.expansions[0]?.price ?? 3);
+    }
+    return round2(price);
+  }
+
+  // window / sliding
+  const layout = computeLayout(config.modelType, config.widthMm, config.heightMm);
   let price =
     m.ramPerimM * ramPrice +
     m.tShtylleM * tPrice +
     m.glassM2 * glassPrice +
     m.llajsneM * llajsnePrice +
-    m.paneCount * (MECH_PER_SASH + HANDLE_PER_SASH) +
     (isPVC ? m.ramPerimM * armimPrice : 0) +
-    m.ramPerimM * LABOR_PER_M;
+    m.ramPerimM * LABOR_PER_M +
+    m.krahM * krahPrice;
+
+  // per opening sash: size-dependent mechanism + handle
+  layout.panes.forEach((p, i) => {
+    const t = config.openings?.[i];
+    if (t && t !== "fiks") {
+      const sashPerimM = (2 * (p.w + p.h)) / 1000;
+      price += MECH_BASE + sashPerimM * MECH_PER_M + HANDLE_PRICE;
+    }
+  });
 
   if (config.roleta) {
     const area = (config.widthMm * config.heightMm) / 1e6;
-    const roletaPrice = pricing.roletaVersions[0]?.pricePerM2 ?? 45;
-    price += area * roletaPrice + 65; // + motor
+    price += area * (pricing.roletaVersions[0]?.pricePerM2 ?? 45) + 65;
   }
   for (const sh of config.shtesa) {
     const sideLenMm = sh.side === "Lart" || sh.side === "Poshtë" ? config.widthMm : config.heightMm;
-    const exp = pricing.expansions[0]?.price ?? 3;
-    price += (sideLenMm / 1000) * exp;
+    price += (sideLenMm / 1000) * (pricing.expansions[0]?.price ?? 3);
   }
 
-  // Doors carry a base surcharge (hardware, panel)
-  if (config.productType === "Derë Hyrje") price += 220;
-  else if (config.productType === "Derë") price += 60;
-
   return round2(price);
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-function num(v: string | undefined, fallback: number): number {
-  const n = parseFloat((v ?? "").replace(",", "."));
-  return Number.isFinite(n) && n > 0 ? n : fallback;
 }

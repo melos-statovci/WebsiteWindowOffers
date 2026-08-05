@@ -55,3 +55,35 @@ mechanism + handle per sash) tuned so the reference single window ≈ €100. Do
 ## Quantity + add
 SASIA − N + stepper · ÇMIMI I PËRLLOGARITUR (live) · **Shto në Ofertë** (adds configured item to offer;
 reopening a product loads its full config for editing).
+
+## SECOND PASS — interactions & per-type variations (directly observed)
+
+### Product selection is step 0
+Empty Produkti → big "+" → popup **"ZGJIDH PRODUKTIN"**: Dritare · Derë Hyrje · Derë ·
+Rreshqitëse · Roletë. Picking one opens a **type-specific** configurator. The product
+dropdown at the top switches type in place.
+
+### Clicking a window/sliding pane toggles its opening
+Default panes are **FIKS** (glass only → materials RAM/LLAJSNE/XHAM, no hardware).
+Clicking a pane makes it **hapëse** and cycles the opening symbol (majtas/djathtas/kip,
+drawn with red+blue dashed indicators). An opening pane ADDS: **PROFIL KRAH** (sash
+perimeter), **MEKANIZËM SINGLE** (per opening sash, size-dependent), **DOREZA** (handle,
+per opening sash). Example (1000×2500 double): fixed €220.95 → one pane opened €330.28.
+
+### Shtesa flow
+"Shto shtesë" → menu **"KU TA SHTONI?"**: Lart / Poshtë / Majtas / Djathtas → adds a
+row `SIDE | [width] MM | ✕` (side fixed as a label, width editable, removable).
+
+### Per-type panels
+- **Dritare**: window model toolbar (19), glass (XHAM), window+ALU systems, per-pane opening.
+- **Derë Hyrje / Derë**: door model toolbar (5), taller default (H≈2500), door-only systems
+  (Derë PVC 70, ALU 70). Extra fields: **MBISHKRIM MANUAL (OPSIONAL)** price override
+  (0 = auto), **MODELI I DERËS** (ARIES / CARINA / CONNA), **PËRBËRJA E KRAHUT**
+  (Panel i plotë / Krah masiv  vs  Gjysmë xham|Me xham). Material **PANEL m²** (not XHAM).
+- **Rreshqitëse**: glass (XHAM) + T-SHTYLLË (meeting rail), sliding systems (Smart-Slide,
+  HST 85) + window systems, MBISHKRIM MANUAL, per-pane opening, own model toolbar.
+- **Roletë**: minimal — only GJERËSIA/LARTËSIA, no sub-tabs, no systems. Material **KUTIA**.
+
+### Material chip vocabulary
+PROFIL RAM · PROFIL KRAH · T-SHTYLLË · LLAJSNE · XHAM (windows/sliding) / PANEL (doors) /
+KUTIA (roleta) · MEKANIZËM SINGLE|DOUBLE (count) · DOREZA (count).
