@@ -17,6 +17,10 @@ const MECH_BASE = 15; // € per opening sash (before size)
 const MECH_PER_M = 8; // € per m of sash perimeter
 const HANDLE_PRICE = 8;
 const PANEL_PRICE = 90; // €/m² door panel
+// Shtesë (expansion band) — tuned so a 300×1200 band adds ~€150 (observed
+// production total went 100.15 → 234.54 with a 300mm right shtesë).
+const SHTESE_PER_M2 = 350;
+const SHTESE_EDGE_PER_M = 20;
 const DOOR_BASE: Record<ProductType, number> = {
   Dritare: 0,
   "Derë Hyrje": 60,
@@ -120,8 +124,30 @@ export interface Materials {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+export interface EffectiveDims {
+  ew: number; // window width after shtesa carve-out
+  eh: number; // window height after shtesa carve-out
+  left: number; right: number; top: number; bottom: number;
+}
+
+// A shtesë (expansion profile) does NOT enlarge the product: it carves a band
+// out of the overall opening, shrinking the actual window to fit inside it.
+export function effectiveDims(config: WindowConfig): EffectiveDims {
+  let left = 0, right = 0, top = 0, bottom = 0;
+  for (const s of config.shtesa) {
+    if (s.side === "Majtas") left += s.widthMm;
+    else if (s.side === "Djathtas") right += s.widthMm;
+    else if (s.side === "Lart") top += s.widthMm;
+    else bottom += s.widthMm;
+  }
+  const ew = Math.max(200, config.widthMm - left - right);
+  const eh = Math.max(200, config.heightMm - top - bottom);
+  return { ew, eh, left, right, top, bottom };
+}
+
 export function openingCount(config: WindowConfig): number {
-  const layout = computeLayout(config.modelType, config.widthMm, config.heightMm);
+  const { ew, eh } = effectiveDims(config);
+  const layout = computeLayout(config.modelType, ew, eh);
   let n = 0;
   for (let i = 0; i < layout.panes.length; i++) {
     const t = config.openings?.[i];
@@ -131,30 +157,31 @@ export function openingCount(config: WindowConfig): number {
 }
 
 export function computeMaterials(config: WindowConfig): Materials {
-  const { productType, widthMm: W, heightMm: H } = config;
-  const ramPerimM = round2((2 * (W + H)) / 1000);
+  const { productType, widthMm: W } = config;
+  const { ew, eh } = effectiveDims(config);
+  const ramPerimM = round2((2 * (ew + eh)) / 1000);
 
   if (productType === "Roletë") {
     return { productType, ramPerimM: 0, krahM: 0, tShtylleM: 0, llajsneM: 0, glassM2: 0, panelM2: 0, kutiaM: round2(W / 1000), mechCount: 0, handleCount: 0, paneCount: 0 };
   }
 
   if (isDoorProduct(productType)) {
-    const innerW = Math.max(0, W - 2 * FRAME_FACE);
-    const innerH = Math.max(0, H - 2 * FRAME_FACE);
+    const innerW = Math.max(0, ew - 2 * FRAME_FACE);
+    const innerH = Math.max(0, eh - 2 * FRAME_FACE);
     const panelM2 = round2((innerW * innerH) / 1e6);
     const llajsneM = round2((2 * (innerW + innerH)) / 1000);
     return { productType, ramPerimM, krahM: 0, tShtylleM: 0, llajsneM, glassM2: 0, panelM2, kutiaM: 0, mechCount: 0, handleCount: 0, paneCount: 1 };
   }
 
-  // window / sliding
+  // window / sliding — computed on the effective (carved) window size
   const def = MODELS[config.modelType] ?? MODELS.njeshe;
-  const layout = computeLayout(config.modelType, W, H);
+  const layout = computeLayout(config.modelType, ew, eh);
   const glassM2 = round2(layout.panes.reduce((s, p) => s + (p.w * p.h) / 1e6, 0));
   const llajsneM = round2(layout.panes.reduce((s, p) => s + (2 * (p.w + p.h)) / 1000, 0));
   const totalHf = def.rows.reduce((s, r) => s + r.hf, 0);
   let mullionMm = 0;
-  def.rows.forEach((row) => { mullionMm += (row.cols - 1) * (H * (row.hf / totalHf)); });
-  mullionMm += (def.rows.length - 1) * W;
+  def.rows.forEach((row) => { mullionMm += (row.cols - 1) * (eh * (row.hf / totalHf)); });
+  mullionMm += (def.rows.length - 1) * ew;
 
   let krahMm = 0;
   let mechCount = 0;
@@ -184,6 +211,19 @@ function colorKey(color: WindowConfig["color"]): "white" | "whiteColor" | "color
 function num(v: string | undefined, fallback: number): number {
   const n = parseFloat((v ?? "").replace(",", "."));
   return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+// Cost of the expansion bands (filler section + coupling profile).
+function shtesaCost(config: WindowConfig): number {
+  let c = 0;
+  for (const s of config.shtesa) {
+    if (!s.widthMm) continue;
+    const vertical = s.side === "Majtas" || s.side === "Djathtas";
+    const longMm = vertical ? config.heightMm : config.widthMm;
+    const areaM2 = (s.widthMm / 1000) * (longMm / 1000);
+    c += areaM2 * SHTESE_PER_M2 + (longMm / 1000) * SHTESE_EDGE_PER_M;
+  }
+  return c;
 }
 
 export function computePrice(config: WindowConfig, pricing: Pricing): number {
@@ -221,15 +261,13 @@ export function computePrice(config: WindowConfig, pricing: Pricing): number {
       m.ramPerimM * LABOR_PER_M +
       DOOR_BASE[config.productType];
     if (config.sashComposition === "glass") price += m.panelM2 * (glassPrice - PANEL_PRICE) * 0.5;
-    for (const sh of config.shtesa) {
-      const sideLenMm = sh.side === "Lart" || sh.side === "Poshtë" ? config.widthMm : config.heightMm;
-      price += (sideLenMm / 1000) * (pricing.expansions[0]?.price ?? 3);
-    }
+    price += shtesaCost(config);
     return round2(price);
   }
 
-  // window / sliding
-  const layout = computeLayout(config.modelType, config.widthMm, config.heightMm);
+  // window / sliding — geometry on the effective (carved) window size
+  const { ew, eh } = effectiveDims(config);
+  const layout = computeLayout(config.modelType, ew, eh);
   let price =
     m.ramPerimM * ramPrice +
     m.tShtylleM * tPrice +
@@ -252,10 +290,7 @@ export function computePrice(config: WindowConfig, pricing: Pricing): number {
     const area = (config.widthMm * config.heightMm) / 1e6;
     price += area * (pricing.roletaVersions[0]?.pricePerM2 ?? 45) + 65;
   }
-  for (const sh of config.shtesa) {
-    const sideLenMm = sh.side === "Lart" || sh.side === "Poshtë" ? config.widthMm : config.heightMm;
-    price += (sideLenMm / 1000) * (pricing.expansions[0]?.price ?? 3);
-  }
+  price += shtesaCost(config);
 
   return round2(price);
 }

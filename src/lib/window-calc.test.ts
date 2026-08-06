@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeMaterials, computeLayout, computePrice } from "./window-calc";
+import { computeMaterials, computeLayout, computePrice, effectiveDims } from "./window-calc";
 import * as seed from "@/lib/mock/data";
 import type { WindowConfig, ProductType } from "@/types";
 
@@ -67,6 +67,25 @@ describe("opening panes add krah/mechanism/handle", () => {
     const fixed = computePrice(cfg({ modelType: "dyshe-v" }), pricing);
     const opened = computePrice(cfg({ modelType: "dyshe-v", openings: { 0: "majtas" } }), pricing);
     expect(opened).toBeGreaterThan(fixed);
+  });
+});
+
+describe("shtesa carve the window down (not enlarge it)", () => {
+  const withShtese = cfg({ shtesa: [{ id: "a", side: "Djathtas", widthMm: 300 }] });
+  it("effectiveDims subtracts shtesa widths from the overall opening", () => {
+    const d = effectiveDims(withShtese);
+    expect(d.ew).toBe(700);
+    expect(d.eh).toBe(1200);
+    expect(d.right).toBe(300);
+  });
+  it("materials recompute on the smaller window (matches observed 3.80/3.36/0.64)", () => {
+    const m = computeMaterials(withShtese);
+    expect(m.ramPerimM).toBe(3.8);
+    expect(m.glassM2).toBe(0.64);
+    expect(m.llajsneM).toBe(3.36);
+  });
+  it("adding a shtesë raises the price above the plain window", () => {
+    expect(computePrice(withShtese, pricing)).toBeGreaterThan(computePrice(cfg({}), pricing));
   });
 });
 

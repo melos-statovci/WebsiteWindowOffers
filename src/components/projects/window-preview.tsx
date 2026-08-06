@@ -1,6 +1,6 @@
 "use client";
 
-import { computeLayout, isDoorProduct, FRAME_FACE } from "@/lib/window-calc";
+import { computeLayout, effectiveDims, isDoorProduct, FRAME_FACE } from "@/lib/window-calc";
 import type { WindowConfig, OpeningType } from "@/types";
 
 // Live technical drawing. Panes are clickable (onPaneClick) to cycle their
@@ -70,25 +70,62 @@ export function WindowPreview({
   }
 
   // ---- Windows / sliding -------------------------------------------------
-  const layout = computeLayout(config.modelType, W, H);
+  // A shtesë carves the window down: the drawing spans the full W×H, but the
+  // actual window occupies the effective region, offset by any top/left bands.
+  const { ew, eh, left, top } = effectiveDims(config);
+  const layout = computeLayout(config.modelType, ew, eh);
   const frameT = Math.max(7, FRAME_FACE * scale);
   const mulT = Math.max(5, 42 * scale);
+  const wox = ox + left * scale;
+  const woy = oy + top * scale;
+  const wpw = ew * scale;
+  const wph = eh * scale;
+  const ty = roletaH ? roletaH + 3 : 0;
 
   return (
     <svg viewBox={`0 0 ${vbW} ${vbH}`} className="h-full max-h-[420px] w-full" role="img" aria-label="Skica teknike e produktit">
-      <defs><linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#bcd4ef" stopOpacity="0.55" /><stop offset="55%" stopColor="#9fc0e8" stopOpacity="0.35" /><stop offset="100%" stopColor="#cfe0f2" stopOpacity="0.5" /></linearGradient></defs>
+      <defs>
+        <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#bcd4ef" stopOpacity="0.55" /><stop offset="55%" stopColor="#9fc0e8" stopOpacity="0.35" /><stop offset="100%" stopColor="#cfe0f2" stopOpacity="0.5" /></linearGradient>
+        <pattern id="shtese" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+          <rect width="7" height="7" fill="var(--color-slate-300)" opacity="0.5" />
+          <line x1="0" y1="0" x2="0" y2="7" stroke="var(--color-slate-500)" strokeWidth="1.5" opacity="0.5" />
+        </pattern>
+      </defs>
 
       {config.roleta && (
         <rect x={ox} y={oy} width={pw} height={roletaH} rx="2" className="fill-slate-300/60" stroke="currentColor" strokeWidth="1.5" style={{ color: "var(--color-slate-400)" }} />
       )}
-      <g transform={`translate(0 ${roletaH ? roletaH + 3 : 0})`}>
+      <g transform={`translate(0 ${ty})`}>
+        {/* shtesë bands (drawn behind, filling the carved-out sides) */}
+        {config.shtesa.map((sh) => {
+          if (!sh.widthMm) return null;
+          const d = sh.widthMm * scale;
+          let bx = ox, by = oy, bw = pw, bh = ph;
+          let rot = 0;
+          if (sh.side === "Majtas") { bw = d; }
+          else if (sh.side === "Djathtas") { bx = ox + pw - d; bw = d; }
+          else if (sh.side === "Lart") { bh = d; rot = 0; }
+          else { by = oy + ph - d; bh = d; }
+          const vertical = sh.side === "Majtas" || sh.side === "Djathtas";
+          const lx = bx + bw / 2, ly = by + bh / 2;
+          return (
+            <g key={sh.id}>
+              <rect x={bx} y={by} width={bw} height={bh} fill="url(#shtese)" stroke="currentColor" strokeWidth="1" style={{ color: "var(--color-slate-500)" }} />
+              <text x={lx} y={ly} fontSize="11" fontWeight="600" fill="currentColor" textAnchor="middle" dominantBaseline="middle"
+                transform={vertical ? `rotate(-90 ${lx} ${ly})` : `rotate(${rot} ${lx} ${ly})`} style={{ color: "var(--color-slate-500)" }}>
+                SHTESË {sh.widthMm}MM
+              </text>
+            </g>
+          );
+        })}
+
         {layout.shape ? (
-          <ShapeOutline shape={layout.shape} ox={ox} oy={oy} pw={pw} ph={ph} frameT={frameT} />
+          <ShapeOutline shape={layout.shape} ox={wox} oy={woy} pw={wpw} ph={wph} frameT={frameT} />
         ) : (
           <>
-            <rect x={ox} y={oy} width={pw} height={ph} rx="3" className="fill-slate-300/40" stroke="currentColor" strokeWidth="1.5" style={{ color: "var(--color-slate-500)" }} />
+            <rect x={wox} y={woy} width={wpw} height={wph} rx="3" className="fill-slate-300/40" stroke="currentColor" strokeWidth="1.5" style={{ color: "var(--color-slate-500)" }} />
             {layout.panes.map((p, i) => {
-              const gx = ox + p.x * scale, gy = oy + p.y * scale, gw = p.w * scale, gh = p.h * scale;
+              const gx = wox + p.x * scale, gy = woy + p.y * scale, gw = p.w * scale, gh = p.h * scale;
               const opening = (config.openings?.[i] ?? "fiks") as OpeningType;
               return (
                 <g key={i}>
@@ -103,16 +140,17 @@ export function WindowPreview({
               );
             })}
             {layout.vMullions.map((v, i) => (
-              <rect key={`v${i}`} x={ox + v.x * scale - mulT / 2} y={oy + v.y * scale} width={mulT} height={v.h * scale} className="fill-slate-300/60" stroke="currentColor" strokeWidth="1" style={{ color: "var(--color-slate-500)" }} />
+              <rect key={`v${i}`} x={wox + v.x * scale - mulT / 2} y={woy + v.y * scale} width={mulT} height={v.h * scale} className="fill-slate-300/60" stroke="currentColor" strokeWidth="1" style={{ color: "var(--color-slate-500)" }} />
             ))}
             {layout.hMullions.map((h, i) => (
-              <rect key={`h${i}`} x={ox + h.x * scale} y={oy + h.y * scale - mulT / 2} width={h.w * scale} height={mulT} className="fill-slate-300/60" stroke="currentColor" strokeWidth="1" style={{ color: "var(--color-slate-500)" }} />
+              <rect key={`h${i}`} x={wox + h.x * scale} y={woy + h.y * scale - mulT / 2} width={h.w * scale} height={mulT} className="fill-slate-300/60" stroke="currentColor" strokeWidth="1" style={{ color: "var(--color-slate-500)" }} />
             ))}
           </>
         )}
       </g>
-      <g transform={`translate(0 ${roletaH ? roletaH + 3 : 0})`}>
-        <DimLines ox={ox} oy={oy} pw={pw} ph={ph} cols={layout.mainCols} W={W} H={H} mm={mm} />
+      {/* dimension lines reflect the actual window (ew × eh) */}
+      <g transform={`translate(0 ${ty})`}>
+        <DimLines ox={wox} oy={woy} pw={wpw} ph={wph} cols={layout.mainCols} W={ew} H={eh} mm={mm} />
       </g>
     </svg>
   );
