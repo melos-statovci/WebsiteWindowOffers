@@ -84,7 +84,11 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
   return (
     <div className="min-h-screen bg-slate-50">
       <Sidebar />
-      <div className={cn("flex min-h-screen flex-col transition-[padding] duration-200", sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[264px]")}>
+      <div className={cn(
+        "flex min-h-screen flex-col transition-[padding] duration-200",
+        step === "produkti" && configuring && "lg:h-screen lg:min-h-0 lg:overflow-hidden",
+        sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[264px]",
+      )}>
       <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-1 rounded-xl bg-slate-200/70 p-1">
           <button onClick={() => router.push("/projects")} className="grid size-8 place-items-center rounded-lg text-slate-700 hover:bg-slate-300" aria-label="Mbyll"><X className="size-4" /></button>
@@ -112,7 +116,7 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
         </div>
       </div>
 
-      <div className={cn("mx-auto w-full flex-1 px-4 pb-16", step === "produkti" && configuring ? "max-w-6xl" : "max-w-2xl")}>
+      <div className={cn("w-full flex-1 px-4", step === "produkti" && configuring ? "pb-4 sm:px-6 lg:min-h-0 lg:overflow-hidden" : "mx-auto max-w-2xl pb-16")}>
         {step === "detajet" && (
           <div className="space-y-4">
             <button onClick={() => setStep("produkti")} className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900">

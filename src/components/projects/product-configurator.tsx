@@ -130,9 +130,9 @@ export function ProductConfigurator({
   };
 
   return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[380px_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-5 lg:h-full lg:grid-cols-[360px_minmax(0,1fr)]">
       {/* LEFT: configuration panel */}
-      <div className="order-2 space-y-4 lg:order-1">
+      <div className="no-scrollbar order-2 space-y-4 lg:order-1 lg:h-full lg:overflow-y-auto lg:pr-1">
         {/* Product type dropdown */}
         <div className="relative">
           <button onClick={() => setProductOpen((v) => !v)} className="flex w-full items-center gap-3 rounded-xl border-2 border-indigo-500/60 bg-slate-100 px-4 py-3 text-left">
@@ -279,25 +279,25 @@ export function ProductConfigurator({
       </div>
 
       {/* RIGHT: preview + summary */}
-      <div className="order-1 space-y-4 lg:order-2">
+      <div className="order-1 flex flex-col gap-3 lg:order-2 lg:h-full lg:min-h-0">
         {glass && (
-          <div className="no-scrollbar flex gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-2">
+          <div className="no-scrollbar flex shrink-0 gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-2">
             {MODEL_ORDER.map((mt) => (
               <button key={mt} onClick={() => set("modelType", mt)} title={MODELS[mt].label} aria-label={MODELS[mt].label}
-                className={cn("grid size-11 shrink-0 place-items-center rounded-lg border transition-colors", cfg.modelType === mt ? "border-indigo-500 bg-indigo-600/10 text-indigo-400" : "border-slate-200 text-slate-400 hover:text-slate-700")}>
+                className={cn("grid size-10 shrink-0 place-items-center rounded-lg border transition-colors", cfg.modelType === mt ? "border-indigo-500 bg-indigo-600/10 text-indigo-400" : "border-slate-200 text-slate-400 hover:text-slate-700")}>
                 <ModelGlyph modelType={mt} />
               </button>
             ))}
           </div>
         )}
 
-        <div className="grid min-h-[320px] place-items-center rounded-2xl border border-slate-200 bg-slate-100 p-6 text-slate-500">
+        <div className="flex min-h-[220px] flex-1 items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 p-4 text-slate-500 lg:min-h-0">
           <WindowPreview config={cfg} onPaneClick={glass ? cyclePane : undefined} />
         </div>
-        {glass && <p className="-mt-2 text-center text-xs text-slate-400">Kliko një sekcion të xhamit për ta bërë hapëse (fiks → majtas → djathtas → kip).</p>}
+        {glass && <p className="shrink-0 text-center text-xs text-slate-400">Kliko një sekcion të xhamit për ta bërë hapëse (fiks → majtas → djathtas → kip).</p>}
 
         {/* materials */}
-        <div className="rounded-2xl border border-slate-200 bg-slate-100 p-4">
+        <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-100 p-3">
           <div className="mb-3 flex items-center gap-2 text-xs font-bold tracking-widest text-emerald-500 uppercase"><Check className="size-4" /> Materialet për këtë pozicion</div>
           <div className="flex flex-wrap gap-2 text-sm">
             {roleta ? (
@@ -323,7 +323,7 @@ export function ProductConfigurator({
         </div>
 
         {/* quantity + price + add */}
-        <div className="rounded-2xl border border-slate-200 bg-slate-100 p-4">
+        <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-100 p-3">
           <div className="flex items-center justify-between border-b border-slate-200 pb-3">
             <span className="text-xs font-bold tracking-widest text-slate-400 uppercase">Sasia</span>
             <div className="flex items-center gap-1">

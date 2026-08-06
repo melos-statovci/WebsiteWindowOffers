@@ -32,7 +32,7 @@ export function WindowPreview({
   // ---- Roletë: a shutter box + slats ------------------------------------
   if (config.productType === "Roletë") {
     return (
-      <svg viewBox={`0 0 ${vbW} ${vbH}`} className="h-full max-h-[420px] w-full" role="img" aria-label="Skica e roletës">
+      <svg viewBox={`0 0 ${vbW} ${vbH}`} className="mx-auto h-full max-h-full w-full" role="img" aria-label="Skica e roletës">
         <rect x={ox} y={oy} width={pw} height={ph * 0.18} rx="3" className="fill-slate-300/50" stroke="currentColor" strokeWidth="1.5" style={{ color: "var(--color-slate-500)" }} />
         {Array.from({ length: 9 }).map((_, i) => (
           <line key={i} x1={ox + 3} y1={oy + ph * 0.18 + ((ph * 0.82) / 9) * (i + 1)} x2={ox + pw - 3} y2={oy + ph * 0.18 + ((ph * 0.82) / 9) * (i + 1)} stroke="currentColor" strokeWidth="1" style={{ color: "var(--color-slate-400)" }} opacity="0.6" />
@@ -51,7 +51,7 @@ export function WindowPreview({
     const inH = ph - 2 * FRAME_FACE * scale;
     const glass = config.sashComposition === "glass";
     return (
-      <svg viewBox={`0 0 ${vbW} ${vbH}`} className="h-full max-h-[420px] w-full" role="img" aria-label="Skica e derës">
+      <svg viewBox={`0 0 ${vbW} ${vbH}`} className="mx-auto h-full max-h-full w-full" role="img" aria-label="Skica e derës">
         <defs><linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#bcd4ef" stopOpacity="0.5" /><stop offset="100%" stopColor="#cfe0f2" stopOpacity="0.45" /></linearGradient></defs>
         <rect x={ox} y={oy} width={pw} height={ph} rx="3" className="fill-slate-300/40" stroke="currentColor" strokeWidth="1.5" style={{ color: "var(--color-slate-500)" }} />
         {glass ? (
@@ -83,7 +83,7 @@ export function WindowPreview({
   const ty = roletaH ? roletaH + 3 : 0;
 
   return (
-    <svg viewBox={`0 0 ${vbW} ${vbH}`} className="h-full max-h-[420px] w-full" role="img" aria-label="Skica teknike e produktit">
+    <svg viewBox={`0 0 ${vbW} ${vbH}`} className="mx-auto h-full max-h-full w-full" role="img" aria-label="Skica teknike e produktit">
       <defs>
         <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#bcd4ef" stopOpacity="0.55" /><stop offset="55%" stopColor="#9fc0e8" stopOpacity="0.35" /><stop offset="100%" stopColor="#cfe0f2" stopOpacity="0.5" /></linearGradient>
         <pattern id="shtese" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
