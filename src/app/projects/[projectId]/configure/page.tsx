@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { Button, Avatar, Toggle, EmptyState, Badge } from "@/components/ui/kit";
 import { ProductConfigurator, PRODUCT_TYPES } from "@/components/projects/product-configurator";
+import { Sidebar } from "@/components/shell/sidebar";
 import { useStore } from "@/lib/store";
 import { eur, initials } from "@/lib/format";
 import { projectNet } from "@/lib/selectors";
@@ -33,7 +34,7 @@ function WindowGlyph({ item }: { item: OfferItem }) {
 export default function ConfigurePage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(params);
   const router = useRouter();
-  const { toast, confirm } = useApp();
+  const { toast, confirm, sidebarCollapsed } = useApp();
 
   const project = useStore((s) => s.projects.find((p) => p.id === projectId));
   const company = useStore((s) => s.company);
@@ -82,6 +83,8 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <Sidebar />
+      <div className={cn("flex min-h-screen flex-col transition-[padding] duration-200", sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[264px]")}>
       <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-1 rounded-xl bg-slate-200/70 p-1">
           <button onClick={() => router.push("/projects")} className="grid size-8 place-items-center rounded-lg text-slate-700 hover:bg-slate-300" aria-label="Mbyll"><X className="size-4" /></button>
@@ -109,7 +112,7 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
         </div>
       </div>
 
-      <div className={cn("mx-auto w-full px-4 pb-16", step === "produkti" && configuring ? "max-w-6xl" : "max-w-2xl")}>
+      <div className={cn("mx-auto w-full flex-1 px-4 pb-16", step === "produkti" && configuring ? "max-w-6xl" : "max-w-2xl")}>
         {step === "detajet" && (
           <div className="space-y-4">
             <button onClick={() => setStep("produkti")} className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900">
@@ -229,6 +232,15 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
             </div>
           </div>
         )}
+      </div>
+
+      <div className="flex items-center gap-4 border-t border-slate-200 px-4 py-2 text-[11px] font-semibold tracking-widest text-slate-400 uppercase">
+        <span className="flex items-center gap-2">
+          <span className="inline-block size-2 rounded-full bg-emerald-500" /> System active
+        </span>
+        <span>Precision: 1.0mm</span>
+        <span className="ml-auto hidden sm:inline">© 2026 Proferto</span>
+      </div>
       </div>
     </div>
   );
