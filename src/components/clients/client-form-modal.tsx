@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/overlay";
 import { Button, Field, Input, Label } from "@/components/ui/kit";
 import { cn } from "@/lib/utils";
-import type { Client, ClientType } from "@/types";
+import type { Client, ClientType } from "@/domain/types";
 
 export interface ClientDraft {
   name: string;

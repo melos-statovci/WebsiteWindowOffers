@@ -14,7 +14,7 @@ import { plans, offerDesigns } from "@/lib/plan";
 import { eurAfter } from "@/lib/format";
 import { useApp } from "@/components/providers/providers";
 import { cn } from "@/lib/utils";
-import type { CompanyProfile } from "@/types";
+import type { CompanyProfile } from "@/domain/types";
 
 type PanelId = "profili" | "dizajni" | "perdoruesit" | "abonimi" | "backup";
 

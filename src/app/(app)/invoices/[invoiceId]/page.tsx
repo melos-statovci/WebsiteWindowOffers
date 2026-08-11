@@ -8,10 +8,10 @@ import { Button, Card, Badge, EmptyState } from "@/components/ui/kit";
 import { PaymentModal, type PaymentDraft } from "@/components/clients/payment-modal";
 import { useStore } from "@/lib/store";
 import { eurAfter, shortDate } from "@/lib/format";
-import { invoiceNet, invoicePaid, invoiceOutstanding, invoicePaymentState } from "@/lib/selectors";
+import { invoiceNet, invoicePaid, invoiceOutstanding, invoicePaymentState } from "@/domain/finance/selectors";
 import { printInvoice } from "@/lib/print";
 import { useApp } from "@/components/providers/providers";
-import type { InvoiceStatus } from "@/types";
+import type { InvoiceStatus } from "@/domain/types";
 
 const statusTone: Record<InvoiceStatus, "neutral" | "blue" | "emerald" | "rose" | "amber"> = {
   Draft: "neutral", Dërguar: "blue", Paguar: "emerald", Vonesë: "rose", Anuluar: "amber",

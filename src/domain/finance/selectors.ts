@@ -22,7 +22,7 @@
 // Every consumer (client card, dashboard, invoice list) derives from these same
 // helpers so the numbers can never disagree.
 
-import type { Project, Invoice, Payment } from "@/types";
+import type { Project, Invoice, Payment } from "@/domain/types";
 
 /** Half-a-cent tolerance so float noise never flips a paid invoice to "partial". */
 const EPS = 0.005;

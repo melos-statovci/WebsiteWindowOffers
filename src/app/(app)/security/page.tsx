@@ -8,7 +8,7 @@ import { PageHeader, Button, Badge, SectionCard, Field, Input, Label } from "@/c
 import { Modal } from "@/components/ui/overlay";
 import { devices as seedDevices, loginHistory } from "@/lib/mock/data";
 import { useApp } from "@/components/providers/providers";
-import type { Device } from "@/types";
+import type { Device } from "@/domain/types";
 
 export default function SecurityPage() {
   const { toast, confirm } = useApp();

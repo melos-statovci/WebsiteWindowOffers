@@ -4,7 +4,7 @@ import {
   invoicePaid, invoiceOutstanding, invoicePaymentState,
   clientStats, dashboardStats,
 } from "./selectors";
-import type { Project, Invoice, Payment } from "@/types";
+import type { Project, Invoice, Payment } from "@/domain/types";
 
 const mkProject = (over: Partial<Project> = {}): Project => ({
   id: "p1", number: "PRJ-1", title: "t", clientId: "c1", clientName: "C",

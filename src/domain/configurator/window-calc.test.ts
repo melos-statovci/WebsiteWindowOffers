@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { computeMaterials, computeLayout, computePrice, effectiveDims, validateConfig } from "./window-calc";
 import * as seed from "@/lib/mock/data";
-import type { WindowConfig, ProductType } from "@/types";
+import type { WindowConfig, ProductType } from "@/domain/types";
 
 const pricing = {
   systems: seed.pricingSystems,

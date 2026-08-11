@@ -7,9 +7,9 @@ import { PageHeader, Button, Card, Badge, EmptyState } from "@/components/ui/kit
 import { InvoiceFormModal } from "@/components/invoices/invoice-form-modal";
 import { useStore } from "@/lib/store";
 import { eur, shortDate } from "@/lib/format";
-import { invoiceTotal, invoicePaid, invoiceOutstanding } from "@/lib/selectors";
+import { invoiceTotal, invoicePaid, invoiceOutstanding } from "@/domain/finance/selectors";
 import { useApp } from "@/components/providers/providers";
-import type { Invoice, InvoiceStatus } from "@/types";
+import type { Invoice, InvoiceStatus } from "@/domain/types";
 
 const statusTone: Record<InvoiceStatus, "neutral" | "blue" | "emerald" | "rose" | "amber"> = {
   Draft: "neutral",

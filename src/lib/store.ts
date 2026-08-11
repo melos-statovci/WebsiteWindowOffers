@@ -14,13 +14,12 @@ import type {
   OfferStatus,
   InvoiceStatus,
   CompanyProfile,
-  PricingSystem,
-  CatalogRow,
-} from "@/types";
+} from "@/domain/types";
+import type { PricingCatalog } from "@/domain/pricing/types";
 import * as seed from "@/lib/mock/data";
 import { guideStepKeys } from "@/lib/plan";
-import { invoiceTotal, invoicePaid } from "@/lib/selectors";
-import { validateBackup, SCHEMA_VERSION } from "@/lib/backup";
+import { invoiceTotal, invoicePaid } from "@/domain/finance/selectors";
+import { validateBackup, SCHEMA_VERSION } from "@/domain/backup/backup";
 
 /** Half-a-cent tolerance, matching selectors. */
 const MONEY_EPS = 0.005;
@@ -49,19 +48,9 @@ export function isUiDismissed(value?: string): boolean {
   return Number.isFinite(time) && time > Date.now();
 }
 
-interface PricingState {
-  systems: PricingSystem[];
-  profilePriceRows: typeof seed.profilePriceRows;
-  metals: CatalogRow[];
-  armingRows: typeof seed.armingRows;
-  glass: CatalogRow[];
-  panels: CatalogRow[];
-  expansions: typeof seed.expansions;
-  roletaVersions: typeof seed.roletaVersions;
-  doorModels: typeof seed.doorModels;
-  accessoryParams: Record<string, string>;
-  productionParams: Record<string, string>;
-}
+// The editable pricing catalog shape now lives in the domain layer
+// (@/domain/pricing/types) so it can be shared without importing the store.
+type PricingState = PricingCatalog;
 
 interface DataSlice {
   clients: Client[];

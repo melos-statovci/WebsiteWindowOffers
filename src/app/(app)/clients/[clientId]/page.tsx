@@ -13,7 +13,7 @@ import { ClientFormModal, type ClientDraft } from "@/components/clients/client-f
 import { PaymentModal, type PaymentDraft } from "@/components/clients/payment-modal";
 import { useStore } from "@/lib/store";
 import { eur, initials, shortDate } from "@/lib/format";
-import { clientStats, projectTotal } from "@/lib/selectors";
+import { clientStats, projectTotal } from "@/domain/finance/selectors";
 import { useApp } from "@/components/providers/providers";
 import { cn } from "@/lib/utils";
 

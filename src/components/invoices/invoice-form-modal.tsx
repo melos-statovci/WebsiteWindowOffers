@@ -7,8 +7,8 @@ import { Button, Field, Input, Label } from "@/components/ui/kit";
 import { useStore } from "@/lib/store";
 import { useApp } from "@/components/providers/providers";
 import { eur } from "@/lib/format";
-import { projectTotal } from "@/lib/selectors";
-import type { InvoiceLine, InvoiceStatus } from "@/types";
+import { projectTotal } from "@/domain/finance/selectors";
+import type { InvoiceLine, InvoiceStatus } from "@/domain/types";
 
 const addDays = (iso: string, days: number) => {
   const d = new Date(iso);

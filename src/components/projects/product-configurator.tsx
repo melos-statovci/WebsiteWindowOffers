@@ -12,12 +12,12 @@ import { useApp } from "@/components/providers/providers";
 import { useStore, uid } from "@/lib/store";
 import {
   computeLayout, computeMaterials, computePrice, validateConfig, MODELS, DOOR_MODELS, isDoorProduct, isGlassProduct,
-} from "@/lib/window-calc";
+} from "@/domain/configurator/window-calc";
 import { eur } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type {
   ModelType, OfferItem, ProductType, WindowConfig, ProfileColor, OpeningType, ShteseSide,
-} from "@/types";
+} from "@/domain/types";
 
 export const PRODUCT_TYPES: { type: ProductType; icon: LucideIcon }[] = [
   { type: "Dritare", icon: Square },

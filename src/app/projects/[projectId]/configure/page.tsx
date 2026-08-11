@@ -10,11 +10,11 @@ import { ProductConfigurator, PRODUCT_TYPES } from "@/components/projects/produc
 import { Sidebar } from "@/components/shell/sidebar";
 import { useStore } from "@/lib/store";
 import { eur, initials } from "@/lib/format";
-import { projectNet } from "@/lib/selectors";
+import { projectNet } from "@/domain/finance/selectors";
 import { printOffer } from "@/lib/print";
 import { useApp } from "@/components/providers/providers";
 import { cn } from "@/lib/utils";
-import type { OfferItem, OfferStatus, ProductType } from "@/types";
+import type { OfferItem, OfferStatus, ProductType } from "@/domain/types";
 
 type Step = "detajet" | "produkti" | "permbledhje";
 const OPTIONS = ["Marzha", "Zbritje", "TVSH", "Montimi", "Demontimi", "Transporti"];

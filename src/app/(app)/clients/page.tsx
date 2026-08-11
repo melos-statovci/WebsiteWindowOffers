@@ -8,7 +8,7 @@ import { ClientFormModal, type ClientDraft } from "@/components/clients/client-f
 import { useStore } from "@/lib/store";
 import { initials } from "@/lib/format";
 import { useApp } from "@/components/providers/providers";
-import type { Client, ClientType } from "@/types";
+import type { Client, ClientType } from "@/domain/types";
 
 type Filter = "Të gjithë" | ClientType;
 type Sort = "Emri (A-Z)" | "Emri (Z-A)" | "Më të rejat";

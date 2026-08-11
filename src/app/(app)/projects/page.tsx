@@ -7,9 +7,9 @@ import { PageHeader, Button, Card, Badge, EmptyState } from "@/components/ui/kit
 import { NewProjectModal } from "@/components/projects/new-project-modal";
 import { useStore } from "@/lib/store";
 import { eur, shortDate } from "@/lib/format";
-import { projectTotal } from "@/lib/selectors";
+import { projectTotal } from "@/domain/finance/selectors";
 import { useApp } from "@/components/providers/providers";
-import type { Project, OfferStatus } from "@/types";
+import type { Project, OfferStatus } from "@/domain/types";
 
 const statusTone: Record<OfferStatus, "neutral" | "blue" | "emerald" | "rose"> = {
   Draft: "neutral",

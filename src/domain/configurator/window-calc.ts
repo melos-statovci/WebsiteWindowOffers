@@ -4,10 +4,10 @@
 // constants are tuned so a fixed single 1000×1200 window ≈ €100 and opening a
 // sash adds KRAH + MEKANIZËM + DOREZA, matching the observed live behaviour.
 
-import type { ModelType, ProductType, WindowConfig } from "@/types";
-import type { useStore } from "@/lib/store";
+import type { ModelType, ProductType, WindowConfig } from "@/domain/types";
+import type { PricingCatalog } from "@/domain/pricing/types";
 
-type Pricing = ReturnType<typeof useStore.getState>["pricing"];
+type Pricing = PricingCatalog;
 
 export const FRAME_FACE = 55;
 export const MULLION_FACE = 42;

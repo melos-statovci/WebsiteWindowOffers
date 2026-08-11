@@ -8,7 +8,7 @@ import { Button, Field, Input, Label } from "@/components/ui/kit";
 import { useStore } from "@/lib/store";
 import { useApp } from "@/components/providers/providers";
 import { cn } from "@/lib/utils";
-import type { ClientType } from "@/types";
+import type { ClientType } from "@/domain/types";
 
 const colors = ["Bardhë - Bardhë", "Antracit 7016 - Bardhë", "Antracit 7016 - Antracit 7016", "Ngjyrë druri - Bardhë"];
 

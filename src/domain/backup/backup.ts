@@ -13,7 +13,7 @@
 
 import type {
   Client, Project, Invoice, Payment, Note, User, AppNotification, CompanyProfile,
-} from "@/types";
+} from "@/domain/types";
 
 /** Bumped whenever the persisted shape changes in a breaking way. */
 export const SCHEMA_VERSION = 2;

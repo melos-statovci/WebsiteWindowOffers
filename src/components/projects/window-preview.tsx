@@ -1,7 +1,7 @@
 "use client";
 
-import { computeLayout, effectiveDims, isDoorProduct, FRAME_FACE, MODELS } from "@/lib/window-calc";
-import type { WindowConfig, OpeningType } from "@/types";
+import { computeLayout, effectiveDims, isDoorProduct, FRAME_FACE, MODELS } from "@/domain/configurator/window-calc";
+import type { WindowConfig, OpeningType } from "@/domain/types";
 import { cn } from "@/lib/utils";
 import type { CSSProperties } from "react";
 

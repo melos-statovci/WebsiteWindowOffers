@@ -2,8 +2,8 @@
 // Opens a self-contained, styled document in a new window and triggers print.
 // Uses local mock data only — never contacts any server.
 
-import type { Project, Invoice, CompanyProfile } from "@/types";
-import { projectNet, invoiceNet, invoiceTotal } from "@/lib/selectors";
+import type { Project, Invoice, CompanyProfile } from "@/domain/types";
+import { projectNet, invoiceNet, invoiceTotal } from "@/domain/finance/selectors";
 
 const money = (n: number) =>
   n.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";

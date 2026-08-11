@@ -11,7 +11,7 @@ import type {
   PricingSystem,
   CatalogRow,
   CompanyProfile,
-} from "@/types";
+} from "@/domain/types";
 
 // ---------------------------------------------------------------------------
 // Company / account (fictional — no real PII from the source account)

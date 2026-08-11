@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/kit";
 import { FlowChart } from "@/components/dashboard/flow-chart";
 import { useApp } from "@/components/providers/providers";
 import { isUiDismissed, useStore } from "@/lib/store";
-import { dashboardStats, projectTotal } from "@/lib/selectors";
+import { dashboardStats, projectTotal } from "@/domain/finance/selectors";
 import { guideStepKeys } from "@/lib/plan";
 import { eur, shortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";

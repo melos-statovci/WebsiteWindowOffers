@@ -8,7 +8,7 @@ import { useApp } from "@/components/providers/providers";
 import { useStore, uid } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { eurAfter } from "@/lib/format";
-import type { CatalogRow, PricingSystem } from "@/types";
+import type { CatalogRow, PricingSystem } from "@/domain/types";
 
 type Pricing = ReturnType<typeof useStore.getState>["pricing"];
 
