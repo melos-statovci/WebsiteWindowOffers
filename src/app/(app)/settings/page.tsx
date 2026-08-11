@@ -25,6 +25,10 @@ const MENU: { id: PanelId; label: string; icon: LucideIcon }[] = [
   { id: "abonimi", label: "Abonimi", icon: CreditCard },
   { id: "backup", label: "Backup & Eksport", icon: Download },
 ];
+const clampInt = (value: string, min: number, max: number) => {
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min;
+};
 
 export default function SettingsPage() {
   const [active, setActive] = useState<PanelId>("profili");
@@ -60,7 +64,7 @@ export default function SettingsPage() {
             <ArrowLeft className="size-4" /> Kthehu te Cilësimet
           </button>
           <div className="mb-4 flex items-center gap-3">
-            <activeItem.icon className="size-6 text-indigo-400" />
+            <activeItem.icon className="size-6 text-slate-900" />
             <h2 className="font-heading text-xl font-bold text-slate-900">{activeItem.label}</h2>
           </div>
           {active === "profili" && <ProfiliPanel />}
@@ -116,7 +120,7 @@ function ProfiliPanel() {
             <div className="text-sm font-semibold text-slate-900">Logo e Kompanisë</div>
             <p className="max-w-sm text-sm text-slate-400">Kjo logo do të shfaqet në të gjitha ofertat dhe dokumentet zyrtare.</p>
             <div className="mt-2 flex gap-3">
-              <button onClick={() => fileRef.current?.click()} className="text-xs font-bold text-indigo-400 uppercase hover:underline">Ngarko logo</button>
+              <button onClick={() => fileRef.current?.click()} className="text-xs font-bold text-slate-900 uppercase hover:underline">Ngarko logo</button>
               {draft.logoDataUrl && <button onClick={removeLogo} className="text-xs font-bold text-rose-400 uppercase hover:underline">Fshij logon</button>}
             </div>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onLogo} />
@@ -130,8 +134,8 @@ function ProfiliPanel() {
           <Field label="Adresa"><Input value={draft.address} onChange={(e) => set("address", e.target.value)} /></Field>
           <Field label="Telefoni"><Input value={draft.phone} onChange={(e) => set("phone", e.target.value)} /></Field>
           <Field label="Email zyrtar"><Input value={draft.email} onChange={(e) => set("email", e.target.value)} /></Field>
-          <Field label="Marzha default (%)"><Input value={String(draft.marginDefault)} onChange={(e) => set("marginDefault", parseInt(e.target.value) || 0)} inputMode="numeric" /></Field>
-          <Field label="TVSH default (%)"><Input value={String(draft.vatDefault)} onChange={(e) => set("vatDefault", parseInt(e.target.value) || 0)} inputMode="numeric" /></Field>
+          <Field label="Marzha default (%)"><Input value={String(draft.marginDefault)} onChange={(e) => set("marginDefault", clampInt(e.target.value, 0, 1000))} inputMode="numeric" min={0} max={1000} /></Field>
+          <Field label="TVSH default (%)"><Input value={String(draft.vatDefault)} onChange={(e) => set("vatDefault", clampInt(e.target.value, 0, 100))} inputMode="numeric" min={0} max={100} /></Field>
         </div>
       </Card>
 
@@ -170,9 +174,9 @@ function DizajniPanel() {
           const isActive = selectedId === d.id;
           const locked = d.plan !== "SOLO";
           return (
-            <Card key={d.id} className={cn("overflow-hidden p-3", isActive && "ring-2 ring-indigo-500")}>
+            <Card key={d.id} className={cn("overflow-hidden p-3", isActive && "ring-2 ring-neutral-500")}>
               <div className="relative mb-3 aspect-[1/1.414] overflow-hidden rounded-lg border border-slate-200 bg-white p-3 text-[6px] leading-tight text-slate-700">
-                <div className="mb-1 font-bold text-indigo-600">{company.name}</div>
+                <div className="mb-1 font-bold text-neutral-700">{company.name}</div>
                 <div className="mb-2 text-[7px] font-bold">OFERTË {sampleOffer.number}</div>
                 <div className="space-y-0.5">
                   {[1, 2, 3, 4].map((r) => (
@@ -293,7 +297,7 @@ function AbonimiPanel() {
       <div className="flex items-center gap-2">
         {steps.map((s, i) => (
           <div key={s} className="flex items-center gap-2">
-            <span className={cn("grid size-6 place-items-center rounded-full text-xs font-bold", i === 0 ? "bg-indigo-600 text-white" : "bg-slate-200 text-slate-500")}>{i + 1}</span>
+            <span className={cn("grid size-6 place-items-center rounded-full text-xs font-bold", i === 0 ? "bg-slate-300 text-white" : "bg-slate-200 text-slate-500")}>{i + 1}</span>
             <span className={cn("text-sm", i === 0 ? "font-semibold text-slate-900" : "text-slate-400")}>{s}</span>
             {i < steps.length - 1 && <span className="mx-1 h-px w-6 bg-slate-200" />}
           </div>
@@ -310,7 +314,7 @@ function AbonimiPanel() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {plans.map((p) => (
-          <Card key={p.tier} className={cn("flex flex-col p-5", p.current && "ring-2 ring-indigo-500")}>
+          <Card key={p.tier} className={cn("flex flex-col p-5", p.current && "ring-2 ring-neutral-500")}>
             <div className="flex items-center justify-between">
               <div className="font-heading font-bold text-slate-900">{p.name}</div>
               {p.current && <Badge tone="indigo">AKTUAL</Badge>}
@@ -352,7 +356,7 @@ function BackupPanel() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `proferto-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `kornizo-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
     setLastExport(new Date().toLocaleString("sq"));

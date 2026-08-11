@@ -27,6 +27,23 @@ export const uid = (): string =>
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
+export type UiDismissalKey = "configGuide" | "trialBanner";
+export type UiDismissalMode = "tomorrow" | "forever";
+type UiDismissals = Partial<Record<UiDismissalKey, string>>;
+
+const nextLocalMidnightIso = () => {
+  const d = new Date();
+  d.setHours(24, 0, 0, 0);
+  return d.toISOString();
+};
+
+export function isUiDismissed(value?: string): boolean {
+  if (!value) return false;
+  if (value === "forever") return true;
+  const time = Date.parse(value);
+  return Number.isFinite(time) && time > Date.now();
+}
+
 interface PricingState {
   systems: PricingSystem[];
   profilePriceRows: typeof seed.profilePriceRows;
@@ -53,6 +70,7 @@ interface DataSlice {
   pricing: PricingState;
   selectedDesignId: string;
   guideDone: Record<string, boolean>;
+  uiDismissals: UiDismissals;
 }
 
 function seedData(): DataSlice {
@@ -81,6 +99,7 @@ function seedData(): DataSlice {
     selectedDesignId: "klasik",
     // all 12 steps complete by default (matches original 12/12)
     guideDone: Object.fromEntries(guideStepKeys.map((k) => [k, true])),
+    uiDismissals: {},
   };
 }
 
@@ -129,6 +148,8 @@ interface StoreState extends DataSlice {
   savePricing: (pricing: PricingState) => void;
   setDesign: (id: string) => void;
   toggleGuideStep: (key: string, done: boolean) => void;
+  dismissUi: (key: UiDismissalKey, mode: UiDismissalMode) => void;
+  clearUiDismissal: (key: UiDismissalKey) => void;
 
   // demo data mgmt
   resetDemo: () => void;
@@ -276,16 +297,29 @@ export const useStore = create<StoreState>()(
       setDesign: (id) => set({ selectedDesignId: id }),
       toggleGuideStep: (key, done) =>
         set((s) => ({ guideDone: { ...s.guideDone, [key]: done } })),
+      dismissUi: (key, mode) =>
+        set((s) => ({
+          uiDismissals: {
+            ...s.uiDismissals,
+            [key]: mode === "forever" ? "forever" : nextLocalMidnightIso(),
+          },
+        })),
+      clearUiDismissal: (key) =>
+        set((s) => {
+          const uiDismissals = { ...s.uiDismissals };
+          delete uiDismissals[key];
+          return { uiDismissals };
+        }),
 
-      resetDemo: () => set({ ...seedData() }),
+      resetDemo: () => set({ ...seedData(), uiDismissals: get().uiDismissals }),
       exportData: () => {
         const s = get();
         const {
           clients, projects, invoices, payments, notes, users,
-          notifications, company, pricing, selectedDesignId, guideDone,
+          notifications, company, pricing, selectedDesignId, guideDone, uiDismissals,
         } = s;
         return JSON.stringify(
-          { clients, projects, invoices, payments, notes, users, notifications, company, pricing, selectedDesignId, guideDone },
+          { clients, projects, invoices, payments, notes, users, notifications, company, pricing, selectedDesignId, guideDone, uiDismissals },
           null,
           2,
         );
@@ -294,7 +328,7 @@ export const useStore = create<StoreState>()(
         try {
           const data = JSON.parse(json);
           if (!data || typeof data !== "object" || !Array.isArray(data.clients) || !Array.isArray(data.projects)) {
-            return { ok: false, error: "Skedari nuk përmban të dhëna Proferto të vlefshme." };
+            return { ok: false, error: "Skedari nuk përmban të dhëna Kornizo të vlefshme." };
           }
           const base = seedData();
           set({ ...base, ...data });
@@ -305,16 +339,16 @@ export const useStore = create<StoreState>()(
       },
     }),
     {
-      name: "proferto-demo-store",
+      name: "kornizo-demo-store",
       version: 1,
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
       partialize: (s) => {
         const {
           clients, projects, invoices, payments, notes, users,
-          notifications, company, pricing, selectedDesignId, guideDone,
+          notifications, company, pricing, selectedDesignId, guideDone, uiDismissals,
         } = s;
-        return { clients, projects, invoices, payments, notes, users, notifications, company, pricing, selectedDesignId, guideDone };
+        return { clients, projects, invoices, payments, notes, users, notifications, company, pricing, selectedDesignId, guideDone, uiDismissals };
       },
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

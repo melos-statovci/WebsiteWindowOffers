@@ -86,7 +86,7 @@ export function PaymentModal({
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value)}
-            className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500"
+            className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-neutral-500"
           >
             {methods.map((m) => (
               <option key={m}>{m}</option>

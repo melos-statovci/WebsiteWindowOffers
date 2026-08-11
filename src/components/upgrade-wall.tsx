@@ -18,12 +18,12 @@ export function UpgradeWall({ info }: { info: GatedInfo }) {
         </h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-slate-400">
           Për ta përdorur këtë funksion, kaloni në planin{" "}
-          <span className="font-semibold text-indigo-400">{info.plan}</span>.
+          <span className="font-semibold text-slate-900">{info.plan}</span>.
         </p>
 
         <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-left">
           <div className="mb-3 flex items-center gap-2 font-heading font-semibold text-slate-900">
-            <Sparkles className="size-5 text-indigo-400" />
+            <Sparkles className="size-5 text-slate-900" />
             Plani {info.plan} përfshin:
           </div>
           <ul className="space-y-2.5">

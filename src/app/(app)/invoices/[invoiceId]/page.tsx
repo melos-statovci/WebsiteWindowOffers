@@ -71,7 +71,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ invoic
             <div className="mt-1 text-sm text-slate-400">Referencë: {inv.reference ?? "—"}</div>
             <div className="mt-3">
               <select value={inv.status} onChange={(e) => { setInvoiceStatus(inv.id, e.target.value as InvoiceStatus); toast("Statusi u përditësua."); }}
-                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-900 outline-none focus:border-indigo-500">
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500">
                 {(["Draft", "Dërguar", "Paguar", "Vonesë", "Anuluar"] as InvoiceStatus[]).map((s) => <option key={s}>{s}</option>)}
               </select>
               <span className="ml-2 align-middle"><Badge tone={statusTone[inv.status]}>{inv.status}</Badge></span>

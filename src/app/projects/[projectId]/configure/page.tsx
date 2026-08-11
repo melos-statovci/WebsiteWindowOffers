@@ -3,7 +3,7 @@
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  X, Undo2, Printer, Plus, ArrowLeft, MoreVertical, Copy, Pencil, Trash2, FileDown, Check,
+  X, Undo2, Printer, Plus, ArrowLeft, Pencil, Trash2, FileDown, Check,
 } from "lucide-react";
 import { Button, Avatar, Toggle, EmptyState, Badge } from "@/components/ui/kit";
 import { ProductConfigurator, PRODUCT_TYPES } from "@/components/projects/product-configurator";
@@ -18,6 +18,8 @@ import type { OfferItem, OfferStatus, ProductType } from "@/types";
 
 type Step = "detajet" | "produkti" | "permbledhje";
 const OPTIONS = ["Marzha", "Zbritje", "TVSH", "Montimi", "Demontimi", "Transporti"];
+const stepFromParam = (value?: string): Step | null =>
+  value === "detajet" || value === "produkti" || value === "permbledhje" ? value : null;
 
 function WindowGlyph({ item }: { item: OfferItem }) {
   const wide = item.widthMm >= item.heightMm;
@@ -31,8 +33,15 @@ function WindowGlyph({ item }: { item: OfferItem }) {
   );
 }
 
-export default function ConfigurePage({ params }: { params: Promise<{ projectId: string }> }) {
+export default function ConfigurePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ step?: string }>;
+}) {
   const { projectId } = use(params);
+  const query = use(searchParams);
   const router = useRouter();
   const { toast, confirm, sidebarCollapsed } = useApp();
 
@@ -43,14 +52,12 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
   const addItem = useStore((s) => s.addProjectItem);
   const updateItem = useStore((s) => s.updateProjectItem);
   const removeItem = useStore((s) => s.removeProjectItem);
-  const duplicateItem = useStore((s) => s.duplicateProjectItem);
   const setOption = useStore((s) => s.setProjectOption);
 
-  const [step, setStep] = useState<Step>("produkti");
+  const [step, setStep] = useState<Step>(() => stepFromParam(query.step) ?? "produkti");
   const [configuring, setConfiguring] = useState<null | "new" | string>(null);
   const [newType, setNewType] = useState<ProductType>("Dritare");
   const [typeMenu, setTypeMenu] = useState(false);
-  const [menuId, setMenuId] = useState<string | null>(null);
 
   if (!project) {
     return (
@@ -67,18 +74,21 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
   const vat = net * project.vatRate;
 
   const editingItem = configuring && configuring !== "new" ? project.items.find((i) => i.id === configuring) ?? null : null;
-  const openAdd = () => { setTypeMenu(true); setMenuId(null); };
+  const openAdd = () => { setTypeMenu(true); };
   const pickType = (pt: ProductType) => { setNewType(pt); setConfiguring("new"); setTypeMenu(false); };
-  const openEdit = (it: OfferItem) => { setConfiguring(it.id); setMenuId(null); };
+  const openEdit = (it: OfferItem) => { setConfiguring(it.id); };
   const saveProduct = (data: Omit<OfferItem, "id">, id?: string) => {
     if (id) { updateItem(project.id, id, data); toast("Produkti u përditësua."); }
     else { addItem(project.id, data); toast("Produkti u shtua."); }
     setConfiguring(null);
   };
   const removeProduct = async (it: OfferItem) => {
-    setMenuId(null);
     const ok = await confirm({ title: "Hiq produktin?", message: `“${it.label}” do të hiqet nga oferta.`, confirmLabel: "Hiq", danger: true });
     if (ok) { removeItem(project.id, it.id); toast("Produkti u hoq."); }
+  };
+  const changeStep = (next: Step) => {
+    setStep(next);
+    if (query.step) router.replace(`/projects/${project.id}/configure`, { scroll: false });
   };
 
   return (
@@ -97,29 +107,22 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
 
         <div className="inline-flex items-center gap-1 rounded-xl bg-slate-200/60 p-1">
           {([["detajet", "Detajet"], ["produkti", "Produkti"], ["permbledhje", "Përmbledhje"]] as const).map(([v, label]) => (
-            <button key={v} onClick={() => setStep(v)}
+            <button key={v} onClick={() => changeStep(v)}
               className={cn("rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors", step === v ? "bg-slate-50 text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-700")}>{label}</button>
           ))}
         </div>
 
         <div className="flex items-center gap-2">
-          {step === "produkti" ? (
-            !configuring && (
-              <div className="relative">
-                <button onClick={() => setTypeMenu((v) => !v)} className="grid size-9 place-items-center rounded-full bg-indigo-600 text-white hover:bg-indigo-500" aria-label="Shto produkt"><Plus className="size-5" /></button>
-                {typeMenu && <ProductTypeMenu onPick={pickType} onClose={() => setTypeMenu(false)} />}
-              </div>
-            )
-          ) : (
+          {step !== "produkti" && (
             <button onClick={() => printOffer(project, company)} className="grid size-9 place-items-center rounded-full bg-slate-200/70 text-slate-700 hover:bg-slate-300" aria-label="Printo ofertën"><Printer className="size-5" /></button>
           )}
         </div>
       </div>
 
-      <div className={cn("w-full flex-1 px-4", step === "produkti" && configuring ? "pb-4 sm:px-6 lg:min-h-0 lg:overflow-hidden" : "mx-auto max-w-2xl pb-16")}>
+      <div className={cn("w-full flex-1 px-4", step === "produkti" && configuring ? "pb-4 sm:px-6 lg:min-h-0 lg:overflow-hidden" : "mx-auto max-w-2xl pt-8 pb-16")}>
         {step === "detajet" && (
           <div className="space-y-4">
-            <button onClick={() => setStep("produkti")} className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900">
+            <button onClick={() => changeStep("produkti")} className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900">
               <ArrowLeft className="size-4" /> Kthehu te Oferta ({project.items.length})
             </button>
             <div className="rounded-2xl border border-slate-200 bg-slate-100 p-5">
@@ -134,22 +137,22 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
               <label className="block">
                 <span className="text-sm text-slate-400">Sistemi i profilit</span>
                 <input value={project.profileSystem} onChange={(e) => updateProject(project.id, { profileSystem: e.target.value })}
-                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-900 outline-none focus:border-indigo-500" />
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500" />
               </label>
               <label className="block">
                 <span className="text-sm text-slate-400">Ngjyra e profilit</span>
                 <input value={project.profileColor} onChange={(e) => updateProject(project.id, { profileColor: e.target.value })}
-                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-900 outline-none focus:border-indigo-500" />
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500" />
               </label>
               <label className="block">
                 <span className="text-sm text-slate-400">Statusi i ofertës</span>
                 <select value={project.status} onChange={(e) => setStatus(project.id, e.target.value as OfferStatus)}
-                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-900 outline-none focus:border-indigo-500">
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500">
                   {(["Draft", "Dërguar", "Pranuar", "Refuzuar"] as OfferStatus[]).map((s) => <option key={s}>{s}</option>)}
                 </select>
               </label>
             </div>
-            <Button className="w-full" onClick={() => setStep("produkti")}>Vazhdo Konfigurimin</Button>
+            <Button className="w-full" onClick={() => changeStep("produkti")}>Vazhdo Konfigurimin</Button>
           </div>
         )}
 
@@ -158,38 +161,46 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
             <ProductConfigurator
               initial={editingItem}
               initialProductType={newType}
+              offerItemCount={project.items.length}
               onSave={saveProduct}
               onCancel={() => setConfiguring(null)}
             />
           ) : project.items.length === 0 ? (
-            <div className="rounded-2xl border border-slate-200 bg-slate-100">
-              <EmptyState icon={Plus} title="Asnjë produkt ende" description="Shtoni produktin e parë në ofertë."
-                action={<Button onClick={openAdd}><Plus className="size-4" /> Shto produkt</Button>} />
+            <div className="relative flex min-h-[58vh] items-center justify-center">
+              <div className="flex flex-col items-center text-center">
+                <div className="relative mb-3">
+                  <button onClick={openAdd} className="grid size-20 place-items-center rounded-full bg-slate-300 text-white shadow-lg shadow-neutral-900/25 hover:bg-slate-400" aria-label="Shto produkt">
+                    <Plus className="size-10" />
+                  </button>
+                  {typeMenu && <ProductTypeMenu placement="center" onPick={pickType} onClose={() => setTypeMenu(false)} />}
+                </div>
+                <h1 className="font-heading text-xl font-bold text-slate-900">Shto produktin e parë</h1>
+                <p className="mt-3 text-base text-slate-400">Zgjidh llojin e produktit dhe hapet konfiguratori.</p>
+              </div>
             </div>
           ) : (
-            <ul className="space-y-3">
-              {project.items.map((item) => (
-                <li key={item.id} className="relative flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-100 p-3">
-                  <button onClick={() => openEdit(item)} className="grid size-16 shrink-0 place-items-center rounded-xl bg-slate-50 p-2" aria-label="Edito"><WindowGlyph item={item} /></button>
-                  <button onClick={() => openEdit(item)} className="flex-1 text-left">
-                    <div className="font-semibold text-slate-900">{item.label}</div>
-                    <div className="text-sm text-slate-400">{item.widthMm} × {item.heightMm} mm · {item.qty} copë</div>
-                    <div className="font-heading font-semibold text-slate-900">{eur(item.qty * item.unitPrice)}</div>
-                  </button>
-                  <button onClick={() => setMenuId(menuId === item.id ? null : item.id)} className="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-200/60" aria-label="Opsione"><MoreVertical className="size-5" /></button>
-                  {menuId === item.id && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setMenuId(null)} />
-                      <div className="absolute top-12 right-3 z-20 w-40 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 py-1 shadow-xl">
-                        <MenuItem icon={Pencil} label="Edito" onClick={() => openEdit(item)} />
-                        <MenuItem icon={Copy} label="Dyfisho" onClick={() => { duplicateItem(project.id, item.id); setMenuId(null); toast("Produkti u dyfishua."); }} />
-                        <MenuItem icon={Trash2} label="Hiq" danger onClick={() => removeProduct(item)} />
-                      </div>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
+            <div className="relative">
+              <ProductListHeader count={project.items.length} onNext={() => changeStep("permbledhje")} onAdd={openAdd} />
+              {typeMenu && <ProductTypeMenu onPick={pickType} onClose={() => setTypeMenu(false)} />}
+              <ul className="space-y-3">
+                {project.items.map((item) => (
+                  <li key={item.id} className="relative flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-100 p-3">
+                    <button onClick={() => openEdit(item)} className="grid size-16 shrink-0 place-items-center rounded-xl bg-slate-50 p-2" aria-label="Edito produktin"><WindowGlyph item={item} /></button>
+                    <button onClick={() => openEdit(item)} className="flex-1 text-left">
+                      <div className="font-semibold text-slate-900">{item.label}</div>
+                      <div className="text-sm text-slate-400">{item.widthMm} × {item.heightMm} mm · {item.qty} copë</div>
+                      <div className="font-heading font-semibold text-slate-900">{eur(item.qty * item.unitPrice)}</div>
+                    </button>
+                    <button onClick={() => openEdit(item)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-200/60">
+                      <Pencil className="size-4" /> Edito
+                    </button>
+                    <button onClick={() => removeProduct(item)} className="grid size-9 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-500" aria-label="Hiq produktin">
+                      <Trash2 className="size-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )
         )}
 
@@ -243,21 +254,32 @@ export default function ConfigurePage({ params }: { params: Promise<{ projectId:
           <span className="inline-block size-2 rounded-full bg-emerald-500" /> System active
         </span>
         <span>Precision: 1.0mm</span>
-        <span className="ml-auto hidden sm:inline">© 2026 Proferto</span>
+        <span className="ml-auto hidden sm:inline">© 2026 Kornizo</span>
       </div>
       </div>
     </div>
   );
 }
 
-function ProductTypeMenu({ onPick, onClose }: { onPick: (pt: ProductType) => void; onClose: () => void }) {
+function ProductTypeMenu({
+  placement = "right",
+  onPick,
+  onClose,
+}: {
+  placement?: "right" | "center";
+  onPick: (pt: ProductType) => void;
+  onClose: () => void;
+}) {
   return (
     <>
       <div className="fixed inset-0 z-10" onClick={onClose} />
-      <div className="absolute top-11 right-0 z-20 w-52 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 py-1 shadow-xl">
+      <div className={cn(
+        "absolute z-20 w-[184px] overflow-hidden rounded-xl border border-slate-200 bg-slate-100 py-1.5 shadow-xl",
+        placement === "center" ? "top-[76px] left-1/2 -translate-x-1/2" : "top-[68px] right-0",
+      )}>
         <div className="px-3 py-1.5 text-[10px] font-bold tracking-widest text-slate-400 uppercase">Zgjidh produktin</div>
         {PRODUCT_TYPES.map(({ type, icon: Icon }) => (
-          <button key={type} onClick={() => onPick(type)} className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-200/60">
+          <button key={type} onClick={() => onPick(type)} className="flex h-[44px] w-full items-center gap-3 px-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-200/60">
             <Icon className="size-4 text-slate-400" /> {type}
           </button>
         ))}
@@ -266,11 +288,18 @@ function ProductTypeMenu({ onPick, onClose }: { onPick: (pt: ProductType) => voi
   );
 }
 
-function MenuItem({ icon: Icon, label, onClick, danger }: { icon: typeof Pencil; label: string; onClick: () => void; danger?: boolean }) {
+function ProductListHeader({ count, onNext, onAdd }: { count: number; onNext: () => void; onAdd: () => void }) {
   return (
-    <button onClick={onClick} className={cn("flex w-full items-center gap-2 px-3 py-2 text-sm font-medium hover:bg-slate-200/60", danger ? "text-rose-400" : "text-slate-700")}>
-      <Icon className="size-4" /> {label}
-    </button>
+    <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h1 className="font-heading text-2xl font-bold text-slate-900">Produktet e ofertës</h1>
+        <p className="text-sm font-medium text-slate-400">{count} pozicione</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" onClick={onNext}>Vazhdo te Përmbledhja</Button>
+        <Button onClick={onAdd}><Plus className="size-4" /> Shto produkt</Button>
+      </div>
+    </div>
   );
 }
 function Row({ label, value, muted }: { label: string; value: string; muted?: boolean }) {

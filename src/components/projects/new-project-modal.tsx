@@ -58,7 +58,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
     });
     toast("Projekti u krijua.");
     onClose();
-    router.push(`/projects/${id}/configure`);
+    router.push(`/projects/${id}/configure?step=detajet`);
   };
 
   const submitExisting = () => {
@@ -103,7 +103,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
             disabled={!clients.length}
             className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-left hover:bg-slate-200/40 disabled:opacity-50"
           >
-            <span className="grid size-10 place-items-center rounded-lg bg-indigo-50 text-indigo-400"><Users className="size-5" /></span>
+            <span className="grid size-10 place-items-center rounded-lg bg-slate-200 text-slate-900"><Users className="size-5" /></span>
             <span className="flex-1">
               <span className="block font-semibold text-slate-900">Klient ekzistues</span>
               <span className="block text-sm text-slate-400">Të dhënat e tij ngarkohen automatikisht.</span>
@@ -129,7 +129,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
           <div>
             <Label>Klienti</Label>
             <select value={clientId} onChange={(e) => setClientId(e.target.value)}
-              className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500">
+              className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-neutral-500">
               {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
@@ -174,14 +174,14 @@ function ProjectFields({
       <div>
         <Label>Sistemi i profilit</Label>
         <select value={system} onChange={(e) => setSystem(e.target.value)}
-          className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500">
+          className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-neutral-500">
           {systems.map((s) => <option key={s}>{s}</option>)}
         </select>
       </div>
       <div>
         <Label>Ngjyra e profilit</Label>
         <select value={color} onChange={(e) => setColor(e.target.value)}
-          className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500">
+          className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-neutral-500">
           {colors.map((c) => <option key={c}>{c}</option>)}
         </select>
       </div>

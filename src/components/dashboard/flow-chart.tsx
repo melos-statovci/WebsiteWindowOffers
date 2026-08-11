@@ -13,7 +13,7 @@ const months = ["Mar", "Apr", "May", "Jun", "Jul", "Aug"];
 const series: Series[] = [
   { label: "Arkëtuar", color: "#10b981", points: [0, 0, 0, 0, 0, 12] },
   { label: "Shpenzime", color: "#f43f5e", points: [8, 0, 0, 0, 0, 0] },
-  { label: "Të hyra", color: "#3b82f6", points: [0, 0, 0, 0, 0, 24] },
+  { label: "Të hyra", color: "#a3a3a3", points: [0, 0, 0, 0, 0, 24] },
 ];
 
 const W = 720;

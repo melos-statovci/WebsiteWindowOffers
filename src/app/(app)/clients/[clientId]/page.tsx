@@ -139,7 +139,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ clientI
         {tabs.map(({ key, icon: Icon, count }) => (
           <button key={key} onClick={() => setTab(key)}
             className={cn("flex shrink-0 items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors",
-              tab === key ? "border-indigo-500 bg-indigo-600 text-white" : "border-slate-200 bg-slate-100 text-slate-500 hover:text-slate-900")}>
+              tab === key ? "border-neutral-500 bg-slate-300 text-white" : "border-slate-200 bg-slate-100 text-slate-500 hover:text-slate-900")}>
             <Icon className="size-4" />
             {key}
             {count != null && count > 0 && (
@@ -231,7 +231,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ clientI
         <div className="space-y-4">
           <Card className="p-5 sm:p-6">
             <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Shkruani një shënim për klientin..."
-              className="min-h-24 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900 outline-none focus:border-indigo-500" />
+              className="min-h-24 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900 outline-none focus:border-neutral-500" />
             <div className="mt-3 flex justify-end">
               <Button disabled={!noteText.trim()} onClick={() => { addNote(client.id, noteText.trim()); setNoteText(""); toast("Shënimi u ruajt."); }}>
                 Ruaj shënimin

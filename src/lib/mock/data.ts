@@ -17,10 +17,10 @@ import type {
 // Company / account (fictional — no real PII from the source account)
 // ---------------------------------------------------------------------------
 export const company: CompanyProfile = {
-  name: "Proferto Production sh.p.k.",
+  name: "Kornizo Production sh.p.k.",
   address: "Zona Industriale, 10000 Prishtinë",
   phone: "+383 49 123 456",
-  email: "info@proferto-demo.io",
+  email: "info@kornizo-demo.io",
   nui: "811234567",
   vatNo: "330123456",
   postalCode: "10000",
@@ -40,14 +40,14 @@ export const account = {
 
 export const currentUser = {
   name: "Milaim Hasani",
-  email: "milaim@proferto-demo.io",
+  email: "milaim@kornizo-demo.io",
   role: "PRONAR",
   initial: "M",
   sidebarRole: "Operator",
 };
 
 export const users: User[] = [
-  { id: "u1", name: "Milaim Hasani", email: "milaim@proferto-demo.io", role: "PRONAR" },
+  { id: "u1", name: "Milaim Hasani", email: "milaim@kornizo-demo.io", role: "PRONAR" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -288,8 +288,8 @@ export const devices: Device[] = [
 export const loginHistory: LoginEvent[] = [
   { id: "l1", kind: "success", who: "Milaim Hasani", device: "Chrome · Mac", ip: "10.0.12.4", at: "05/08/2026, 13:34" },
   { id: "l2", kind: "success", who: "Milaim Hasani", device: "Chrome · Mac", ip: "10.0.12.4", at: "05/08/2026, 13:33" },
-  { id: "l3", kind: "failure", who: "milaim@proferto-demo.io", device: "Chrome · Mac", ip: "10.0.12.4", at: "05/08/2026, 13:33" },
-  { id: "l4", kind: "failure", who: "milaim@proferto-demo.io", device: "Chrome · Mac", ip: "10.0.12.4", at: "05/08/2026, 13:32" },
+  { id: "l3", kind: "failure", who: "milaim@kornizo-demo.io", device: "Chrome · Mac", ip: "10.0.12.4", at: "05/08/2026, 13:33" },
+  { id: "l4", kind: "failure", who: "milaim@kornizo-demo.io", device: "Chrome · Mac", ip: "10.0.12.4", at: "05/08/2026, 13:32" },
   { id: "l5", kind: "success", who: "Milaim Hasani", device: "Edge · Windows", ip: "10.0.44.9", at: "02/08/2026, 15:51" },
 ];
 

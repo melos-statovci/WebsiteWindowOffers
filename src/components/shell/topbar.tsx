@@ -18,7 +18,7 @@ import { shortDate } from "@/lib/format";
 
 function pageTitle(pathname: string): string {
   const base = "/" + (pathname.split("/")[1] ?? "");
-  return routeTitles[base] ?? "Proferto";
+  return routeTitles[base] ?? "Kornizo";
 }
 
 export function Topbar() {
@@ -66,7 +66,7 @@ export function Topbar() {
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         <button
           onClick={() => setOverlay("help")}
-          className="hidden items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold text-indigo-400 hover:bg-slate-200/60 sm:flex"
+          className="hidden items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold text-slate-900 hover:bg-slate-200/60 sm:flex"
         >
           <LifeBuoy className="size-5" />
           Ndihmë
@@ -111,7 +111,7 @@ export function Topbar() {
                   <span className="font-heading font-semibold text-slate-900">Njoftimet</span>
                   <div className="flex items-center gap-2">
                     {unread > 0 && (
-                      <button onClick={() => markAllRead()} className="text-xs font-semibold text-indigo-400 hover:underline">
+                      <button onClick={() => markAllRead()} className="text-xs font-semibold text-slate-900 hover:underline">
                         Shëno të gjitha
                       </button>
                     )}
@@ -134,7 +134,7 @@ export function Topbar() {
                           }}
                           className="flex w-full gap-3 px-4 py-3 text-left hover:bg-slate-200/40"
                         >
-                          <span className={`mt-1.5 size-2 shrink-0 rounded-full ${n.read ? "bg-transparent" : "bg-indigo-500"}`} />
+                          <span className={`mt-1.5 size-2 shrink-0 rounded-full ${n.read ? "bg-transparent" : "bg-slate-400"}`} />
                           <span className="min-w-0 flex-1">
                             <span className={`block text-sm ${n.read ? "font-medium text-slate-500" : "font-semibold text-slate-900"}`}>{n.title}</span>
                             <span className="block text-xs text-slate-400">{n.body}</span>

@@ -1,13 +1,13 @@
-# Proferto — Per-Page Specs (from authenticated inspection 2026-08-05)
+# Kornizo — Per-Page Specs (from authenticated inspection 2026-08-05)
 
 > Language: Albanian. Currency: EUR (`€1,234.56` and `1.234,00 €` both appear; list uses `€398.25`).
 > Env limitation: original only observable at **977px** CSS viewport (fixed). Desktop sidebar-rail + true mobile verified on the clone.
 > All PII (real emails/IPs/device history/company "Milaim") is replaced with fictional mock data in the clone.
 
 ## Global shell
-- **Top banner** (blue `#2563eb`, white text, full width): clock icon + "Prova falas: edhe 11 ditë. Proferto është në fazë lansimi dhe përmirësohet vazhdimisht — mund të ndodhin ndërprerje të shkurtra. Për problem ose sugjerim, hapni **Qendrën e Ndihmës**." (dismissible; inline underlined link opens Help drawer).
+- **Top banner** (blue `#2563eb`, white text, full width): clock icon + "Prova falas: edhe 11 ditë. Kornizo është në fazë lansimi dhe përmirësohet vazhdimisht — mund të ndodhin ndërprerje të shkurtra. Për problem ose sugjerim, hapni **Qendrën e Ndihmës**." (dismissible; inline underlined link opens Help drawer).
 - **Top bar** (~64px, bg slate-100/blur): LEFT = hamburger (toggle sidebar) + gear (→settings) + page title (Space Grotesk ~20px). RIGHT = "Ndihmë" (life-buoy, violet) + search input ("Kërko…" + ⌘K badge) + bell (notifications) + theme toggle (sun/moon).
-- **Sidebar** (fixed rail on desktop ≥1024; off-canvas overlay + hamburger below): logo "P" gradient square + "Proferto" gradient wordmark + "Plani SOLO"; user block (avatar initial "M" + "Milaim Hasani" + "Operator"); "Udhëzuesi" guide row w/ `12/12` badge (violet, bg `#1a1f40`); groups:
+- **Sidebar** (fixed rail on desktop ≥1024; off-canvas overlay + hamburger below): logo "P" gradient square + "Kornizo" gradient wordmark + "Plani SOLO"; user block (avatar initial "M" + "Milaim Hasani" + "Operator"); "Udhëzuesi" guide row w/ `12/12` badge (violet, bg `#1a1f40`); groups:
   - **KRYESORE**: Dashboard (grid icon), Projektet (folder icon), Klientët (users icon)
   - **FINANCA**: Faturat (receipt), Financat 🔒(bar-chart)
   - **OPERACIONET**: Prodhimi 🔒(box), Stoku 🔒(layers), Monitorimi 🔒(activity)
@@ -19,7 +19,7 @@
 - **Group header**: uppercase ~11px slate-400 bold wide-tracking.
 
 ## /dashboard
-- Onboarding banner card (dark, rounded-2xl): rocket icon chip; "Konfigurimi i Proferto-s" + `12/12 hapa` badge; "Hapi i radhës: **Siguria e llogarisë** — Në llogarinë tuaj rrinë çmimet, klientët dhe financat — një hap i dytë verifikimi ia vlen."; buttons "Vazhdo" (primary), "Hapma faqen →" (ghost); full progress bar (violet gradient).
+- Onboarding banner card (dark, rounded-2xl): rocket icon chip; "Konfigurimi i Kornizo-s" + `12/12 hapa` badge; "Hapi i radhës: **Siguria e llogarisë** — Në llogarinë tuaj rrinë çmimet, klientët dhe financat — një hap i dytë verifikimi ia vlen."; buttons "Vazhdo" (primary), "Hapma faqen →" (ghost); full progress bar (violet gradient).
 - **KPI cards** (2-col grid on desktop, stack mobile; bg slate-100, rounded-2xl, icon chip top-left, UPPERCASE label, big value Space Grotesk):
   - OFERTAT KËTË MUAJ = **1** (doc icon, cyan)
   - PUNË NË PRODHIM = **1** / "0 përfunduar" (wrench icon, cyan)

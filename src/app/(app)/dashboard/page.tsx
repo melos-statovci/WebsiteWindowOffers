@@ -3,13 +3,13 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import {
-  FileText, Wrench, Wallet, LayoutGrid, Bell, Clock, ArrowRight, Rocket, Users,
+  FileText, Wrench, Wallet, Bell, Clock, Rocket, Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/kit";
 import { FlowChart } from "@/components/dashboard/flow-chart";
 import { useApp } from "@/components/providers/providers";
-import { useStore } from "@/lib/store";
+import { isUiDismissed, useStore } from "@/lib/store";
 import { dashboardStats, projectTotal } from "@/lib/selectors";
 import { guideStepKeys } from "@/lib/plan";
 import { eur, shortDate } from "@/lib/format";
@@ -26,22 +26,14 @@ function StatCard({ icon: Icon, tone, label, value, sub }: { icon: LucideIcon; t
   );
 }
 
-function LockedStatCard() {
-  return (
-    <Card className="flex flex-col items-center justify-center p-5 text-center">
-      <LayoutGrid className="mb-2 size-6 text-slate-400" />
-      <div className="font-heading text-base font-semibold text-slate-700">Fitimi</div>
-      <div className="text-sm text-slate-400">Përditëso në PRO</div>
-    </Card>
-  );
-}
-
 export default function DashboardPage() {
   const { setOverlay } = useApp();
   const projects = useStore((s) => s.projects);
   const payments = useStore((s) => s.payments);
   const clients = useStore((s) => s.clients);
   const guideDone = useStore((s) => s.guideDone);
+  const uiDismissals = useStore((s) => s.uiDismissals);
+  const dismissUi = useStore((s) => s.dismissUi);
 
   const stats = useMemo(() => dashboardStats(projects, payments, clients), [projects, payments, clients]);
   const recent = useMemo(
@@ -51,46 +43,45 @@ export default function DashboardPage() {
   const doneCount = guideStepKeys.filter((k) => guideDone[k]).length;
   const total = guideStepKeys.length;
   const pct = total ? Math.round((doneCount / total) * 100) : 0;
+  const configPromptHidden = doneCount === total || isUiDismissed(uiDismissals.configGuide);
 
   return (
     <div className="space-y-6">
       {/* Onboarding banner */}
-      <Card className="overflow-hidden p-5 sm:p-6">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-          <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-indigo-50 text-indigo-400"><Rocket className="size-7" /></span>
-          <div className="flex-1">
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="font-heading text-lg font-bold text-slate-900">Konfigurimi i Proferto-s</h2>
-              <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-400">{doneCount}/{total} hapa</span>
+      {!configPromptHidden && (
+        <Card className="overflow-hidden p-5 sm:p-6">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+            <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-violet-50 text-violet-400"><Rocket className="size-7" /></span>
+            <div className="flex-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="font-heading text-lg font-bold text-slate-900">Konfigurimi i Kornizo-s</h2>
+                <span className="rounded-md bg-violet-50 px-2 py-0.5 text-xs font-bold text-violet-400">{doneCount}/{total} hapa</span>
+              </div>
+              <p className="mt-1 text-sm text-slate-400">
+                Hapi i radhës: <span className="font-semibold text-slate-700">Siguria e llogarisë</span> — një hap i dytë verifikimi ia vlen.
+              </p>
+              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                <div className="h-full bg-gradient-to-r from-violet-400 to-violet-600 transition-all" style={{ width: `${pct}%` }} />
+              </div>
             </div>
-            <p className="mt-1 text-sm text-slate-400">
-              {doneCount === total ? (
-                <>Konfigurimi u përfundua — <span className="font-semibold text-slate-700">gjithçka gati</span>.</>
-              ) : (
-                <>Hapi i radhës: <span className="font-semibold text-slate-700">Siguria e llogarisë</span> — një hap i dytë verifikimi ia vlen.</>
-              )}
-            </p>
-            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-              <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all" style={{ width: `${pct}%` }} />
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <button onClick={() => setOverlay("config")} className="rounded-lg bg-slate-300 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-400">Vazhdo</button>
+              <button onClick={() => dismissUi("configGuide", "tomorrow")} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200/50">Deri nesër</button>
+              <button onClick={() => dismissUi("configGuide", "forever")} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-200/50 hover:text-slate-900">Mos e shfaq më</button>
             </div>
           </div>
-          <div className="flex shrink-0 gap-2">
-            <button onClick={() => setOverlay("config")} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Vazhdo</button>
-            <button onClick={() => setOverlay("config")} className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200/50">Hapma faqen <ArrowRight className="size-4" /></button>
-          </div>
-        </div>
-      </Card>
+        </Card>
+      )}
 
       {/* KPI grid */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <StatCard icon={FileText} tone="bg-cyan-50 text-cyan-400" label="Ofertat këtë muaj" value={String(stats.offersThisMonth)} />
-        <StatCard icon={Wrench} tone="bg-cyan-50 text-cyan-400" label="Punë në prodhim" value={String(stats.jobsInProduction)} sub={`${stats.jobsCompleted} përfunduar`} />
+        <StatCard icon={Wrench} tone="bg-sky-50 text-sky-400" label="Punë në prodhim" value={String(stats.jobsInProduction)} sub={`${stats.jobsCompleted} përfunduar`} />
         <StatCard icon={Wallet} tone="bg-emerald-50 text-emerald-500" label="Të hyra (pranuar)" value={eur(stats.revenue)} />
-        <LockedStatCard />
-        <StatCard icon={FileText} tone="bg-blue-50 text-blue-400" label="Të pranuara" value={String(stats.jobsInProduction)} sub={eur(stats.revenue)} />
+        <StatCard icon={FileText} tone="bg-violet-50 text-violet-400" label="Të pranuara" value={String(stats.jobsInProduction)} sub={eur(stats.revenue)} />
         <StatCard icon={Clock} tone="bg-amber-50 text-amber-500" label="Në pritje" value={String(stats.pendingCount)} sub={eur(stats.pending)} />
         <StatCard icon={Users} tone="bg-rose-50 text-rose-400" label="Borxhi i klientëve" value={eur(stats.clientDebt)} />
-        <StatCard icon={Wallet} tone="bg-slate-200 text-slate-500" label="Të pranuara (pagesa)" value={eur(stats.received)} sub={`${stats.receivedCount} pagesa`} />
+        <StatCard icon={Wallet} tone="bg-slate-200 text-slate-700" label="Të pranuara (pagesa)" value={eur(stats.received)} sub={`${stats.receivedCount} pagesa`} />
       </div>
 
       {/* Chart */}

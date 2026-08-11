@@ -4,25 +4,15 @@ import {
   FolderKanban,
   Users,
   ReceiptText,
-  BarChart3,
-  Package,
-  Layers,
-  Activity,
-  HardHat,
-  Truck,
-  FileText,
   Tags,
   ShieldCheck,
   Settings,
 } from "lucide-react";
 
-export type PlanTier = "SOLO" | "BIZNES" | "FABRIKA";
-
 export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
-  lockedFor?: PlanTier; // plan required to unlock
 }
 
 export interface NavGroup {
@@ -43,23 +33,6 @@ export const navGroups: NavGroup[] = [
     label: "FINANCA",
     items: [
       { label: "Faturat", href: "/invoices", icon: ReceiptText },
-      { label: "Financat", href: "/finance", icon: BarChart3, lockedFor: "BIZNES" },
-    ],
-  },
-  {
-    label: "OPERACIONET",
-    items: [
-      { label: "Prodhimi", href: "/jobs", icon: Package, lockedFor: "BIZNES" },
-      { label: "Stoku", href: "/stock", icon: Layers, lockedFor: "BIZNES" },
-      { label: "Monitorimi", href: "/monitoring", icon: Activity, lockedFor: "BIZNES" },
-    ],
-  },
-  {
-    label: "BURIMET",
-    items: [
-      { label: "Punëtorët", href: "/workers", icon: HardHat, lockedFor: "FABRIKA" },
-      { label: "Asetet", href: "/assets", icon: Truck, lockedFor: "FABRIKA" },
-      { label: "Dokumentet", href: "/documents", icon: FileText, lockedFor: "FABRIKA" },
     ],
   },
   {

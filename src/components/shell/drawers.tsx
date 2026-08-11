@@ -32,7 +32,7 @@ function DrawerShell({
   return (
     <div className="fixed inset-0 z-50">
       <div
-        className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/55"
         onClick={onClose}
       />
       <div className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-slate-100 shadow-2xl">
@@ -54,7 +54,7 @@ export function HelpDrawer() {
 
   return (
     <DrawerShell open={overlay === "help"} onClose={() => setOverlay(null)}>
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 text-white">
+      <div className="bg-gradient-to-r from-slate-300 to-slate-200 p-5 text-white">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <span className="grid size-11 place-items-center rounded-xl bg-white/15">
@@ -87,7 +87,7 @@ export function HelpDrawer() {
               onClick={() => setTab(v)}
               className={cn(
                 "flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors",
-                tab === v ? "bg-white text-indigo-600" : "text-white/85",
+                tab === v ? "bg-white text-neutral-700" : "text-white/85",
               )}
             >
               {label}
@@ -130,12 +130,12 @@ export function HelpDrawer() {
             <div>
               <label className="text-xs font-semibold tracking-wide text-slate-400 uppercase">Tema</label>
               <input value={contact.subject} onChange={(e) => setContact((c) => ({ ...c, subject: e.target.value }))} placeholder="P.sh. Problem me çmimet"
-                className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500" />
+                className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-neutral-500" />
             </div>
             <div>
               <label className="text-xs font-semibold tracking-wide text-slate-400 uppercase">Mesazhi</label>
               <textarea value={contact.message} onChange={(e) => setContact((c) => ({ ...c, message: e.target.value }))} placeholder="Përshkruani çështjen…"
-                className="mt-1.5 min-h-28 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900 outline-none focus:border-indigo-500" />
+                className="mt-1.5 min-h-28 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900 outline-none focus:border-neutral-500" />
             </div>
             <Button className="w-full" disabled={!contact.subject.trim() || !contact.message.trim()}
               onClick={() => { setContact({ subject: "", message: "" }); toast("Mesazhi u dërgua (simulim lokal — asgjë nuk u dërgua vërtet)."); }}>
@@ -175,7 +175,7 @@ export function ConfigGuideDrawer() {
 
   return (
     <DrawerShell open={overlay === "config"} onClose={() => setOverlay(null)}>
-      <div className="bg-gradient-to-r from-violet-600 to-indigo-600 p-5 text-white">
+      <div className="bg-gradient-to-r from-slate-300 to-slate-200 p-5 text-white">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <span className="grid size-11 place-items-center rounded-xl bg-white/15">
@@ -235,7 +235,7 @@ export function ConfigGuideDrawer() {
                     </div>
                     {open === key && (
                       <div className="border-t border-slate-200 px-4 py-3">
-                        <button onClick={() => goTo(step.href)} className="text-sm font-semibold text-indigo-400 hover:underline">
+                        <button onClick={() => goTo(step.href)} className="text-sm font-semibold text-slate-900 hover:underline">
                           Hap faqen →
                         </button>
                       </div>

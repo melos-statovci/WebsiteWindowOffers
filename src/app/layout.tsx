@@ -1,28 +1,9 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans, IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers/providers";
 
-const plexSans = IBM_Plex_Sans({
-  variable: "--font-plex-sans",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const plexMono = IBM_Plex_Mono({
-  variable: "--font-plex-mono",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-});
-
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-space-grotesk",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-});
-
 export const metadata: Metadata = {
-  title: "Proferto - Konfigurator & Oferta për Dritare e Dyer",
+  title: "Kornizo - Konfigurator & Oferta për Dritare e Dyer",
   description:
     "Konfigurator dhe ofertim për dritare e dyer — klientë, projekte, fatura dhe çmime në një vend.",
 };
@@ -36,7 +17,7 @@ export default function RootLayout({
   return (
     <html
       lang="sq"
-      className={`${plexSans.variable} ${plexMono.variable} ${spaceGrotesk.variable} dark`}
+      className="dark"
       suppressHydrationWarning
     >
       <head>

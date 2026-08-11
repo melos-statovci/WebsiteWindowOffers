@@ -16,17 +16,17 @@ type ButtonVariant =
 type ButtonSize = "sm" | "md" | "lg" | "icon";
 
 const buttonBase =
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0";
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-neutral-500/60 disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0";
 
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: "bg-indigo-600 text-white hover:bg-indigo-500",
+  primary: "bg-slate-300 text-slate-950 hover:bg-slate-400",
   ghost: "text-slate-500 hover:bg-slate-200/60 hover:text-slate-900",
   outline:
     "border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200/60 hover:text-slate-900",
   danger:
     "bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 dark:bg-rose-500/15",
   subtle: "bg-slate-200 text-slate-900 hover:bg-slate-300",
-  soft: "bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20",
+  soft: "bg-slate-200 text-slate-900 hover:bg-slate-300",
 };
 
 const buttonSizes: Record<ButtonSize, string> = {
@@ -120,12 +120,12 @@ type BadgeTone =
 
 const badgeTones: Record<BadgeTone, string> = {
   neutral: "bg-slate-200 text-slate-600",
-  blue: "bg-blue-50 text-blue-400",
-  indigo: "bg-indigo-50 text-indigo-400",
+  blue: "bg-slate-200 text-slate-900",
+  indigo: "bg-slate-200 text-slate-900",
   emerald: "bg-emerald-50 text-emerald-500",
   amber: "bg-amber-50 text-amber-500",
   rose: "bg-rose-50 text-rose-400",
-  violet: "bg-violet-50 text-violet-400",
+  violet: "bg-slate-200 text-slate-900",
 };
 
 export function Badge({
@@ -165,7 +165,7 @@ export function Avatar({
   return (
     <span
       className={cn(
-        "inline-flex items-center justify-center bg-indigo-600 font-heading font-semibold text-white",
+        "inline-flex items-center justify-center bg-slate-300 font-heading font-semibold text-white",
         circle ? "rounded-full" : "rounded-xl",
         className ?? "size-11 text-base",
       )}
@@ -250,8 +250,8 @@ export function Toggle({
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60",
-        checked ? "bg-indigo-600" : "bg-slate-300",
+        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors outline-none focus-visible:ring-2 focus-visible:ring-neutral-500/60",
+        checked ? "bg-slate-300" : "bg-slate-300",
       )}
     >
       <span
@@ -328,7 +328,7 @@ export function Input({
   return (
     <input
       className={cn(
-        "h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30",
+        "h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-neutral-500 focus:ring-2 focus:ring-neutral-500/30",
         className,
       )}
       {...props}

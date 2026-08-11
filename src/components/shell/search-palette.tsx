@@ -90,7 +90,7 @@ export function SearchPalette() {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 pt-[12vh]">
-      <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setOverlay(null)} />
+      <div className="absolute inset-0 bg-black/55" onClick={() => setOverlay(null)} />
       <div
         className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-2xl"
         onKeyDown={(e) => {

@@ -1,18 +1,18 @@
-# Proferto Application URL Map
+# Kornizo Application URL Map
 
-- **Starting URL:** `https://app.proferto.io/dashboard`
-- **Allowed origin:** `https://app.proferto.io`
+- **Starting URL:** `https://app.kornizo.io/dashboard`
+- **Allowed origin:** `https://app.kornizo.io`
 - **Exploration date:** 2026-08-05
 - **Account or role observed:** Signed-in user "Milaim Hasani" — role **PRONAR (Owner)** per Settings → Users (sidebar avatar cosmetically labels it "Operator"). Plan: **SOLO**.
 - **Total confirmed concrete routes:** 23 (14 distinct paths + 9 `/pricing?tab=` query variants). Root `/` additionally confirmed to redirect to `/dashboard`.
 - **Total route patterns:** 2 observed (`/projects/:projectId/configure`, `/clients/:clientId`) + 1 inferred-but-unobservable (`/invoices/:invoiceId`).
 - **Redirects found:** 1 (`/` → `/dashboard`).
 - **Inaccessible destinations:** 0 hard-blocked. 8 routes are **plan-gated** (load successfully but render an upgrade wall instead of functional content).
-- **Important limitations:** The app is a button-driven SPA with **zero `<a href>` anchors** — every route was discovered by observed navigation, never by guessing. Application data is nearly empty (1 project, 1 client, 0 invoices), so some detail/child routes could not be exercised. Banner warns the app is in active launch phase ("Prova falas … Proferto është në fazë lansimi") and may change.
+- **Important limitations:** The app is a button-driven SPA with **zero `<a href>` anchors** — every route was discovered by observed navigation, never by guessing. Application data is nearly empty (1 project, 1 client, 0 invoices), so some detail/child routes could not be exercised. Banner warns the app is in active launch phase ("Prova falas … Kornizo është në fazë lansimi") and may change.
 
 ## Executive Summary
 
-Proferto is an Albanian-language SaaS for windows/doors quoting, configuration, and light ERP (a "Konfigurator & Oferta për Dritare e Dyer"). The current account is on the **SOLO** plan, which unlocks a core set of areas — **Dashboard, Projektet (projects/offers), Klientët (clients), Faturat (invoices), Çmimet & Sistemet (pricing/systems catalog), Siguria (security), Cilësimet (settings)** — while the OPERACIONET and BURIMET modules (**Financat, Prodhimi, Stoku, Monitorimi, Punëtorët, Asetet, Dokumentet**) are visibly padlocked and route to an upgrade wall for the BIZNES / FABRIKA plans.
+Kornizo is an Albanian-language SaaS for windows/doors quoting, configuration, and light ERP (a "Konfigurator & Oferta për Dritare e Dyer"). The current account is on the **SOLO** plan, which unlocks a core set of areas — **Dashboard, Projektet (projects/offers), Klientët (clients), Faturat (invoices), Çmimet & Sistemet (pricing/systems catalog), Siguria (security), Cilësimet (settings)** — while the OPERACIONET and BURIMET modules (**Financat, Prodhimi, Stoku, Monitorimi, Punëtorët, Asetet, Dokumentet**) are visibly padlocked and route to an upgrade wall for the BIZNES / FABRIKA plans.
 
 Navigation is a single fixed left sidebar (three functional groups + a SISTEMET group), a slim top bar (Help drawer, global search palette, notifications dropdown), and in-page tabs. Most "tabs" (configurator steps, client-detail tabs, settings sub-pages) are **internal component state and do not change the URL**; the one exception is the Çmimet & Sistemet page, whose ten catalog tabs are genuine `?tab=` query routes. Coverage of the reachable route surface is believed to be essentially complete for this account; the main gaps are dynamic detail routes that require more seed data (invoices) to observe.
 
@@ -23,10 +23,10 @@ Navigation is a single fixed left sidebar (three functional groups + a SISTEMET 
 ### KRYESORE (Main)
 
 #### Dashboard
-- **URL:** `https://app.proferto.io/dashboard`
+- **URL:** `https://app.kornizo.io/dashboard`
 - **Path:** `/dashboard`
 - **Status:** Confirmed
-- **Page title:** Proferto - Konfigurator & Oferta për Dritare e Dyer
+- **Page title:** Kornizo - Konfigurator & Oferta për Dritare e Dyer
 - **Primary heading:** Dashboard
 - **How discovered:** Starting URL / Main sidebar → Dashboard
 - **Purpose:** Home overview with onboarding progress banner, KPI stat cards (offers this month, jobs in production, revenue, receivables, expenses) and a 6-month financial-flow chart.
@@ -36,7 +36,7 @@ Navigation is a single fixed left sidebar (three functional groups + a SISTEMET 
 - **Related routes:** Stat cards are display-only (not links).
 
 #### Projektet (Projects)
-- **URL:** `https://app.proferto.io/projects`
+- **URL:** `https://app.kornizo.io/projects`
 - **Path:** `/projects`
 - **Status:** Confirmed
 - **Primary heading:** Projektet
@@ -47,7 +47,7 @@ Navigation is a single fixed left sidebar (three functional groups + a SISTEMET 
 - **Related routes:** `/projects/:projectId/configure`
 
 #### Klientët (Clients)
-- **URL:** `https://app.proferto.io/clients`
+- **URL:** `https://app.kornizo.io/clients`
 - **Path:** `/clients`
 - **Status:** Confirmed
 - **Primary heading:** Klientët
@@ -60,7 +60,7 @@ Navigation is a single fixed left sidebar (three functional groups + a SISTEMET 
 ### FINANCA (Finance)
 
 #### Faturat (Invoices)
-- **URL:** `https://app.proferto.io/invoices`
+- **URL:** `https://app.kornizo.io/invoices`
 - **Path:** `/invoices`
 - **Status:** Confirmed
 - **Primary heading:** Faturat
@@ -71,7 +71,7 @@ Navigation is a single fixed left sidebar (three functional groups + a SISTEMET 
 - **Related routes:** `/invoices/:invoiceId` (pattern inferred; not observable while list is empty).
 
 #### Financat (Finances)
-- **URL:** `https://app.proferto.io/finance`
+- **URL:** `https://app.kornizo.io/finance`
 - **Path:** `/finance`
 - **Status:** Confirmed (loads) — **plan-gated (BIZNES)**
 - **Primary heading:** "Ky modul nuk është i përfshirë në planin tuaj" (upgrade wall)
@@ -83,7 +83,7 @@ Navigation is a single fixed left sidebar (three functional groups + a SISTEMET 
 ### OPERACIONET (Operations)
 
 #### Prodhimi (Production)
-- **URL:** `https://app.proferto.io/jobs`
+- **URL:** `https://app.kornizo.io/jobs`
 - **Path:** `/jobs`
 - **Status:** Confirmed (loads) — **plan-gated (BIZNES)**
 - **Primary heading:** Prodhimi → upgrade wall
@@ -93,7 +93,7 @@ Navigation is a single fixed left sidebar (three functional groups + a SISTEMET 
 - **Access notes:** Upgrade wall on SOLO.
 
 #### Stoku (Stock)
-- **URL:** `https://app.proferto.io/stock`
+- **URL:** `https://app.kornizo.io/stock`
 - **Path:** `/stock`
 - **Status:** Confirmed (loads) — **plan-gated (BIZNES)**
 - **How discovered:** Main sidebar → Stoku (padlock)
@@ -102,7 +102,7 @@ Navigation is a single fixed left sidebar (three functional groups + a SISTEMET 
 - **Access notes:** Upgrade wall on SOLO (inferred from identical gating pattern).
 
 #### Monitorimi (Monitoring)
-- **URL:** `https://app.proferto.io/monitoring`
+- **URL:** `https://app.kornizo.io/monitoring`
 - **Path:** `/monitoring`
 - **Status:** Confirmed (loads) — **plan-gated (BIZNES)**
 - **How discovered:** Main sidebar → Monitorimi (padlock)
@@ -113,7 +113,7 @@ Navigation is a single fixed left sidebar (three functional groups + a SISTEMET 
 ### BURIMET (Resources)
 
 #### Punëtorët (Workers)
-- **URL:** `https://app.proferto.io/workers`
+- **URL:** `https://app.kornizo.io/workers`
 - **Path:** `/workers`
 - **Status:** Confirmed (loads) — **plan-gated (FABRIKA)**
 - **How discovered:** Main sidebar → Punëtorët (padlock)
@@ -122,7 +122,7 @@ Navigation is a single fixed left sidebar (three functional groups + a SISTEMET 
 - **Access notes:** Upgrade wall on SOLO (inferred).
 
 #### Asetet (Assets)
-- **URL:** `https://app.proferto.io/assets`
+- **URL:** `https://app.kornizo.io/assets`
 - **Path:** `/assets`
 - **Status:** Confirmed (loads) — **plan-gated (FABRIKA)**
 - **How discovered:** Main sidebar → Asetet (padlock)
@@ -131,7 +131,7 @@ Navigation is a single fixed left sidebar (three functional groups + a SISTEMET 
 - **Access notes:** Upgrade wall on SOLO (inferred).
 
 #### Dokumentet (Documents)
-- **URL:** `https://app.proferto.io/documents`
+- **URL:** `https://app.kornizo.io/documents`
 - **Path:** `/documents`
 - **Status:** Confirmed (loads) — **plan-gated (FABRIKA)**
 - **Primary heading:** Dokumentet → upgrade wall
@@ -143,7 +143,7 @@ Navigation is a single fixed left sidebar (three functional groups + a SISTEMET 
 ### SISTEMET (Systems)
 
 #### Çmimet & Sistemet (Pricing & Systems)
-- **URL:** `https://app.proferto.io/pricing`
+- **URL:** `https://app.kornizo.io/pricing`
 - **Path:** `/pricing`
 - **Status:** Confirmed
 - **Primary heading:** Çmimet & Sistemet
@@ -154,7 +154,7 @@ Navigation is a single fixed left sidebar (three functional groups + a SISTEMET 
 - **Related routes:** `/pricing?tab=…` (9 variants).
 
 #### Siguria (Security)
-- **URL:** `https://app.proferto.io/security`
+- **URL:** `https://app.kornizo.io/security`
 - **Path:** `/security`
 - **Status:** Confirmed
 - **Primary heading:** Siguria
@@ -164,7 +164,7 @@ Navigation is a single fixed left sidebar (three functional groups + a SISTEMET 
 - **Access notes:** Available. Consequential controls (Aktivizo 2FA, Ndrysho fjalëkalimin, Dil nga të gjitha pajisjet) skipped.
 
 #### Cilësimet (Settings)
-- **URL:** `https://app.proferto.io/settings`
+- **URL:** `https://app.kornizo.io/settings`
 - **Path:** `/settings`
 - **Status:** Confirmed
 - **Primary heading:** Cilësimet
@@ -222,16 +222,16 @@ The `/pricing` page's ten tabs each set a `?tab=` query value:
 
 | Tab label (Albanian) | URL |
 | --- | --- |
-| Sistemet (default) | `https://app.proferto.io/pricing` |
-| Metalet | `https://app.proferto.io/pricing?tab=metals` |
-| Mekanizmat | `https://app.proferto.io/pricing?tab=mechanisms` |
-| Xhamat | `https://app.proferto.io/pricing?tab=glass` |
-| Panelet | `https://app.proferto.io/pricing?tab=door-panels` |
-| Shtesat | `https://app.proferto.io/pricing?tab=expansion-profiles` |
-| Aksesorët | `https://app.proferto.io/pricing?tab=accessories` |
-| Parametrat | `https://app.proferto.io/pricing?tab=production` |
-| Roletat | `https://app.proferto.io/pricing?tab=roleta` |
-| Dyer të Hyrjes | `https://app.proferto.io/pricing?tab=doors` |
+| Sistemet (default) | `https://app.kornizo.io/pricing` |
+| Metalet | `https://app.kornizo.io/pricing?tab=metals` |
+| Mekanizmat | `https://app.kornizo.io/pricing?tab=mechanisms` |
+| Xhamat | `https://app.kornizo.io/pricing?tab=glass` |
+| Panelet | `https://app.kornizo.io/pricing?tab=door-panels` |
+| Shtesat | `https://app.kornizo.io/pricing?tab=expansion-profiles` |
+| Aksesorët | `https://app.kornizo.io/pricing?tab=accessories` |
+| Parametrat | `https://app.kornizo.io/pricing?tab=production` |
+| Roletat | `https://app.kornizo.io/pricing?tab=roleta` |
+| Dyer të Hyrjes | `https://app.kornizo.io/pricing?tab=doors` |
 
 ### State-only tabs (NO URL change) — recorded for completeness
 - **Offer configurator** (`/projects/:projectId/configure`): tabs **Detajet · Produkti · Përmbledhje** — internal step state, URL unchanged.
@@ -252,7 +252,7 @@ Real identifiers deliberately replaced with safe placeholders.
 
 | Original URL | Final URL | Notes |
 | --- | --- | --- |
-| `https://app.proferto.io/` | `https://app.proferto.io/dashboard` | Root redirects to dashboard for authenticated user. |
+| `https://app.kornizo.io/` | `https://app.kornizo.io/dashboard` | Root redirects to dashboard for authenticated user. |
 
 ## Inaccessible or Permission-Limited Destinations
 
@@ -260,13 +260,13 @@ No route returned an outright 403/404. The following resolve but are **plan-gate
 
 | Label | Observed URL | Result | How discovered |
 | --- | --- | --- | --- |
-| Financat | `https://app.proferto.io/finance` | Plan-gated (BIZNES) — upgrade wall confirmed directly | Sidebar (padlock) |
-| Prodhimi | `https://app.proferto.io/jobs` | Plan-gated (BIZNES) — upgrade wall confirmed directly | Sidebar (padlock) |
-| Stoku | `https://app.proferto.io/stock` | Plan-gated (BIZNES) — inferred (URL confirmed to load) | Sidebar (padlock) |
-| Monitorimi | `https://app.proferto.io/monitoring` | Plan-gated (BIZNES) — inferred (URL confirmed to load) | Sidebar (padlock) |
-| Punëtorët | `https://app.proferto.io/workers` | Plan-gated (FABRIKA) — inferred (URL confirmed to load) | Sidebar (padlock) |
-| Asetet | `https://app.proferto.io/assets` | Plan-gated (FABRIKA) — inferred (URL confirmed to load) | Sidebar (padlock) |
-| Dokumentet | `https://app.proferto.io/documents` | Plan-gated (FABRIKA) — upgrade wall confirmed directly | Sidebar (padlock) |
+| Financat | `https://app.kornizo.io/finance` | Plan-gated (BIZNES) — upgrade wall confirmed directly | Sidebar (padlock) |
+| Prodhimi | `https://app.kornizo.io/jobs` | Plan-gated (BIZNES) — upgrade wall confirmed directly | Sidebar (padlock) |
+| Stoku | `https://app.kornizo.io/stock` | Plan-gated (BIZNES) — inferred (URL confirmed to load) | Sidebar (padlock) |
+| Monitorimi | `https://app.kornizo.io/monitoring` | Plan-gated (BIZNES) — inferred (URL confirmed to load) | Sidebar (padlock) |
+| Punëtorët | `https://app.kornizo.io/workers` | Plan-gated (FABRIKA) — inferred (URL confirmed to load) | Sidebar (padlock) |
+| Asetet | `https://app.kornizo.io/assets` | Plan-gated (FABRIKA) — inferred (URL confirmed to load) | Sidebar (padlock) |
+| Dokumentet | `https://app.kornizo.io/documents` | Plan-gated (FABRIKA) — upgrade wall confirmed directly | Sidebar (padlock) |
 
 ## Discovered External Links
 
@@ -335,41 +335,41 @@ Deliberately **not** clicked/submitted (could modify state or leave scope):
 Sorted by application section, alphabetical within section.
 
 **Core**
-- `https://app.proferto.io/dashboard`  *(also target of `/` redirect)*
+- `https://app.kornizo.io/dashboard`  *(also target of `/` redirect)*
 
 **Sales / Records**
-- `https://app.proferto.io/clients`
-- `https://app.proferto.io/clients/:clientId`  *(route pattern)*
-- `https://app.proferto.io/projects`
-- `https://app.proferto.io/projects/:projectId/configure`  *(route pattern)*
+- `https://app.kornizo.io/clients`
+- `https://app.kornizo.io/clients/:clientId`  *(route pattern)*
+- `https://app.kornizo.io/projects`
+- `https://app.kornizo.io/projects/:projectId/configure`  *(route pattern)*
 
 **Finance**
-- `https://app.proferto.io/finance`  *(plan-gated)*
-- `https://app.proferto.io/invoices`
-- `https://app.proferto.io/invoices/:invoiceId`  *(route pattern — unverified)*
+- `https://app.kornizo.io/finance`  *(plan-gated)*
+- `https://app.kornizo.io/invoices`
+- `https://app.kornizo.io/invoices/:invoiceId`  *(route pattern — unverified)*
 
 **Operations (plan-gated)**
-- `https://app.proferto.io/jobs`
-- `https://app.proferto.io/monitoring`
-- `https://app.proferto.io/stock`
+- `https://app.kornizo.io/jobs`
+- `https://app.kornizo.io/monitoring`
+- `https://app.kornizo.io/stock`
 
 **Resources (plan-gated)**
-- `https://app.proferto.io/assets`
-- `https://app.proferto.io/documents`
-- `https://app.proferto.io/workers`
+- `https://app.kornizo.io/assets`
+- `https://app.kornizo.io/documents`
+- `https://app.kornizo.io/workers`
 
 **Systems / Catalog**
-- `https://app.proferto.io/pricing`
-- `https://app.proferto.io/pricing?tab=accessories`
-- `https://app.proferto.io/pricing?tab=door-panels`
-- `https://app.proferto.io/pricing?tab=doors`
-- `https://app.proferto.io/pricing?tab=expansion-profiles`
-- `https://app.proferto.io/pricing?tab=glass`
-- `https://app.proferto.io/pricing?tab=mechanisms`
-- `https://app.proferto.io/pricing?tab=metals`
-- `https://app.proferto.io/pricing?tab=production`
-- `https://app.proferto.io/pricing?tab=roleta`
+- `https://app.kornizo.io/pricing`
+- `https://app.kornizo.io/pricing?tab=accessories`
+- `https://app.kornizo.io/pricing?tab=door-panels`
+- `https://app.kornizo.io/pricing?tab=doors`
+- `https://app.kornizo.io/pricing?tab=expansion-profiles`
+- `https://app.kornizo.io/pricing?tab=glass`
+- `https://app.kornizo.io/pricing?tab=mechanisms`
+- `https://app.kornizo.io/pricing?tab=metals`
+- `https://app.kornizo.io/pricing?tab=production`
+- `https://app.kornizo.io/pricing?tab=roleta`
 
 **Settings & Security**
-- `https://app.proferto.io/security`
-- `https://app.proferto.io/settings`
+- `https://app.kornizo.io/security`
+- `https://app.kornizo.io/settings`

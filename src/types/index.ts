@@ -1,4 +1,4 @@
-// Domain types for the local Proferto clone. All data is local/mock.
+// Domain types for the local Kornizo clone. All data is local/mock.
 // Financial aggregates (client value/paid/debt, project total) are DERIVED via
 // src/lib/selectors.ts, not stored — so relationships stay consistent.
 
@@ -44,7 +44,8 @@ export type ModelType =
   | "trekendesh"
   | "trapez"
   | "pesekendesh"
-  | "hark";
+  | "hark"
+  | "rreth";
 
 export type ProfileColor = "white" | "white_color" | "color_color";
 
@@ -56,8 +57,8 @@ export interface Shtese {
   widthMm: number;
 }
 
-/** Per-pane opening: fixed glass, hinged left/right, or tilt-turn. */
-export type OpeningType = "fiks" | "majtas" | "djathtas" | "kip";
+/** Per-pane opening: fixed glass, hinged left/right, tilt, or tilt-turn. */
+export type OpeningType = "fiks" | "majtas" | "majtas-kip" | "djathtas" | "djathtas-kip" | "kip";
 
 export interface WindowConfig {
   productType: ProductType;
@@ -72,6 +73,9 @@ export interface WindowConfig {
   roleta: boolean;
   roletaBoxMm?: number;
   shtesa: Shtese[];
+  /** custom model-only mullion counts; production defaults custom to 1 vertical, 0 horizontal. */
+  customVerticalMullions?: number;
+  customHorizontalMullions?: number;
   /** pane index -> opening type; absent = "fiks" (fixed). */
   openings: Record<number, OpeningType>;
   /** door-only */

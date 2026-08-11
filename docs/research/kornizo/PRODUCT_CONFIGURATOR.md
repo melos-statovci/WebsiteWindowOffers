@@ -1,4 +1,4 @@
-# Proferto — "Shto produkt" Window Configurator (directly observed 2026-08-05)
+# Kornizo — "Shto produkt" Window Configurator (directly observed 2026-08-05)
 
 The real "add product" is a **full parametric window/door configurator**, NOT a form modal.
 It IS the content of the Produkti tab: a product LIST (when items exist) that switches to the
@@ -7,7 +7,7 @@ CONFIGURATOR when you click a product (edit) or "+" (add). "Shto në Ofertë" ad
 ## Layout
 - Left: normal app sidebar (desktop) — configurator has its own top strip (X "Dil nga konfiguratori",
   undo "Kthehu mbrapa", tabs Detajet/Produkti/Përmbledhje) and a bottom status bar
-  "● SYSTEM ACTIVE · PRECISION: 1.0MM · © 2026 PROFERTO".
+  "● SYSTEM ACTIVE · PRECISION: 1.0MM · © 2026 KORNIZO".
 - Produkti content = two columns:
   - **Top: window-type toolbar** (icon buttons) — selects the model geometry.
   - **Left panel**: product-type dropdown + 3 sub-tabs + fields.

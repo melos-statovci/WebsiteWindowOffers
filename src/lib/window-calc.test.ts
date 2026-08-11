@@ -32,7 +32,7 @@ const cfg = (over: Partial<WindowConfig>): WindowConfig => ({
   ...over,
 });
 
-describe("window materials — matches observed Proferto values", () => {
+describe("window materials — matches observed Kornizo values", () => {
   it("single 1000×1200 fixed: ram 4.40m, glass 0.97m², llajsne 3.96m, no mullion/krah", () => {
     const m = computeMaterials(cfg({ modelType: "njeshe" }));
     expect(m.ramPerimM).toBe(4.4);
@@ -125,5 +125,25 @@ describe("window layout + price", () => {
   it("supports every product type without throwing", () => {
     const types: ProductType[] = ["Dritare", "Derë Hyrje", "Derë", "Rreshqitëse", "Roletë"];
     for (const t of types) expect(computePrice(cfg({ productType: t }), pricing)).toBeGreaterThan(0);
+  });
+});
+
+describe("malformed persisted dimensions are sanitized", () => {
+  it("clamps non-positive width/height for effective materials", () => {
+    const m = computeMaterials(cfg({ widthMm: -100, heightMm: 0 }));
+    expect(m.ramPerimM).toBe(0.8);
+    expect(m.glassM2).toBe(0.01);
+    expect(computePrice(cfg({ widthMm: -100, heightMm: 0 }), pricing)).toBeGreaterThan(0);
+  });
+
+  it("ignores negative shtesa widths instead of enlarging the window", () => {
+    const d = effectiveDims(cfg({ shtesa: [{ id: "bad", side: "Majtas", widthMm: -300 }] }));
+    expect(d.left).toBe(0);
+    expect(d.ew).toBe(1000);
+  });
+
+  it("roletë prices cannot go negative from invalid dimensions", () => {
+    const p = computePrice(cfg({ productType: "Roletë", widthMm: -1000, heightMm: -1000 }), pricing);
+    expect(p).toBeGreaterThan(0);
   });
 });

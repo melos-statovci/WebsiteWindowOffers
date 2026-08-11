@@ -8,9 +8,10 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/kit";
 import { WindowPreview } from "@/components/projects/window-preview";
+import { useApp } from "@/components/providers/providers";
 import { useStore, uid } from "@/lib/store";
 import {
-  computeMaterials, computePrice, MODELS, DOOR_MODELS, isDoorProduct, isGlassProduct,
+  computeLayout, computeMaterials, computePrice, MODELS, DOOR_MODELS, isDoorProduct, isGlassProduct,
 } from "@/lib/window-calc";
 import { eur } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -30,7 +31,7 @@ const MODEL_ORDER: ModelType[] = [
   "custom", "njeshe", "dyshe-v", "treshe-v", "katershe-v",
   "transom-top-1-1", "transom-top-1-2", "transom-top-2-2", "transom-top-1-3", "transom-top-3-3",
   "transom-bot-1-1", "transom-bot-2-1", "transom-bot-2-2", "transom-bot-3-1", "transom-bot-3-3",
-  "trekendesh", "trapez", "pesekendesh", "hark",
+  "trekendesh", "trapez", "pesekendesh", "hark", "rreth",
 ];
 
 const COLORS: { value: ProfileColor; label: string }[] = [
@@ -40,7 +41,22 @@ const COLORS: { value: ProfileColor; label: string }[] = [
 ];
 const MECHANISMS = ["Roto NX", "Roto Patio", "Vorne Kip"];
 const SIDES: ShteseSide[] = ["Lart", "Poshtë", "Majtas", "Djathtas"];
-const OPENING_CYCLE: OpeningType[] = ["fiks", "majtas", "djathtas", "kip"];
+const OPENING_CYCLE: OpeningType[] = ["fiks", "majtas", "majtas-kip", "djathtas", "djathtas-kip", "kip"];
+const clampNumber = (value: number, min: number, max: number) =>
+  Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : min;
+const intFromInput = (value: string, min: number, max: number) =>
+  clampNumber(parseInt(value, 10), min, max);
+const decimalFromInput = (value: string, min: number, max: number) =>
+  clampNumber(parseFloat(value.replace(",", ".")), min, max);
+const sanitizeConfig = (config: WindowConfig): WindowConfig => ({
+  ...config,
+  widthMm: clampNumber(config.widthMm, 200, 10000),
+  heightMm: clampNumber(config.heightMm, 200, 10000),
+  manualPrice: config.manualPrice == null ? config.manualPrice : clampNumber(config.manualPrice, 0, 1_000_000),
+  customVerticalMullions: config.customVerticalMullions == null ? config.customVerticalMullions : clampNumber(config.customVerticalMullions, 0, 5),
+  customHorizontalMullions: config.customHorizontalMullions == null ? config.customHorizontalMullions : clampNumber(config.customHorizontalMullions, 0, 5),
+  shtesa: config.shtesa.map((s) => ({ ...s, widthMm: clampNumber(s.widthMm, 0, 2000) })),
+});
 
 function kindOf(pt: ProductType): OfferItem["kind"] {
   if (pt === "Dritare") return "Dritare";
@@ -72,18 +88,20 @@ function defaultConfig(pt: ProductType, systems: SystemLite[], glassId: string):
 export function ProductConfigurator({
   initial,
   initialProductType = "Dritare",
+  offerItemCount = 0,
   onSave,
   onCancel,
 }: {
   initial?: OfferItem | null;
   initialProductType?: ProductType;
+  offerItemCount?: number;
   onSave: (item: Omit<OfferItem, "id">, id?: string) => void;
   onCancel: () => void;
 }) {
   const pricing = useStore((s) => s.pricing);
 
   const [cfg, setCfg] = useState<WindowConfig>(
-    () => initial?.config ?? defaultConfig(initialProductType, pricing.systems, pricing.glass[0]?.id ?? "g1"),
+    () => initial?.config ? sanitizeConfig(structuredClone(initial.config)) : defaultConfig(initialProductType, pricing.systems, pricing.glass[0]?.id ?? "g1"),
   );
   const [qty, setQty] = useState(initial?.qty ?? 1);
   const [subtab, setSubtab] = useState<"permasat" | "shtesa" | "mekanizmi">("permasat");
@@ -117,6 +135,44 @@ export function ProductConfigurator({
     });
   };
 
+  const changeModel = (modelType: ModelType) => {
+    setCfg((c) => {
+      const next = {
+        ...c,
+        modelType,
+        ...(modelType === "custom" && {
+          customVerticalMullions: c.customVerticalMullions ?? 1,
+          customHorizontalMullions: c.customHorizontalMullions ?? 0,
+        }),
+      };
+      const paneCount = computeLayout(modelType, next.widthMm, next.heightMm, next).panes.length;
+      const openings = Object.fromEntries(
+        Object.entries(next.openings ?? {}).filter(([index]) => Number(index) < paneCount),
+      ) as Record<number, OpeningType>;
+      return { ...next, openings };
+    });
+  };
+
+  const changeCustomMullions = (axis: "vertical" | "horizontal", delta: number) => {
+    setCfg((c) => {
+      const next = {
+        ...c,
+        modelType: "custom" as ModelType,
+        customVerticalMullions: axis === "vertical"
+          ? clampNumber((c.customVerticalMullions ?? 1) + delta, 0, 5)
+          : c.customVerticalMullions ?? 1,
+        customHorizontalMullions: axis === "horizontal"
+          ? clampNumber((c.customHorizontalMullions ?? 0) + delta, 0, 5)
+          : c.customHorizontalMullions ?? 0,
+      };
+      const paneCount = computeLayout(next.modelType, next.widthMm, next.heightMm, next).panes.length;
+      const openings = Object.fromEntries(
+        Object.entries(next.openings ?? {}).filter(([index]) => Number(index) < paneCount),
+      ) as Record<number, OpeningType>;
+      return { ...next, openings };
+    });
+  };
+
   const addShtese = (side: ShteseSide) => {
     setShtesaMenu(false);
     set("shtesa", [...cfg.shtesa, { id: uid(), side, widthMm: 0 }]);
@@ -124,18 +180,18 @@ export function ProductConfigurator({
 
   const save = () => {
     onSave(
-      { kind: kindOf(pt), label: pt, widthMm: cfg.widthMm, heightMm: cfg.heightMm, qty, unitPrice: price, config: cfg },
+      { kind: kindOf(pt), label: pt, widthMm: cfg.widthMm, heightMm: cfg.heightMm, qty: clampNumber(qty, 1, 999), unitPrice: price, config: sanitizeConfig(cfg) },
       initial?.id,
     );
   };
 
   return (
-    <div className="grid grid-cols-1 gap-5 lg:h-full lg:grid-cols-[360px_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-5 lg:h-full lg:grid-cols-[380px_minmax(0,1fr)]">
       {/* LEFT: configuration panel */}
-      <div className="no-scrollbar order-2 space-y-4 lg:order-1 lg:h-full lg:overflow-y-auto lg:pr-1">
+      <div className="no-scrollbar order-2 space-y-4 lg:order-1 lg:h-full lg:max-w-[380px] lg:overflow-y-auto lg:pr-6 lg:pt-10">
         {/* Product type dropdown */}
         <div className="relative">
-          <button onClick={() => setProductOpen((v) => !v)} className="flex w-full items-center gap-3 rounded-xl border-2 border-indigo-500/60 bg-slate-100 px-4 py-3 text-left">
+          <button onClick={() => setProductOpen((v) => !v)} className="flex w-full items-center gap-3 rounded-xl border-2 border-neutral-500/60 bg-slate-100 px-4 py-3 text-left">
             <activeProduct.icon className="size-5 text-slate-500" />
             <span className="flex-1 font-semibold text-slate-900">{pt}</span>
             <ChevronDown className={cn("size-4 text-slate-400 transition-transform", productOpen && "rotate-180")} />
@@ -148,7 +204,7 @@ export function ProductConfigurator({
                   <button key={type} onClick={() => changeType(type)}
                     className={cn("flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-slate-200/60", pt === type ? "font-semibold text-slate-900" : "text-slate-500")}>
                     <Icon className="size-4" /> {type}
-                    {pt === type && <Check className="ml-auto size-4 text-indigo-400" />}
+                    {pt === type && <Check className="ml-auto size-4 text-slate-900" />}
                   </button>
                 ))}
               </div>
@@ -158,10 +214,10 @@ export function ProductConfigurator({
 
         {/* Sub-tabs (roleta has none) */}
         {!roleta && (
-          <div className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1">
+          <div className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1.5">
             {([["permasat", "Përmasat", Ruler], ["shtesa", "Shtesa & Roleta", Layers], ["mekanizmi", "Mekanizmi & Xhami", Settings2]] as const).map(([v, label, Icon]) => (
               <button key={v} onClick={() => setSubtab(v)}
-                className={cn("flex flex-col items-center gap-1 rounded-lg px-2 py-2 text-center text-[11px] font-semibold leading-tight transition-colors", subtab === v ? "bg-indigo-600 text-white" : "text-slate-500 hover:text-slate-900")}>
+                className={cn("flex h-[72px] flex-col items-center justify-center gap-1 rounded-lg px-2 text-center text-[11px] font-semibold leading-tight transition-colors", subtab === v ? "bg-slate-300 text-white" : "text-slate-500 hover:text-slate-900")}>
                 <Icon className="size-4" /> {label}
               </button>
             ))}
@@ -171,13 +227,21 @@ export function ProductConfigurator({
         {(roleta || subtab === "permasat") && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <DimInput label="Gjerësia (W)" value={cfg.widthMm} onChange={(v) => set("widthMm", v)} />
-              <DimInput label="Lartësia (H)" value={cfg.heightMm} onChange={(v) => set("heightMm", v)} />
+              <DimInput key={`width-${pt}`} label="Gjerësia (W)" value={cfg.widthMm} onChange={(v) => set("widthMm", v)} />
+              <DimInput key={`height-${pt}`} label="Lartësia (H)" value={cfg.heightMm} onChange={(v) => set("heightMm", v)} />
             </div>
 
-            {!roleta && (
+            {!roleta && cfg.modelType === "custom" && (
+              <CustomModelControls
+                vertical={cfg.customVerticalMullions ?? 1}
+                horizontal={cfg.customHorizontalMullions ?? 0}
+                onChange={changeCustomMullions}
+              />
+            )}
+
+            {!roleta && cfg.modelType !== "custom" && (
               <div className="rounded-xl border border-slate-200 bg-slate-100 p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900"><Layers className="size-4 text-indigo-400" /> Profili & Ngjyra</div>
+                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900"><Layers className="size-4 text-slate-900" /> Profili & Ngjyra</div>
                 <Field label="Sistemi i profilit">
                   <Select value={cfg.systemId} onChange={(v) => set("systemId", v)} options={sysOptions.map((s) => ({ value: s.id, label: `${s.name} (${s.brand})` }))} />
                 </Field>
@@ -188,9 +252,9 @@ export function ProductConfigurator({
             )}
 
             {(door || pt === "Rreshqitëse") && (
-              <Field label="Mbishkrim manual (opsional) — 0 = automatik">
-                <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 focus-within:border-indigo-500">
-                  <input value={String(cfg.manualPrice ?? 0)} onChange={(e) => set("manualPrice", parseFloat(e.target.value.replace(",", ".")) || 0)} inputMode="decimal"
+                <Field label="Mbishkrim manual (opsional) — 0 = automatik">
+                <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 focus-within:border-neutral-500">
+                  <input value={String(cfg.manualPrice ?? 0)} onChange={(e) => set("manualPrice", decimalFromInput(e.target.value, 0, 1_000_000))} inputMode="decimal" min={0}
                     className="h-10 w-full bg-transparent px-3 text-sm font-semibold text-slate-900 outline-none" />
                   <span className="px-3 text-xs font-semibold text-slate-400">€</span>
                 </div>
@@ -207,7 +271,7 @@ export function ProductConfigurator({
                   <div className="grid grid-cols-2 gap-2">
                     {[["panel", "Panel i plotë", "Krah masiv"], ["glass", pt === "Derë Hyrje" ? "Gjysmë xham" : "Me xham", pt === "Derë Hyrje" ? "Panel + xham lart" : "Krah me xham"]].map(([v, t, sub]) => (
                       <button key={v} onClick={() => set("sashComposition", v)}
-                        className={cn("rounded-xl border p-3 text-left", cfg.sashComposition === v ? "border-indigo-500 bg-indigo-50/40" : "border-slate-200 hover:bg-slate-200/40")}>
+                        className={cn("rounded-xl border p-3 text-left", cfg.sashComposition === v ? "border-neutral-500 bg-slate-200/80" : "border-slate-200 hover:bg-slate-200/40")}>
                         <span className="block text-sm font-semibold text-slate-900">{t}</span>
                         <span className="block text-xs text-slate-400">{sub}</span>
                       </button>
@@ -224,7 +288,7 @@ export function ProductConfigurator({
             <div className="rounded-xl border border-slate-200 bg-slate-100 p-4">
               <div className="relative mb-2 flex items-center justify-between">
                 <span className="text-xs font-bold tracking-widest text-slate-400 uppercase">Shtesa</span>
-                <button onClick={() => setShtesaMenu((v) => !v)} className="flex items-center gap-1 text-xs font-semibold text-indigo-400 hover:underline"><Plus className="size-3.5" /> Shto shtesë</button>
+                <button onClick={() => setShtesaMenu((v) => !v)} className="flex items-center gap-1 text-xs font-semibold text-slate-900 hover:underline"><Plus className="size-3.5" /> Shto shtesë</button>
                 {shtesaMenu && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setShtesaMenu(false)} />
@@ -246,8 +310,8 @@ export function ProductConfigurator({
                   {cfg.shtesa.map((sh) => (
                     <li key={sh.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                       <span className="flex-1 text-xs font-bold tracking-wide text-slate-500 uppercase">{sh.side}</span>
-                      <input value={String(sh.widthMm)} onChange={(e) => set("shtesa", cfg.shtesa.map((x) => (x.id === sh.id ? { ...x, widthMm: parseInt(e.target.value) || 0 } : x)))}
-                        className="h-8 w-20 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-indigo-500" inputMode="numeric" />
+                      <input value={String(sh.widthMm)} onChange={(e) => set("shtesa", cfg.shtesa.map((x) => (x.id === sh.id ? { ...x, widthMm: intFromInput(e.target.value, 0, 2000) } : x)))}
+                        className="h-8 w-20 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-neutral-500" inputMode="numeric" min={0} max={2000} />
                       <span className="text-xs text-slate-400">mm</span>
                       <button onClick={() => set("shtesa", cfg.shtesa.filter((x) => x.id !== sh.id))} className="text-slate-400 hover:text-rose-400" aria-label="Hiq"><Trash2 className="size-4" /></button>
                     </li>
@@ -272,7 +336,7 @@ export function ProductConfigurator({
             </Field>
             <Field label="Përshkrimi i xhamit (opsionale)">
               <input value={cfg.glassDesc ?? ""} onChange={(e) => set("glassDesc", e.target.value)} placeholder="4mm Float + 16mm Argon + 4mm Low-E"
-                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-indigo-500" />
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-neutral-500" />
             </Field>
           </div>
         )}
@@ -281,24 +345,34 @@ export function ProductConfigurator({
       {/* RIGHT: preview + summary */}
       <div className="order-1 flex flex-col gap-3 lg:order-2 lg:h-full lg:min-h-0">
         {glass && (
-          <div className="no-scrollbar flex shrink-0 gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-2">
+          <div className="no-scrollbar flex shrink-0 gap-1.5 overflow-x-auto p-2">
             {MODEL_ORDER.map((mt) => (
-              <button key={mt} onClick={() => set("modelType", mt)} title={MODELS[mt].label} aria-label={MODELS[mt].label}
-                className={cn("grid size-10 shrink-0 place-items-center rounded-lg border transition-colors", cfg.modelType === mt ? "border-indigo-500 bg-indigo-600/10 text-indigo-400" : "border-slate-200 text-slate-400 hover:text-slate-700")}>
+              <button key={mt} onClick={() => changeModel(mt)} title={MODELS[mt].label} aria-label={MODELS[mt].label}
+                className={cn(
+                  mt === "custom"
+                    ? "group relative flex size-11 shrink-0 items-center justify-center rounded-lg border-2 border-dashed transition-all"
+                    : "group relative size-11 shrink-0 overflow-hidden rounded-lg border-2 bg-slate-900/25 transition-all shadow-[inset_0_0_0_1px_rgba(148,163,184,0.18)]",
+                  cfg.modelType === mt && mt === "custom"
+                    ? "border-neutral-500 bg-slate-200 text-slate-900"
+                    : cfg.modelType === mt
+                      ? "border-neutral-500 ring-2 ring-slate-300"
+                      : mt === "custom"
+                        ? "border-slate-300 text-slate-400 hover:border-neutral-400 hover:bg-slate-200/80 hover:text-slate-900"
+                        : "border-slate-200 hover:border-neutral-500",
+                )}>
                 <ModelGlyph modelType={mt} />
               </button>
             ))}
           </div>
         )}
 
-        <div className="flex min-h-[220px] flex-1 items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 p-4 text-slate-500 lg:min-h-0">
+        <div className="flex min-h-[220px] flex-1 items-center justify-center p-2 text-slate-500 lg:min-h-0">
           <WindowPreview config={cfg} onPaneClick={glass ? cyclePane : undefined} />
         </div>
-        {glass && <p className="shrink-0 text-center text-xs text-slate-400">Kliko një sekcion të xhamit për ta bërë hapëse (fiks → majtas → djathtas → kip).</p>}
 
         {/* materials */}
-        <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-100 p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-bold tracking-widest text-emerald-500 uppercase"><Check className="size-4" /> Materialet për këtë pozicion</div>
+        <div className="shrink-0 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2">
+          <div className="mb-2 flex items-center gap-2 text-xs font-bold tracking-widest text-emerald-500 uppercase"><Check className="size-3.5" /> Materialet për këtë pozicion</div>
           <div className="flex flex-wrap gap-2 text-sm">
             {roleta ? (
               <Chip label="Kutia" value={`${materials.kutiaM.toFixed(2)} m`} />
@@ -323,24 +397,108 @@ export function ProductConfigurator({
         </div>
 
         {/* quantity + price + add */}
-        <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-100 p-3">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+        <div className="shrink-0 space-y-3">
+          <div className="flex items-center justify-end gap-4">
             <span className="text-xs font-bold tracking-widest text-slate-400 uppercase">Sasia</span>
             <div className="flex items-center gap-1">
-              <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="grid size-9 place-items-center rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300" aria-label="Zvogëlo"><Minus className="size-4" /></button>
-              <input value={String(qty)} onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))} className="h-9 w-14 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-semibold text-slate-900 outline-none focus:border-indigo-500" inputMode="numeric" />
-              <button onClick={() => setQty((q) => q + 1)} className="grid size-9 place-items-center rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300" aria-label="Rrit"><Plus className="size-4" /></button>
+              <button onClick={() => setQty((q) => clampNumber(q - 1, 1, 999))} className="grid size-9 place-items-center rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300" aria-label="Zvogëlo"><Minus className="size-4" /></button>
+              <input value={String(qty)} onChange={(e) => setQty(intFromInput(e.target.value, 1, 999))} className="h-9 w-14 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500" inputMode="numeric" min={1} max={999} />
+              <button onClick={() => setQty((q) => clampNumber(q + 1, 1, 999))} className="grid size-9 place-items-center rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300" aria-label="Rrit"><Plus className="size-4" /></button>
             </div>
           </div>
-          <div className="flex items-center justify-between py-3">
+          <div className="flex items-center justify-between">
             <span className="text-xs font-bold tracking-widest text-slate-400 uppercase">Çmimi i përllogaritur</span>
             <span className="font-heading text-2xl font-bold text-slate-900">{eur(price * qty)}</span>
           </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={onCancel}>Anulo</Button>
-            <Button className="flex-1" onClick={save}><Plus className="size-4" /> {initial ? "Ruaj Ndryshimet" : "Shto në Ofertë"}</Button>
-          </div>
+          <Button className="w-full" onClick={save}><Plus className="size-4" /> {initial ? "Ruaj ndryshimet" : "Shto në Ofertë"}</Button>
+          <Button variant="ghost" className="w-full" onClick={onCancel}>Shiko ofertën ({offerItemCount})</Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CustomModelControls({
+  vertical,
+  horizontal,
+  onChange,
+}: {
+  vertical: number;
+  horizontal: number;
+  onChange: (axis: "vertical" | "horizontal", delta: number) => void;
+}) {
+  return (
+    <div className="divide-y divide-slate-200/70">
+      <div className="py-3">
+        <CustomStepper
+          label="Shtyllë Vertikale"
+          value={vertical}
+          minusLabel="Hiq shtyllë vertikale"
+          plusLabel="Shto shtyllë vertikale"
+          onMinus={() => onChange("vertical", -1)}
+          onPlus={() => onChange("vertical", 1)}
+        />
+        <div className="mt-1.5 flex flex-col">
+          {Array.from({ length: vertical + 1 }).map((_, i) => (
+            <button key={i} type="button" className="flex items-center justify-between py-1.5 pl-3 text-left text-xs text-slate-500 transition-colors hover:text-slate-900">
+              <span>Kolona {i + 1}</span>
+              <span className="text-slate-300">›</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="py-3">
+        <CustomStepper
+          label="Shtyllë Horizontale"
+          value={horizontal}
+          minusLabel="Hiq shtyllë horizontale"
+          plusLabel="Shto shtyllë horizontale"
+          onMinus={() => onChange("horizontal", -1)}
+          onPlus={() => onChange("horizontal", 1)}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CustomStepper({
+  label,
+  value,
+  minusLabel,
+  plusLabel,
+  onMinus,
+  onPlus,
+}: {
+  label: string;
+  value: number;
+  minusLabel: string;
+  plusLabel: string;
+  onMinus: () => void;
+  onPlus: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          aria-label={minusLabel}
+          disabled={value <= 0}
+          onClick={onMinus}
+          className="flex size-8 items-center justify-center rounded-lg border border-slate-200 text-lg leading-none text-slate-600 transition-colors active:bg-slate-100 disabled:opacity-30"
+        >
+          −
+        </button>
+        <span className="w-4 text-center text-sm font-semibold text-slate-700">{value}</span>
+        <button
+          type="button"
+          aria-label={plusLabel}
+          disabled={value >= 5}
+          onClick={onPlus}
+          className="flex size-8 items-center justify-center rounded-lg border border-slate-200 text-lg leading-none text-slate-600 transition-colors active:bg-slate-100 disabled:opacity-30"
+        >
+          +
+        </button>
       </div>
     </div>
   );
@@ -349,7 +507,7 @@ export function ProductConfigurator({
 // ---- small UI helpers -----------------------------------------------------
 function Chip({ label, value }: { label: string; value: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-200/70 px-2.5 py-1.5">
+    <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5">
       <span className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">{label}</span>
       <span className="font-semibold text-slate-900">{value}</span>
     </span>
@@ -361,17 +519,51 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function Select({ value, onChange, options, className }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; className?: string }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)}
-      className={cn("h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500", className)}>
+      className={cn("h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-neutral-500", className)}>
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   );
 }
 function DimInput({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  const { toast } = useApp();
+
+  const commitIfValid = (nextDraft: string) => {
+    const parsed = Number(nextDraft);
+    if (/^\d+$/.test(nextDraft) && parsed >= 200 && parsed <= 10000) {
+      onChange(parsed);
+    }
+  };
+
+  const validateOnBlur = (input: HTMLInputElement) => {
+    const draft = input.value.trim();
+    const parsed = Number(draft);
+    if (!/^\d+$/.test(draft) || parsed < 200) {
+      toast("Dimensioni nuk mund të jetë nën 200 mm.");
+      onChange(200);
+      input.value = "200";
+      return;
+    }
+    if (parsed > 10000) {
+      toast("Dimensioni maksimal është 10000 mm.");
+      onChange(10000);
+      input.value = "10000";
+      return;
+    }
+    onChange(parsed);
+    input.value = String(parsed);
+  };
+
   return (
     <div>
       <label className="mb-1.5 block text-xs font-semibold tracking-wide text-slate-400 uppercase">{label}</label>
-      <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 focus-within:border-indigo-500">
-        <input value={String(value)} onChange={(e) => onChange(parseInt(e.target.value) || 0)} inputMode="numeric" className="h-10 w-full bg-transparent px-3 text-sm font-semibold text-slate-900 outline-none" />
+      <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 focus-within:border-neutral-500">
+        <input
+          defaultValue={String(value)}
+          onChange={(e) => commitIfValid(e.target.value)}
+          onBlur={(e) => validateOnBlur(e.currentTarget)}
+          inputMode="numeric"
+          className="h-16 w-full bg-transparent px-3 text-sm font-semibold text-slate-900 outline-none"
+        />
         <span className="px-3 text-xs font-semibold text-slate-400">MM</span>
       </div>
     </div>
@@ -380,35 +572,69 @@ function DimInput({ label, value, onChange }: { label: string; value: number; on
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)}
-      className={cn("relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors", checked ? "bg-indigo-600" : "bg-slate-300")}>
+      className={cn("relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors", checked ? "bg-slate-300" : "bg-slate-300")}>
       <span className={cn("inline-block size-5 transform rounded-full bg-white transition-transform", checked ? "translate-x-[22px]" : "translate-x-0.5")} />
     </button>
   );
 }
 function ModelGlyph({ modelType }: { modelType: ModelType }) {
   const def = MODELS[modelType];
-  if (modelType === "custom") return <Plus className="size-5" />;
+  if (modelType === "custom") return <Plus className="size-5 text-current" />;
+  const frame = "#3f3f46";
+  const glass = "#d4d4d8";
   if (def.shape) {
-    if (def.shape === "arch") return <svg viewBox="0 0 24 24" className="size-6"><path d="M4 20 V11 Q12 3 20 11 V20 Z" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>;
-    const pts = def.shape === "triangle" ? "12,4 20,20 4,20" : def.shape === "trapez" ? "8,4 16,4 20,20 4,20" : "12,4 20,10 17,20 7,20 4,10";
-    return <svg viewBox="0 0 24 24" className="size-6"><polygon points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>;
+    if (def.shape === "triangle") {
+      return <ShapeGlyph outer="M 0 110 L 110 110 L 55 0 Z" inner="M 11 102 L 99 102 L 55 15 Z" />;
+    }
+    if (def.shape === "trapez") {
+      return <ShapeGlyph outer="M 0 110 L 110 110 L 110 0 L 0 44 Z" inner="M 7 103 L 103 103 L 103 10.3 L 7 48.7 Z" />;
+    }
+    if (def.shape === "pentagon") {
+      return <ShapeGlyph outer="M 0 110 L 110 110 L 110 38.5 L 55 0 L 0 38.5 Z" inner="M 7 103 L 103 103 L 103 42.1 L 55 8.5 L 7 42.1 Z" />;
+    }
+    if (def.shape === "arch") {
+      return (
+        <svg width="110" height="110" viewBox="0 0 110 110" className="block size-full overflow-visible" aria-hidden="true">
+          <path d="M 0 110 L 0 49 C 0 18 24 0 55 0 C 86 0 110 18 110 49 L 110 110 Z" fill="none" stroke="#e4e4e7" strokeWidth="7" />
+          <path d="M 8 102 L 8 50 C 8 25 28 8 55 8 C 82 8 102 25 102 50 L 102 102 Z" fill="none" stroke="#a1a1aa" strokeWidth="3" />
+        </svg>
+      );
+    }
+    return (
+      <svg width="110" height="110" viewBox="0 0 110 110" className="block size-full overflow-visible" aria-hidden="true">
+        <circle cx="55" cy="55" r="50" fill="none" stroke="#e4e4e7" strokeWidth="7" />
+        <circle cx="55" cy="55" r="40" fill="none" stroke="#a1a1aa" strokeWidth="3" />
+      </svg>
+    );
   }
   const rows = def.rows;
-  const R = rows.length;
+  const totalHf = rows.reduce((s, r) => s + r.hf, 0);
   return (
-    <svg viewBox="0 0 24 24" className="size-6">
-      <rect x="3" y="3" width="18" height="18" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    <svg viewBox="0 0 100 100" className="size-full" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <rect x="8" y="8" width="84" height="84" rx="7" fill={glass} stroke={frame} strokeWidth="8" />
       {(() => {
         const els: React.ReactElement[] = [];
-        let y = 3;
+        let y = 8;
         rows.forEach((row, ri) => {
-          const rh = 18 * (row.hf / rows.reduce((s, r) => s + r.hf, 0));
-          for (let c = 1; c < row.cols; c++) { const x = 3 + (18 * c) / row.cols; els.push(<line key={`v${ri}-${c}`} x1={x} y1={y} x2={x} y2={y + rh} stroke="currentColor" strokeWidth="1.2" />); }
+          const rh = 84 * (row.hf / totalHf);
+          for (let c = 1; c < row.cols; c++) {
+            const x = 8 + (84 * c) / row.cols;
+            els.push(<line key={`v${ri}-${c}`} x1={x} y1={y} x2={x} y2={y + rh} stroke={frame} strokeWidth="8" />);
+          }
           y += rh;
-          if (ri < R - 1) els.push(<line key={`h${ri}`} x1="3" y1={y} x2="21" y2={y} stroke="currentColor" strokeWidth="1.2" />);
+          if (ri < rows.length - 1) els.push(<line key={`h${ri}`} x1="8" y1={y} x2="92" y2={y} stroke={frame} strokeWidth="8" />);
         });
         return els;
       })()}
+    </svg>
+  );
+}
+
+function ShapeGlyph({ outer, inner }: { outer: string; inner: string }) {
+  return (
+    <svg width="110" height="110" viewBox="0 0 110 110" className="block size-full overflow-visible" aria-hidden="true">
+      <path d={outer} fill="none" stroke="#e4e4e7" strokeWidth="7" strokeLinejoin="round" />
+      <path d={inner} fill="none" stroke="#a1a1aa" strokeWidth="3" strokeLinejoin="round" />
     </svg>
   );
 }

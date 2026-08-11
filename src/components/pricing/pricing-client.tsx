@@ -82,7 +82,7 @@ export function PricingClient() {
           {TABS.map((t) => (
             <button key={t.value} onClick={() => setTab(t.value)}
               className={cn("shrink-0 border-b-2 px-3 py-3 text-sm font-semibold whitespace-nowrap transition-colors",
-                tab === t.value ? "border-indigo-500 text-slate-900" : "border-transparent text-slate-400 hover:text-slate-700")}>
+                tab === t.value ? "border-neutral-500 text-slate-900" : "border-transparent text-slate-400 hover:text-slate-700")}>
               {t.label}
             </button>
           ))}
@@ -118,7 +118,12 @@ export function PricingClient() {
 type TabProps = { draft: Pricing; update: (fn: (d: Pricing) => Pricing) => void };
 
 function num(v: string): number {
-  return parseFloat(v.replace(",", ".")) || 0;
+  const n = parseFloat(v.replace(",", "."));
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+function positiveInt(v: string, fallback = 0): number {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) ? Math.max(0, n) : fallback;
 }
 
 // --- Sistemet -------------------------------------------------------------
@@ -151,14 +156,14 @@ function SystemsTab({ draft, update }: TabProps) {
         <div className="mb-3 flex flex-wrap gap-2">
           {filters.map((f) => (
             <button key={f} onClick={() => setFilter(f)}
-              className={cn("rounded-lg px-3 py-1.5 text-xs font-semibold", filter === f ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-500 hover:text-slate-900")}>{f}</button>
+              className={cn("rounded-lg px-3 py-1.5 text-xs font-semibold", filter === f ? "bg-slate-300 text-white" : "bg-slate-100 text-slate-500 hover:text-slate-900")}>{f}</button>
           ))}
         </div>
         <Card className="divide-y divide-slate-200 overflow-hidden">
           {list.map((s) => (
             <button key={s.id} onClick={() => setSelected(s.id)}
               className={cn("flex w-full flex-col items-start gap-1 border-l-2 px-4 py-3 text-left transition-colors",
-                selected === s.id ? "border-indigo-500 bg-indigo-50/40" : "border-transparent hover:bg-slate-200/40")}>
+                selected === s.id ? "border-neutral-500 bg-slate-200/80" : "border-transparent hover:bg-slate-200/40")}>
               <span className="text-sm font-semibold text-slate-900">{s.name}</span>
               <span className="flex items-center gap-2 text-xs text-slate-400">
                 {s.brand}
@@ -184,7 +189,7 @@ function SystemsTab({ draft, update }: TabProps) {
               <div>
                 <Label>Kategoria</Label>
                 <select value={sys.category} onChange={(e) => patchSystem({ category: e.target.value as PricingSystem["category"] })}
-                  className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500">
+                  className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-neutral-500">
                   <option>Dritare</option><option>Dyer</option><option>Rrëshq.</option>
                 </select>
               </div>
@@ -208,7 +213,7 @@ function SystemsTab({ draft, update }: TabProps) {
                       {(["white", "whiteColor", "colorColor"] as const).map((k, i) => (
                         <td key={k} className={cn("py-2", i < 2 && "pr-3")}>
                           <input value={String(r[k])} onChange={(e) => update((d) => ({ ...d, profilePriceRows: d.profilePriceRows.map((x) => (x.id === r.id ? { ...x, [k]: num(e.target.value) } : x)) }))}
-                            className="h-8 w-20 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-indigo-500" inputMode="decimal" />
+                            className="h-8 w-20 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-neutral-500" inputMode="decimal" />
                         </td>
                       ))}
                     </tr>
@@ -232,7 +237,7 @@ function MetalsTab({ draft, update }: TabProps) {
       <div>
         <Card className="divide-y divide-slate-200 overflow-hidden">
           {draft.metals.map((m) => (
-            <div key={m.id} className={cn("flex items-center border-l-2 px-4 py-3", selected === m.id ? "border-indigo-500 bg-indigo-50/40" : "border-transparent")}>
+            <div key={m.id} className={cn("flex items-center border-l-2 px-4 py-3", selected === m.id ? "border-neutral-500 bg-slate-200/80" : "border-transparent")}>
               <button onClick={() => setSelected(m.id)} className="flex-1 text-left">
                 <span className="block text-sm font-semibold text-slate-900">{m.name}</span>
                 <span className="block text-xs text-slate-400">{m.brand}</span>
@@ -250,7 +255,7 @@ function MetalsTab({ draft, update }: TabProps) {
             <div key={r.id} className="flex items-center justify-between gap-3">
               <span className="text-sm font-semibold text-slate-700">{r.component} <span className="text-xs text-slate-400">· {r.code}</span></span>
               <input value={String(r.price)} onChange={(e) => update((d) => ({ ...d, armingRows: d.armingRows.map((x) => (x.id === r.id ? { ...x, price: num(e.target.value) } : x)) }))}
-                className="h-9 w-24 rounded-lg border border-slate-200 bg-slate-50 px-3 text-right text-sm text-slate-900 outline-none focus:border-indigo-500" inputMode="decimal" />
+                className="h-9 w-24 rounded-lg border border-slate-200 bg-slate-50 px-3 text-right text-sm text-slate-900 outline-none focus:border-neutral-500" inputMode="decimal" />
             </div>
           ))}
         </div>
@@ -323,10 +328,10 @@ function PhotoTab({ draft, update, coll, title, addLabel, showDesc, importExcel 
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-slate-200 last:border-0">
                 <td className="px-4 py-3"><span className="grid size-10 place-items-center rounded-lg bg-slate-200/70 text-slate-400"><ImageIcon className="size-4" /></span></td>
-                <td className="px-4 py-3"><input value={r.name} onChange={(e) => update((d) => ({ ...d, [coll]: d[coll].map((x) => (x.id === r.id ? { ...x, name: e.target.value } : x)) }))} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900 outline-none focus:border-indigo-500" /></td>
-                <td className="px-4 py-3"><input value={r.brand} onChange={(e) => update((d) => ({ ...d, [coll]: d[coll].map((x) => (x.id === r.id ? { ...x, brand: e.target.value } : x)) }))} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm text-slate-900 outline-none focus:border-indigo-500" /></td>
-                {showDesc && <td className="px-4 py-3"><input value={r.extra ?? ""} onChange={(e) => update((d) => ({ ...d, [coll]: d[coll].map((x) => (x.id === r.id ? { ...x, extra: e.target.value } : x)) }))} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm text-slate-500 outline-none focus:border-indigo-500" /></td>}
-                <td className="px-4 py-3 text-right"><input value={String(r.price)} onChange={(e) => update((d) => ({ ...d, [coll]: d[coll].map((x) => (x.id === r.id ? { ...x, price: num(e.target.value) } : x)) }))} className="h-8 w-20 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-indigo-500" inputMode="decimal" /></td>
+                <td className="px-4 py-3"><input value={r.name} onChange={(e) => update((d) => ({ ...d, [coll]: d[coll].map((x) => (x.id === r.id ? { ...x, name: e.target.value } : x)) }))} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500" /></td>
+                <td className="px-4 py-3"><input value={r.brand} onChange={(e) => update((d) => ({ ...d, [coll]: d[coll].map((x) => (x.id === r.id ? { ...x, brand: e.target.value } : x)) }))} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm text-slate-900 outline-none focus:border-neutral-500" /></td>
+                {showDesc && <td className="px-4 py-3"><input value={r.extra ?? ""} onChange={(e) => update((d) => ({ ...d, [coll]: d[coll].map((x) => (x.id === r.id ? { ...x, extra: e.target.value } : x)) }))} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm text-slate-500 outline-none focus:border-neutral-500" /></td>}
+                <td className="px-4 py-3 text-right"><input value={String(r.price)} onChange={(e) => update((d) => ({ ...d, [coll]: d[coll].map((x) => (x.id === r.id ? { ...x, price: num(e.target.value) } : x)) }))} className="h-8 w-20 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-neutral-500" inputMode="decimal" /></td>
                 <td className="px-4 py-3 text-right"><button onClick={() => update((d) => ({ ...d, [coll]: d[coll].filter((x) => x.id !== r.id) }))} className="text-slate-400 hover:text-rose-400" aria-label="Fshi"><Trash2 className="size-4" /></button></td>
               </tr>
             ))}
@@ -352,10 +357,10 @@ function ExpansionsTab({ draft, update }: TabProps) {
           <tbody>
             {draft.expansions.map((e) => (
               <tr key={e.id} className="border-b border-slate-200 last:border-0">
-                <td className="px-4 py-3"><input value={e.name} onChange={(ev) => update((d) => ({ ...d, expansions: d.expansions.map((x) => (x.id === e.id ? { ...x, name: ev.target.value } : x)) }))} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900 outline-none focus:border-indigo-500" /></td>
+                <td className="px-4 py-3"><input value={e.name} onChange={(ev) => update((d) => ({ ...d, expansions: d.expansions.map((x) => (x.id === e.id ? { ...x, name: ev.target.value } : x)) }))} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500" /></td>
                 <td className="px-4 py-3 text-slate-500">{e.brand}</td>
-                <td className="px-4 py-3 text-right"><input value={String(e.widthMm)} onChange={(ev) => update((d) => ({ ...d, expansions: d.expansions.map((x) => (x.id === e.id ? { ...x, widthMm: parseInt(ev.target.value) || 0 } : x)) }))} className="h-8 w-16 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-indigo-500" inputMode="numeric" /></td>
-                <td className="px-4 py-3 text-right"><input value={String(e.price)} onChange={(ev) => update((d) => ({ ...d, expansions: d.expansions.map((x) => (x.id === e.id ? { ...x, price: num(ev.target.value) } : x)) }))} className="h-8 w-20 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-indigo-500" inputMode="decimal" /></td>
+                <td className="px-4 py-3 text-right"><input value={String(e.widthMm)} onChange={(ev) => update((d) => ({ ...d, expansions: d.expansions.map((x) => (x.id === e.id ? { ...x, widthMm: positiveInt(ev.target.value) } : x)) }))} className="h-8 w-16 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-neutral-500" inputMode="numeric" min={0} /></td>
+                <td className="px-4 py-3 text-right"><input value={String(e.price)} onChange={(ev) => update((d) => ({ ...d, expansions: d.expansions.map((x) => (x.id === e.id ? { ...x, price: num(ev.target.value) } : x)) }))} className="h-8 w-20 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-neutral-500" inputMode="decimal" /></td>
                 <td className="px-4 py-3 text-right"><button onClick={() => update((d) => ({ ...d, expansions: d.expansions.filter((x) => x.id !== e.id) }))} className="text-slate-400 hover:text-rose-400" aria-label="Fshi"><Trash2 className="size-4" /></button></td>
               </tr>
             ))}
@@ -415,16 +420,16 @@ function DoorsTab({ draft, update }: TabProps) {
         {draft.doorModels.map((m) => (
           <Card key={m.id} className="p-4">
             <div className="mb-3 grid h-28 place-items-center rounded-xl bg-slate-200/60 text-slate-400"><ImageIcon className="size-6" /></div>
-            <input value={m.name} onChange={(e) => update((d) => ({ ...d, doorModels: d.doorModels.map((x) => (x.id === m.id ? { ...x, name: e.target.value } : x)) }))} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900 outline-none focus:border-indigo-500" />
+            <input value={m.name} onChange={(e) => update((d) => ({ ...d, doorModels: d.doorModels.map((x) => (x.id === m.id ? { ...x, name: e.target.value } : x)) }))} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500" />
             <div className="mt-2 flex gap-2">
               {(["FIKS", "TABELË"] as const).map((mode) => (
                 <button key={mode} onClick={() => update((d) => ({ ...d, doorModels: d.doorModels.map((x) => (x.id === m.id ? { ...x, mode } : x)) }))}
-                  className={cn("rounded-md px-2 py-0.5 text-xs font-semibold", m.mode === mode ? "bg-indigo-50 text-indigo-400" : "bg-slate-200 text-slate-500")}>{mode}</button>
+                  className={cn("rounded-md px-2 py-0.5 text-xs font-semibold", m.mode === mode ? "bg-slate-200 text-slate-900" : "bg-slate-200 text-slate-500")}>{mode}</button>
               ))}
             </div>
             <div className="mt-3">
               <Label>Çmimi bazë</Label>
-              <input value={String(m.basePrice)} onChange={(e) => update((d) => ({ ...d, doorModels: d.doorModels.map((x) => (x.id === m.id ? { ...x, basePrice: num(e.target.value) } : x)) }))} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500" inputMode="decimal" />
+              <input value={String(m.basePrice)} onChange={(e) => update((d) => ({ ...d, doorModels: d.doorModels.map((x) => (x.id === m.id ? { ...x, basePrice: num(e.target.value) } : x)) }))} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-neutral-500" inputMode="decimal" />
               <div className="mt-1 text-xs text-slate-400">{eurAfter(m.basePrice)}</div>
             </div>
             <div className="mt-2 text-right"><button onClick={() => update((d) => ({ ...d, doorModels: d.doorModels.filter((x) => x.id !== m.id) }))} className="text-xs font-semibold text-rose-400 hover:underline">Fshi modelin</button></div>

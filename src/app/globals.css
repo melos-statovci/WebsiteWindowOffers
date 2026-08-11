@@ -4,13 +4,12 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
-  Proferto theming model (reverse-engineered):
+  Kornizo theming model:
   - The app styles everything with Tailwind "slate" utilities + tinted status colors.
   - Light mode = Tailwind's default slate scale.
-  - Dark mode = the slate scale is INVERTED (slate-50 becomes darkest, slate-900 lightest)
-    and the tinted -50/-100 status colors become dark-tinted, so the SAME utility
-    classes flip automatically. Brand primary = indigo-600 (default), which already
-    matches the observed oklch(0.511 0.262 276.966).
+  - Dark mode = neutral graphite ramp. Former blue/indigo/violet utilities are
+    remapped to gray variables so the app reads as dark gray/light gray instead
+    of navy/blue while keeping the existing utility classes stable.
   Base font-size is 14px to match the source app's density (rem utilities scale to it).
 */
 
@@ -32,7 +31,7 @@
   --color-card-foreground: var(--color-slate-900);
   --color-popover: var(--color-slate-100);
   --color-popover-foreground: var(--color-slate-900);
-  --color-primary: var(--color-indigo-600);
+  --color-primary: var(--color-neutral-700);
   --color-primary-foreground: #ffffff;
   --color-secondary: var(--color-slate-100);
   --color-secondary-foreground: var(--color-slate-900);
@@ -43,39 +42,54 @@
   --color-destructive: var(--color-rose-500);
   --color-border: var(--color-slate-200);
   --color-input: var(--color-slate-200);
-  --color-ring: var(--color-indigo-500);
+  --color-ring: var(--color-neutral-500);
 }
 
 :root {
   font-size: 14px;
-  --brand-blue: #2563eb;
+  --brand-blue: #525252;
 }
 
 /*
-  Dark theme: invert the slate ramp + dark-tint the status surfaces.
-  Values captured directly from app.proferto.io (dark mode).
+  Dark theme: neutral graphite, not blue/navy.
 */
 .dark {
-  --color-slate-50: #0b1220;
-  --color-slate-100: #141d31;
-  --color-slate-200: #25324f;
-  --color-slate-300: #33415f;
-  --color-slate-400: #8c9bb2;
-  --color-slate-500: #a6b3c7;
-  --color-slate-600: #c0ccda;
-  --color-slate-700: #d6deea;
-  --color-slate-800: #e8eef5;
-  --color-slate-900: #f3f7fc;
+  --color-slate-50: #0f0f0f;
+  --color-slate-100: #171717;
+  --color-slate-200: #2a2a2a;
+  --color-slate-300: #3f3f3f;
+  --color-slate-400: #b4b4b4;
+  --color-slate-500: #c7c7c7;
+  --color-slate-600: #d8d8d8;
+  --color-slate-700: #e3e3e3;
+  --color-slate-800: #ececec;
+  --color-slate-900: #f7f7f7;
   --color-slate-950: #ffffff;
 
-  --color-blue-50: #15233f;
-  --color-blue-100: #20355c;
-  --color-indigo-50: #1a1f40;
-  --color-violet-50: #20183a;
+  --color-blue-50: #2b2b2b;
+  --color-blue-100: #3a3a3a;
+  --color-blue-300: #d8d8d8;
+  --color-blue-400: #ececec;
+  --color-blue-500: #8a8a8a;
+  --color-blue-600: #5f5f5f;
+  --color-blue-700: #4a4a4a;
+  --color-indigo-50: #2b2b2b;
+  --color-indigo-100: #3a3a3a;
+  --color-indigo-300: #d8d8d8;
+  --color-indigo-400: #ececec;
+  --color-indigo-500: #8a8a8a;
+  --color-indigo-600: #5f5f5f;
+  --color-indigo-700: #4a4a4a;
+  --color-violet-50: #2b2142;
+  --color-violet-400: #c4b5fd;
+  --color-violet-500: #8b5cf6;
+  --color-violet-600: #6d5dfc;
+  --color-sky-50: #102233;
+  --color-sky-400: #38bdf8;
+  --color-cyan-50: #0c2630;
+  --color-cyan-400: #22d3ee;
   --color-emerald-50: #0f2622;
   --color-emerald-100: #133329;
-  --color-sky-50: #11243a;
-  --color-cyan-50: #0c2630;
   --color-rose-50: #2a1722;
   --color-rose-100: #3a1f2d;
   --color-red-50: #2a1717;
@@ -110,7 +124,7 @@
 
 @layer utilities {
   .brand-wordmark {
-    background: linear-gradient(90deg, #60a5fa, #6366f1);
+    background: linear-gradient(90deg, #f5f5f5, #a3a3a3);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;

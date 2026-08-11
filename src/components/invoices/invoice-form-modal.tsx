@@ -15,6 +15,12 @@ const addDays = (iso: string, days: number) => {
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 };
+const clampNumber = (value: number, min: number, max: number) =>
+  Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : min;
+const intFromInput = (value: string, min: number, max: number) =>
+  clampNumber(parseInt(value, 10), min, max);
+const decimalFromInput = (value: string, min: number, max: number) =>
+  clampNumber(parseFloat(value.replace(",", ".")), min, max);
 
 export function InvoiceFormModal({
   open,
@@ -133,7 +139,7 @@ export function InvoiceFormModal({
               <div className="px-1 pt-2 text-[11px] font-bold tracking-widest text-slate-400 uppercase">Nga një ofertë e pranuar</div>
               {acceptedOffers.map((p) => (
                 <button key={p.id} onClick={() => startFromOffer(p.id)} className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-left hover:bg-slate-200/40">
-                  <span className="grid size-10 place-items-center rounded-lg bg-indigo-50 text-indigo-400"><FileText className="size-5" /></span>
+                  <span className="grid size-10 place-items-center rounded-lg bg-slate-200 text-slate-900"><FileText className="size-5" /></span>
                   <span className="flex-1">
                     <span className="block font-semibold text-slate-900">{p.number} · {p.clientName}</span>
                     <span className="block text-sm text-slate-400">{p.items.length} pozicione</span>
@@ -152,7 +158,7 @@ export function InvoiceFormModal({
             <div>
               <Label>Klienti *</Label>
               <select value={clientId} onChange={(e) => setClientId(e.target.value)}
-                className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500">
+                className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-neutral-500">
                 {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
@@ -162,7 +168,7 @@ export function InvoiceFormModal({
             <div>
               <Label>Statusi</Label>
               <select value={status} onChange={(e) => setStatus(e.target.value as InvoiceStatus)}
-                className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500">
+                className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-neutral-500">
                 {(["Draft", "Dërguar", "Paguar", "Vonesë", "Anuluar"] as InvoiceStatus[]).map((s) => <option key={s}>{s}</option>)}
               </select>
             </div>
@@ -174,13 +180,13 @@ export function InvoiceFormModal({
               {lines.map((l, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <Input value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} placeholder="Përshkrimi" className="flex-1" />
-                  <Input value={String(l.qty)} onChange={(e) => setLine(i, { qty: parseInt(e.target.value) || 0 })} className="w-16 text-center" inputMode="numeric" aria-label="Sasia" />
-                  <Input value={String(l.unitPrice)} onChange={(e) => setLine(i, { unitPrice: parseFloat(e.target.value.replace(",", ".")) || 0 })} className="w-24 text-right" inputMode="decimal" aria-label="Çmimi" />
+                  <Input value={String(l.qty)} onChange={(e) => setLine(i, { qty: intFromInput(e.target.value, 0, 999) })} className="w-16 text-center" inputMode="numeric" min={0} max={999} aria-label="Sasia" />
+                  <Input value={String(l.unitPrice)} onChange={(e) => setLine(i, { unitPrice: decimalFromInput(e.target.value, 0, 1_000_000) })} className="w-24 text-right" inputMode="decimal" min={0} aria-label="Çmimi" />
                   <button onClick={() => removeLine(i)} disabled={lines.length === 1} className="grid size-9 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 disabled:opacity-40" aria-label="Hiq pozicionin"><Trash2 className="size-4" /></button>
                 </div>
               ))}
             </div>
-            <button onClick={addLine} className="mt-2 flex items-center gap-1.5 text-sm font-semibold text-indigo-400 hover:underline"><Plus className="size-4" /> Shto pozicion</button>
+            <button onClick={addLine} className="mt-2 flex items-center gap-1.5 text-sm font-semibold text-slate-900 hover:underline"><Plus className="size-4" /> Shto pozicion</button>
           </div>
 
           <div className="flex items-center justify-between rounded-xl bg-slate-200/50 px-4 py-3 text-sm">

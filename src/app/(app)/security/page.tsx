@@ -48,8 +48,8 @@ export default function SecurityPage() {
       <PageHeader title="Siguria" subtitle="Kush kyçet, nga cilat pajisje, dhe çdo qasje e support-it — transparencë e plotë." />
 
       <div className="space-y-5">
-        <SectionCard title={<span className="flex items-center gap-2"><LockKeyhole className="size-5 text-indigo-400" /> Qasja e support-it</span>}>
-          <p className="mb-4 text-sm text-slate-400">Të dhënat tuaja i sheh vetëm kompania juaj. Stafi i Proferto-s i qaset VETËM brenda një dritareje të përkohshme që e hapni ju.</p>
+        <SectionCard title={<span className="flex items-center gap-2"><LockKeyhole className="size-5 text-slate-900" /> Qasja e support-it</span>}>
+          <p className="mb-4 text-sm text-slate-400">Të dhënat tuaja i sheh vetëm kompania juaj. Stafi i Kornizo-s i qaset VETËM brenda një dritareje të përkohshme që e hapni ju.</p>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
             <span className="text-sm font-semibold text-slate-700">
               {supportOpen ? "E hapur — support-i mund të qaset (24 orë)" : "E mbyllur — të dhënat i shihni vetëm ju"}
@@ -61,7 +61,7 @@ export default function SecurityPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title={<span className="flex items-center gap-2"><Smartphone className="size-5 text-indigo-400" /> Verifikimi në dy hapa (2FA)</span>}
+        <SectionCard title={<span className="flex items-center gap-2"><Smartphone className="size-5 text-slate-900" /> Verifikimi në dy hapa (2FA)</span>}
           action={<Badge tone={twoFA ? "emerald" : "amber"}>{twoFA ? "Aktiv" : "Joaktiv"}</Badge>}>
           <p className="mb-4 text-sm text-slate-400">Një kod 6-shifror nga aplikacioni Authenticator kërkohet në çdo kyçje — edhe nëse dikush e di fjalëkalimin, s&apos;hyn dot pa telefonin tuaj.</p>
           {twoFA ? (
@@ -71,12 +71,12 @@ export default function SecurityPage() {
           )}
         </SectionCard>
 
-        <SectionCard title={<span className="flex items-center gap-2"><KeyRound className="size-5 text-indigo-400" /> Fjalëkalimi</span>}>
+        <SectionCard title={<span className="flex items-center gap-2"><KeyRound className="size-5 text-slate-900" /> Fjalëkalimi</span>}>
           <p className="mb-4 text-sm text-slate-400">Ndryshoni fjalëkalimin tuaj rregullisht për siguri.</p>
           <Button variant="outline" onClick={() => setPwModal(true)}>Ndrysho fjalëkalimin</Button>
         </SectionCard>
 
-        <SectionCard title={<span className="flex items-center gap-2"><Monitor className="size-5 text-indigo-400" /> Pajisjet e kyçura ({devices.length})</span>}
+        <SectionCard title={<span className="flex items-center gap-2"><Monitor className="size-5 text-slate-900" /> Pajisjet e kyçura ({devices.length})</span>}
           action={devices.some((d) => !d.current) ? <Button variant="danger" size="sm" onClick={logoutOthers}>Dil nga të gjitha të tjerat</Button> : undefined}>
           <ul className="space-y-3">
             {devices.map((d) => (

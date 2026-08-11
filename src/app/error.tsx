@@ -24,7 +24,7 @@ export default function Error({
         <div className="mt-6 flex justify-center gap-2">
           <button
             onClick={reset}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+            className="rounded-lg bg-slate-300 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-400"
           >
             Provo sërish
           </button>

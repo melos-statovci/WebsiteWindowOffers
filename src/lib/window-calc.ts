@@ -1,5 +1,5 @@
 // Parametric window/door configurator engine — pure functions, unit-tested.
-// Geometry reverse-engineered from app.proferto.io (55mm ram face, 42mm mullion
+// Geometry reverse-engineered from app.kornizo.io (55mm ram face, 42mm mullion
 // face). Prices integrate with the local pricing store; per-sash / labour
 // constants are tuned so a fixed single 1000×1200 window ≈ €100 and opening a
 // sash adds KRAH + MEKANIZËM + DOREZA, matching the observed live behaviour.
@@ -12,7 +12,7 @@ type Pricing = ReturnType<typeof useStore.getState>["pricing"];
 export const FRAME_FACE = 55;
 export const MULLION_FACE = 42;
 
-const LABOR_PER_M = 5.15;
+const LABOR_PER_M = 5.145;
 const MECH_BASE = 15; // € per opening sash (before size)
 const MECH_PER_M = 8; // € per m of sash perimeter
 const HANDLE_PRICE = 8;
@@ -33,7 +33,7 @@ interface RowDef { hf: number; cols: number }
 export interface ModelDef {
   label: string;
   rows: RowDef[];
-  shape?: "triangle" | "trapez" | "pentagon" | "arch";
+  shape?: "triangle" | "trapez" | "pentagon" | "arch" | "circle";
 }
 
 export const MODELS: Record<ModelType, ModelDef> = {
@@ -56,11 +56,24 @@ export const MODELS: Record<ModelType, ModelDef> = {
   trapez: { label: "Trapez", rows: [{ hf: 1, cols: 1 }], shape: "trapez" },
   pesekendesh: { label: "Pesëkëndësh", rows: [{ hf: 1, cols: 1 }], shape: "pentagon" },
   hark: { label: "Hark", rows: [{ hf: 1, cols: 1 }], shape: "arch" },
+  rreth: { label: "Rreth", rows: [{ hf: 1, cols: 1 }], shape: "circle" },
 };
 
 export const DOOR_MODELS = ["ARIES", "CARINA", "CONNA"] as const;
 export const isGlassProduct = (pt: ProductType) => pt === "Dritare" || pt === "Rreshqitëse";
 export const isDoorProduct = (pt: ProductType) => pt === "Derë Hyrje" || pt === "Derë";
+const safeMullions = (n: number | undefined, fallback: number) =>
+  Number.isFinite(n) ? Math.min(5, Math.max(0, Math.round(n as number))) : fallback;
+
+function modelDef(modelType: ModelType, custom?: Pick<WindowConfig, "customVerticalMullions" | "customHorizontalMullions">): ModelDef {
+  if (modelType !== "custom") return MODELS[modelType] ?? MODELS.njeshe;
+  const cols = safeMullions(custom?.customVerticalMullions, 1) + 1;
+  const rows = safeMullions(custom?.customHorizontalMullions, 0) + 1;
+  return {
+    label: MODELS.custom.label,
+    rows: Array.from({ length: rows }, () => ({ hf: 1, cols })),
+  };
+}
 
 export interface Pane { x: number; y: number; w: number; h: number }
 export interface Layout {
@@ -73,8 +86,13 @@ export interface Layout {
   shape?: ModelDef["shape"];
 }
 
-export function computeLayout(modelType: ModelType, W: number, H: number): Layout {
-  const def = MODELS[modelType] ?? MODELS.njeshe;
+export function computeLayout(
+  modelType: ModelType,
+  W: number,
+  H: number,
+  custom?: Pick<WindowConfig, "customVerticalMullions" | "customHorizontalMullions">,
+): Layout {
+  const def = modelDef(modelType, custom);
   const R = def.rows.length;
   const innerX = FRAME_FACE;
   const innerY = FRAME_FACE;
@@ -123,6 +141,8 @@ export interface Materials {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+const safeMm = (n: number): number => (Number.isFinite(n) ? Math.max(200, n) : 200);
+const safeBandMm = (n: number): number => (Number.isFinite(n) ? Math.max(0, n) : 0);
 
 export interface EffectiveDims {
   ew: number; // window width after shtesa carve-out
@@ -135,19 +155,20 @@ export interface EffectiveDims {
 export function effectiveDims(config: WindowConfig): EffectiveDims {
   let left = 0, right = 0, top = 0, bottom = 0;
   for (const s of config.shtesa) {
-    if (s.side === "Majtas") left += s.widthMm;
-    else if (s.side === "Djathtas") right += s.widthMm;
-    else if (s.side === "Lart") top += s.widthMm;
-    else bottom += s.widthMm;
+    const widthMm = safeBandMm(s.widthMm);
+    if (s.side === "Majtas") left += widthMm;
+    else if (s.side === "Djathtas") right += widthMm;
+    else if (s.side === "Lart") top += widthMm;
+    else bottom += widthMm;
   }
-  const ew = Math.max(200, config.widthMm - left - right);
-  const eh = Math.max(200, config.heightMm - top - bottom);
+  const ew = Math.max(200, safeMm(config.widthMm) - left - right);
+  const eh = Math.max(200, safeMm(config.heightMm) - top - bottom);
   return { ew, eh, left, right, top, bottom };
 }
 
 export function openingCount(config: WindowConfig): number {
   const { ew, eh } = effectiveDims(config);
-  const layout = computeLayout(config.modelType, ew, eh);
+  const layout = computeLayout(config.modelType, ew, eh, config);
   let n = 0;
   for (let i = 0; i < layout.panes.length; i++) {
     const t = config.openings?.[i];
@@ -157,7 +178,8 @@ export function openingCount(config: WindowConfig): number {
 }
 
 export function computeMaterials(config: WindowConfig): Materials {
-  const { productType, widthMm: W } = config;
+  const { productType } = config;
+  const W = safeMm(config.widthMm);
   const { ew, eh } = effectiveDims(config);
   const ramPerimM = round2((2 * (ew + eh)) / 1000);
 
@@ -174,8 +196,8 @@ export function computeMaterials(config: WindowConfig): Materials {
   }
 
   // window / sliding — computed on the effective (carved) window size
-  const def = MODELS[config.modelType] ?? MODELS.njeshe;
-  const layout = computeLayout(config.modelType, ew, eh);
+  const def = modelDef(config.modelType, config);
+  const layout = computeLayout(config.modelType, ew, eh, config);
   const glassM2 = round2(layout.panes.reduce((s, p) => s + (p.w * p.h) / 1e6, 0));
   const llajsneM = round2(layout.panes.reduce((s, p) => s + (2 * (p.w + p.h)) / 1000, 0));
   const totalHf = def.rows.reduce((s, r) => s + r.hf, 0);
@@ -217,10 +239,11 @@ function num(v: string | undefined, fallback: number): number {
 function shtesaCost(config: WindowConfig): number {
   let c = 0;
   for (const s of config.shtesa) {
-    if (!s.widthMm) continue;
+    const widthMm = safeBandMm(s.widthMm);
+    if (!widthMm) continue;
     const vertical = s.side === "Majtas" || s.side === "Djathtas";
-    const longMm = vertical ? config.heightMm : config.widthMm;
-    const areaM2 = (s.widthMm / 1000) * (longMm / 1000);
+    const longMm = vertical ? safeMm(config.heightMm) : safeMm(config.widthMm);
+    const areaM2 = (widthMm / 1000) * (longMm / 1000);
     c += areaM2 * SHTESE_PER_M2 + (longMm / 1000) * SHTESE_EDGE_PER_M;
   }
   return c;
@@ -247,9 +270,9 @@ export function computePrice(config: WindowConfig, pricing: Pricing): number {
   const glassPrice = glass?.price ?? 34;
 
   if (config.productType === "Roletë") {
-    const area = (config.widthMm * config.heightMm) / 1e6;
+    const area = (safeMm(config.widthMm) * safeMm(config.heightMm)) / 1e6;
     const roletaPrice = pricing.roletaVersions[0]?.pricePerM2 ?? 45;
-    return round2(area * roletaPrice + 65 + (config.widthMm / 1000) * 14);
+    return round2(area * roletaPrice + 65 + (safeMm(config.widthMm) / 1000) * 14);
   }
 
   if (isDoorProduct(config.productType)) {
@@ -267,7 +290,7 @@ export function computePrice(config: WindowConfig, pricing: Pricing): number {
 
   // window / sliding — geometry on the effective (carved) window size
   const { ew, eh } = effectiveDims(config);
-  const layout = computeLayout(config.modelType, ew, eh);
+  const layout = computeLayout(config.modelType, ew, eh, config);
   let price =
     m.ramPerimM * ramPrice +
     m.tShtylleM * tPrice +
@@ -287,7 +310,7 @@ export function computePrice(config: WindowConfig, pricing: Pricing): number {
   });
 
   if (config.roleta) {
-    const area = (config.widthMm * config.heightMm) / 1e6;
+    const area = (safeMm(config.widthMm) * safeMm(config.heightMm)) / 1e6;
     price += area * (pricing.roletaVersions[0]?.pricePerM2 ?? 45) + 65;
   }
   price += shtesaCost(config);

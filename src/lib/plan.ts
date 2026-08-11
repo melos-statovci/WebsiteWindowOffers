@@ -1,4 +1,4 @@
-import type { PlanTier } from "./nav";
+export type PlanTier = "SOLO" | "BIZNES" | "FABRIKA";
 
 export interface GatedInfo {
   title: string;

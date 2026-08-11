@@ -1,6 +1,6 @@
-# Proferto — Design Tokens
+# Kornizo — Design Tokens
 
-Extracted from https://app.proferto.io (authenticated, SOLO plan) on 2026-08-05.
+Extracted from https://app.kornizo.io (authenticated, SOLO plan) on 2026-08-05.
 
 ## Fonts (Google Fonts)
 - **Body / UI:** `"IBM Plex Sans", system-ui, sans-serif` — weights 400, 500, 600, 700
@@ -53,7 +53,7 @@ Light mode uses Tailwind's default oklch slate + tint scales.
 - **Primary (buttons, progress, guide):** indigo/violet `oklch(0.511 0.262 276.966)` ≈ `#4f46e5` (indigo-600). Hover slightly darker.
 - **Guide button text/icon:** `oklch(0.457 0.24 277.023)` (violet-600) on bg `#1a1f40`.
 - **Active nav item:** text `#93c5fd` (blue-300), bg `#15233f` (blue-50 dark). Inactive text `#d6deea` (slate-700 dark).
-- **Logo "P" square + "Proferto" wordmark:** blue→indigo gradient, wordmark uses gradient text (Space Grotesk 600, 18px). Square rounded ~12px.
+- **Logo "P" square + "Kornizo" wordmark:** blue→indigo gradient, wordmark uses gradient text (Space Grotesk 600, 18px). Square rounded ~12px.
 - **Top banner ("Prova falas…"):** solid blue `#2563eb`-ish (blue-600) full-width bar, white text, underlined inline link "Qendrën e Ndihmës".
 - **Locked (gated) nav items:** slate-400 muted + lock icon on the right, reduced emphasis.
 
