@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import {
-  FileText, Wrench, Wallet, Bell, Clock, Rocket, Users,
+  FileText, ReceiptText, Wallet, Bell, Clock, Rocket, Users, PiggyBank,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/kit";
@@ -29,13 +29,14 @@ function StatCard({ icon: Icon, tone, label, value, sub }: { icon: LucideIcon; t
 export default function DashboardPage() {
   const { setOverlay } = useApp();
   const projects = useStore((s) => s.projects);
+  const invoices = useStore((s) => s.invoices);
   const payments = useStore((s) => s.payments);
   const clients = useStore((s) => s.clients);
   const guideDone = useStore((s) => s.guideDone);
   const uiDismissals = useStore((s) => s.uiDismissals);
   const dismissUi = useStore((s) => s.dismissUi);
 
-  const stats = useMemo(() => dashboardStats(projects, payments, clients), [projects, payments, clients]);
+  const stats = useMemo(() => dashboardStats(projects, invoices, payments, clients), [projects, invoices, payments, clients]);
   const recent = useMemo(
     () => [...projects].filter((p) => !p.archived).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 4),
     [projects],
@@ -73,15 +74,16 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* KPI grid */}
+      {/* KPI grid — every value derives from src/lib/selectors so the dashboard,
+          client cards and invoice list can never disagree. */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <StatCard icon={FileText} tone="bg-cyan-50 text-cyan-400" label="Ofertat këtë muaj" value={String(stats.offersThisMonth)} />
-        <StatCard icon={Wrench} tone="bg-sky-50 text-sky-400" label="Punë në prodhim" value={String(stats.jobsInProduction)} sub={`${stats.jobsCompleted} përfunduar`} />
-        <StatCard icon={Wallet} tone="bg-emerald-50 text-emerald-500" label="Të hyra (pranuar)" value={eur(stats.revenue)} />
-        <StatCard icon={FileText} tone="bg-violet-50 text-violet-400" label="Të pranuara" value={String(stats.jobsInProduction)} sub={eur(stats.revenue)} />
-        <StatCard icon={Clock} tone="bg-amber-50 text-amber-500" label="Në pritje" value={String(stats.pendingCount)} sub={eur(stats.pending)} />
+        <StatCard icon={FileText} tone="bg-violet-50 text-violet-400" label="Oferta të pranuara" value={String(stats.acceptedCount)} sub={eur(stats.acceptedValue)} />
+        <StatCard icon={ReceiptText} tone="bg-sky-50 text-sky-400" label="Të faturuara" value={eur(stats.invoicedTotal)} />
+        <StatCard icon={Wallet} tone="bg-emerald-50 text-emerald-500" label="Të hyra (pagesa)" value={eur(stats.received)} sub={`${stats.receivedCount} pagesa`} />
+        <StatCard icon={Clock} tone="bg-amber-50 text-amber-500" label="Fatura të papaguara" value={eur(stats.outstanding)} sub={`${stats.outstandingCount} fatura`} />
         <StatCard icon={Users} tone="bg-rose-50 text-rose-400" label="Borxhi i klientëve" value={eur(stats.clientDebt)} />
-        <StatCard icon={Wallet} tone="bg-slate-200 text-slate-700" label="Të pranuara (pagesa)" value={eur(stats.received)} sub={`${stats.receivedCount} pagesa`} />
+        <StatCard icon={PiggyBank} tone="bg-slate-200 text-slate-700" label="Kredi klientësh" value={eur(stats.clientCredit)} />
       </div>
 
       {/* Chart */}

@@ -305,7 +305,10 @@ function AbonimiPanel() {
       </div>
 
       <div className="flex items-center justify-between">
-        <div className="font-heading font-semibold text-slate-900">Zgjidhni planin</div>
+        <div className="flex items-center gap-2">
+          <div className="font-heading font-semibold text-slate-900">Zgjidhni planin</div>
+          <Badge tone="amber">Demo lokale</Badge>
+        </div>
         <div className="flex items-center gap-1 rounded-xl bg-slate-200/60 p-1 text-sm font-semibold">
           <button onClick={() => setYearly(false)} className={cn("rounded-lg px-3 py-1.5", !yearly ? "bg-slate-50 text-slate-900" : "text-slate-400")}>Mujor</button>
           <button onClick={() => setYearly(true)} className={cn("rounded-lg px-3 py-1.5", yearly ? "bg-slate-50 text-slate-900" : "text-slate-400")}>Vjetor −17%</button>

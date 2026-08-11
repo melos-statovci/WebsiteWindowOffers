@@ -11,7 +11,7 @@ import { WindowPreview } from "@/components/projects/window-preview";
 import { useApp } from "@/components/providers/providers";
 import { useStore, uid } from "@/lib/store";
 import {
-  computeLayout, computeMaterials, computePrice, MODELS, DOOR_MODELS, isDoorProduct, isGlassProduct,
+  computeLayout, computeMaterials, computePrice, validateConfig, MODELS, DOOR_MODELS, isDoorProduct, isGlassProduct,
 } from "@/lib/window-calc";
 import { eur } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -99,6 +99,7 @@ export function ProductConfigurator({
   onCancel: () => void;
 }) {
   const pricing = useStore((s) => s.pricing);
+  const { toast } = useApp();
 
   const [cfg, setCfg] = useState<WindowConfig>(
     () => initial?.config ? sanitizeConfig(structuredClone(initial.config)) : defaultConfig(initialProductType, pricing.systems, pricing.glass[0]?.id ?? "g1"),
@@ -111,6 +112,8 @@ export function ProductConfigurator({
   const set = <K extends keyof WindowConfig>(k: K, v: WindowConfig[K]) => setCfg((c) => ({ ...c, [k]: v }));
   const materials = useMemo(() => computeMaterials(cfg), [cfg]);
   const price = useMemo(() => computePrice(cfg, pricing), [cfg, pricing]);
+  const issues = useMemo(() => validateConfig(cfg), [cfg]);
+  const hasErrors = issues.some((i) => i.level === "error");
 
   const pt = cfg.productType;
   const glass = isGlassProduct(pt);
@@ -179,6 +182,10 @@ export function ProductConfigurator({
   };
 
   const save = () => {
+    if (hasErrors) {
+      toast(issues.find((i) => i.level === "error")?.message ?? "Konfigurimi ka gabime.");
+      return;
+    }
     onSave(
       { kind: kindOf(pt), label: pt, widthMm: cfg.widthMm, heightMm: cfg.heightMm, qty: clampNumber(qty, 1, 999), unitPrice: price, config: sanitizeConfig(cfg) },
       initial?.id,
@@ -345,6 +352,12 @@ export function ProductConfigurator({
       {/* RIGHT: preview + summary */}
       <div className="order-1 flex flex-col gap-3 lg:order-2 lg:h-full lg:min-h-0">
         {glass && (
+          <div className="flex shrink-0 items-center justify-between gap-2 px-2 pt-1">
+            <span className="text-xs font-bold tracking-widest text-slate-400 uppercase">Modeli</span>
+            <span className="truncate text-sm font-semibold text-slate-900">{MODELS[cfg.modelType].label}</span>
+          </div>
+        )}
+        {glass && (
           <div className="no-scrollbar flex shrink-0 gap-1.5 overflow-x-auto p-2">
             {MODEL_ORDER.map((mt) => (
               <button key={mt} onClick={() => changeModel(mt)} title={MODELS[mt].label} aria-label={MODELS[mt].label}
@@ -369,6 +382,23 @@ export function ProductConfigurator({
         <div className="flex min-h-[220px] flex-1 items-center justify-center p-2 text-slate-500 lg:min-h-0">
           <WindowPreview config={cfg} onPaneClick={glass ? cyclePane : undefined} />
         </div>
+
+        {glass && (
+          <p className="shrink-0 px-2 text-center text-[11px] text-slate-400">
+            Kliko një panel për të ndryshuar hapjen: fiks → majtas → majtas-kip → djathtas → djathtas-kip → kip.
+          </p>
+        )}
+
+        {issues.length > 0 && (
+          <div className="shrink-0 space-y-1.5 px-2">
+            {issues.map((it, i) => (
+              <p key={i} className={cn("flex items-start gap-1.5 text-xs", it.level === "error" ? "text-rose-500" : "text-amber-500")}>
+                <span aria-hidden>{it.level === "error" ? "⚠" : "ⓘ"}</span>
+                {it.message}
+              </p>
+            ))}
+          </div>
+        )}
 
         {/* materials */}
         <div className="shrink-0 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2">
@@ -410,7 +440,7 @@ export function ProductConfigurator({
             <span className="text-xs font-bold tracking-widest text-slate-400 uppercase">Çmimi i përllogaritur</span>
             <span className="font-heading text-2xl font-bold text-slate-900">{eur(price * qty)}</span>
           </div>
-          <Button className="w-full" onClick={save}><Plus className="size-4" /> {initial ? "Ruaj ndryshimet" : "Shto në Ofertë"}</Button>
+          <Button className="w-full" onClick={save} disabled={hasErrors}><Plus className="size-4" /> {initial ? "Ruaj ndryshimet" : "Shto në Ofertë"}</Button>
           <Button variant="ghost" className="w-full" onClick={onCancel}>Shiko ofertën ({offerItemCount})</Button>
         </div>
       </div>

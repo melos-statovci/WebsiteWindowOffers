@@ -117,9 +117,13 @@ export default function ClientDetailPage({ params }: { params: Promise<{ clientI
             </div>
           </div>
           <div className="flex flex-1 flex-wrap items-center gap-6 sm:justify-end">
-            <Metric label="Vlera totale" value={eur(stats.acceptedValue)} />
+            <Metric label="Të faturuara" value={eur(stats.invoicedTotal)} />
             <Metric label="Paguar" value={eur(stats.paid)} tone="text-emerald-500" />
-            <Metric label="Borxhi" value={eur(stats.debt)} tone={stats.debt > 0 ? "text-rose-400" : undefined} />
+            {stats.availableCredit > 0 ? (
+              <Metric label="Kredi" value={eur(stats.availableCredit)} tone="text-emerald-500" />
+            ) : (
+              <Metric label="Borxhi" value={eur(stats.debt)} tone={stats.debt > 0 ? "text-rose-400" : undefined} />
+            )}
             <div className="flex gap-2">
               <Button onClick={() => setPayOpen(true)}>
                 <Plus className="size-4" /> Shto pagesë
@@ -164,9 +168,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ clientI
             <dl className="divide-y divide-slate-200 text-sm">
               <FinRow label="Oferta gjithsej" value={String(stats.offersTotal)} />
               <FinRow label="Të pranuara" value={`${stats.offersAccepted} · ${eur(stats.acceptedValue)}`} />
-              <FinRow label="Të refuzuara" value={String(stats.offersRejected)} />
+              <FinRow label="Të faturuara" value={eur(stats.invoicedTotal)} />
               <FinRow label="Paguar" value={eur(stats.paid)} tone="text-emerald-500" />
-              <FinRow label="Borxh i hapur" value={eur(stats.debt)} tone="text-rose-400" />
+              <FinRow label="Mbetje faturash" value={eur(stats.outstanding)} tone={stats.outstanding > 0 ? "text-rose-400" : undefined} />
+              {stats.availableCredit > 0 && <FinRow label="Kredi klienti" value={eur(stats.availableCredit)} tone="text-emerald-500" />}
+              <FinRow label="Borxh i hapur" value={eur(stats.debt)} tone={stats.debt > 0 ? "text-rose-400" : undefined} />
             </dl>
           </Card>
         </div>

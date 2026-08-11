@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeMaterials, computeLayout, computePrice, effectiveDims } from "./window-calc";
+import { computeMaterials, computeLayout, computePrice, effectiveDims, validateConfig } from "./window-calc";
 import * as seed from "@/lib/mock/data";
 import type { WindowConfig, ProductType } from "@/types";
 
@@ -145,5 +145,26 @@ describe("malformed persisted dimensions are sanitized", () => {
   it("roletë prices cannot go negative from invalid dimensions", () => {
     const p = computePrice(cfg({ productType: "Roletë", widthMm: -1000, heightMm: -1000 }), pricing);
     expect(p).toBeGreaterThan(0);
+  });
+});
+
+describe("validateConfig — business validation", () => {
+  it("a normal single window has no issues", () => {
+    expect(validateConfig(cfg({ modelType: "njeshe", widthMm: 1000, heightMm: 1200 }))).toEqual([]);
+  });
+
+  it("warns when a multi-pane model makes panes too small", () => {
+    const issues = validateConfig(cfg({ modelType: "katershe-v", widthMm: 800, heightMm: 1000 }));
+    expect(issues.some((i) => i.level === "warning")).toBe(true);
+  });
+
+  it("flags sub-minimum dimensions as an error", () => {
+    const issues = validateConfig(cfg({ widthMm: 100 }));
+    expect(issues.some((i) => i.level === "error")).toBe(true);
+  });
+
+  it("warns when shtesa shrink the window below the usable minimum", () => {
+    const issues = validateConfig(cfg({ widthMm: 400, shtesa: [{ id: "s", side: "Majtas", widthMm: 300 }] }));
+    expect(issues.some((i) => i.level === "warning")).toBe(true);
   });
 });

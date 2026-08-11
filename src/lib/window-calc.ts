@@ -249,6 +249,58 @@ function shtesaCost(config: WindowConfig): number {
   return c;
 }
 
+// ---------------------------------------------------------------------------
+// Business validation (Priority 4).
+//
+// Technical bounds (min/max dimensions, quantity) are enforced at the input
+// layer. These are the *business* checks that a clamp can't express: e.g. a
+// three-pane model at a tiny width would produce sub-realistic sashes.
+//
+// MIN_PANE_MM is a documented DEMO ASSUMPTION, not a Proferto engineering limit
+// — a conservative "panes below this look wrong" threshold, surfaced as a
+// non-blocking warning.
+// ---------------------------------------------------------------------------
+export const MIN_DIM_MM = 200;
+export const MAX_DIM_MM = 10000;
+export const MIN_PANE_MM = 350;
+
+export interface ConfigIssue {
+  level: "error" | "warning";
+  message: string;
+}
+
+export function validateConfig(config: WindowConfig): ConfigIssue[] {
+  const issues: ConfigIssue[] = [];
+
+  // Technical (defensive — normally pre-clamped by the inputs).
+  if (!Number.isFinite(config.widthMm) || config.widthMm < MIN_DIM_MM) {
+    issues.push({ level: "error", message: `Gjerësia duhet të jetë të paktën ${MIN_DIM_MM} mm.` });
+  }
+  if (!Number.isFinite(config.heightMm) || config.heightMm < MIN_DIM_MM) {
+    issues.push({ level: "error", message: `Lartësia duhet të jetë të paktën ${MIN_DIM_MM} mm.` });
+  }
+
+  const { ew, eh, left, right, top, bottom } = effectiveDims(config);
+  if (left + right + top + bottom > 0 && (ew <= MIN_DIM_MM || eh <= MIN_DIM_MM)) {
+    issues.push({ level: "warning", message: "Shtesat po e zvogëlojnë dritaren nën përmasën minimale të përdorshme." });
+  }
+
+  // Business: for glazed products, no pane should fall below the realistic
+  // minimum for the chosen model.
+  if (isGlassProduct(config.productType)) {
+    const layout = computeLayout(config.modelType, ew, eh, config);
+    const tiny = layout.panes.some((p) => p.w < MIN_PANE_MM || p.h < MIN_PANE_MM);
+    if (tiny) {
+      issues.push({
+        level: "warning",
+        message: `Për këtë model, ndonjë panel del nën ${MIN_PANE_MM} mm — kontrolloni përmasat ose modelin.`,
+      });
+    }
+  }
+
+  return issues;
+}
+
 export function computePrice(config: WindowConfig, pricing: Pricing): number {
   if (config.manualPrice && config.manualPrice > 0) return round2(config.manualPrice);
 

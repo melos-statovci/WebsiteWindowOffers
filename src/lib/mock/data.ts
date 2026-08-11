@@ -201,6 +201,7 @@ export const invoices: Invoice[] = [
     number: "FAT-2026-001",
     clientId: "arbenkrq1",
     clientName: "Arben Krasniqi",
+    projectId: "b21c0e10-1111-4a22-8f33-abc0000d1234",
     reference: "OF-2026-0142",
     issuedAt: "2026-06-12",
     dueAt: "2026-06-27",
@@ -217,6 +218,7 @@ export const invoices: Invoice[] = [
     number: "FAT-2026-002",
     clientId: "ndertimic2",
     clientName: "Ndërtimi Beqiri SH.P.K.",
+    projectId: "c33d0f20-2222-4b33-9044-def1111e2345",
     reference: "OF-2026-0151",
     issuedAt: "2026-06-28",
     dueAt: "2026-07-13",
@@ -247,6 +249,7 @@ export const invoices: Invoice[] = [
     number: "FAT-2026-004",
     clientId: "lumturije3",
     clientName: "Lumturije Gashi",
+    projectId: "d44e1030-3333-4c44-a155-fab2222f3456",
     reference: "OF-2026-0163",
     issuedAt: "2026-07-15",
     dueAt: "2026-07-30",
@@ -257,12 +260,18 @@ export const invoices: Invoice[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Payments (make derived client/dashboard finances coherent)
+// Payments — coherent with invoices under the invoice-based model:
+//  • pay1  advance/credit (no invoice) — client "test"
+//  • pay2  fully settles FAT-2026-001 (3004.28) → invoice reads "Paguar"
+//  • pay4  partial settlement of FAT-2026-002 (3000 of 8048.19) → "partial"
+//  • pay3  advance/credit (no invoice) — Lumturije (her invoice is still Draft)
+// FAT-2026-003 (Euro Home) intentionally has no payment → open/overdue debt.
 // ---------------------------------------------------------------------------
 export const payments: Payment[] = [
-  { id: "pay1", clientId: "xtlaj7yzg", amount: 398.25, date: "2026-08-03", method: "Para në dorë" },
-  { id: "pay2", clientId: "arbenkrq1", invoiceId: "fat-2026-001", amount: 2124.0, date: "2026-06-13", method: "Transfertë bankare" },
-  { id: "pay3", clientId: "lumturije3", amount: 1890.0, date: "2026-07-16", method: "Kartelë" },
+  { id: "pay1", clientId: "xtlaj7yzg", amount: 398.25, date: "2026-08-03", method: "Para në dorë", note: "Parapagim (pa faturë)" },
+  { id: "pay2", clientId: "arbenkrq1", invoiceId: "fat-2026-001", amount: 3004.28, date: "2026-06-13", method: "Transfertë bankare", note: "Faturë FAT-2026-001" },
+  { id: "pay4", clientId: "ndertimic2", invoiceId: "fat-2026-002", amount: 3000.0, date: "2026-07-02", method: "Transfertë bankare", note: "Këst i parë" },
+  { id: "pay3", clientId: "lumturije3", amount: 1890.0, date: "2026-07-16", method: "Kartelë", note: "Parapagim (pa faturë)" },
 ];
 
 export const notes: Note[] = [

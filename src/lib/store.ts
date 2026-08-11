@@ -19,6 +19,11 @@ import type {
 } from "@/types";
 import * as seed from "@/lib/mock/data";
 import { guideStepKeys } from "@/lib/plan";
+import { invoiceTotal, invoicePaid } from "@/lib/selectors";
+import { validateBackup, SCHEMA_VERSION } from "@/lib/backup";
+
+/** Half-a-cent tolerance, matching selectors. */
+const MONEY_EPS = 0.005;
 
 export const uid = (): string =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -132,6 +137,15 @@ interface StoreState extends DataSlice {
 
   // payments / notes
   addPayment: (data: Omit<Payment, "id">) => string;
+  /**
+   * Record a payment against a specific invoice. Idempotent by design: it can
+   * only ever settle the *remaining* balance, so "mark paid" cannot create
+   * duplicate full-value payments. Overpayment is rejected unless allowCredit.
+   */
+  recordInvoicePayment: (
+    invoiceId: string,
+    data: { amount: number; date: string; method: string; note?: string; allowCredit?: boolean },
+  ) => { ok: boolean; error?: string; credit?: number; paidInFull?: boolean };
   addNote: (clientId: string, text: string) => void;
   deleteNote: (id: string) => void;
 
@@ -271,12 +285,68 @@ export const useStore = create<StoreState>()(
         set((s) => ({ invoices: s.invoices.map((i) => (i.id === id ? { ...i, ...patch } : i)) })),
       setInvoiceStatus: (id, status) =>
         set((s) => ({ invoices: s.invoices.map((i) => (i.id === id ? { ...i, status } : i)) })),
-      deleteInvoice: (id) => set((s) => ({ invoices: s.invoices.filter((i) => i.id !== id) })),
+      // Deleting an invoice must not orphan its payments. They are kept but
+      // unlinked, so the money survives as client credit (an advance) instead
+      // of pointing at a non-existent invoice.
+      deleteInvoice: (id) =>
+        set((s) => ({
+          invoices: s.invoices.filter((i) => i.id !== id),
+          payments: s.payments.map((p) =>
+            p.invoiceId === id ? { ...p, invoiceId: undefined } : p,
+          ),
+        })),
 
       addPayment: (data) => {
         const id = uid();
         set((s) => ({ payments: [{ id, ...data }, ...s.payments] }));
         return id;
+      },
+      recordInvoicePayment: (invoiceId, data) => {
+        const s = get();
+        const inv = s.invoices.find((i) => i.id === invoiceId);
+        if (!inv) return { ok: false, error: "Fatura nuk u gjet." };
+        if (inv.status === "Anuluar") return { ok: false, error: "Fatura është e anuluar." };
+        const amount = Math.round(data.amount * 100) / 100;
+        if (!(amount > 0)) return { ok: false, error: "Shuma duhet të jetë më e madhe se zero." };
+
+        const total = invoiceTotal(inv);
+        const alreadyPaid = invoicePaid(inv.id, s.payments);
+        const outstanding = Math.max(0, Math.round((total - alreadyPaid) * 100) / 100);
+
+        if (outstanding <= MONEY_EPS && !data.allowCredit) {
+          return { ok: false, error: "Kjo faturë është tashmë e paguar plotësisht." };
+        }
+        if (amount > outstanding + MONEY_EPS && !data.allowCredit) {
+          return {
+            ok: false,
+            error: `Shuma tejkalon mbetjen e faturës (${outstanding.toFixed(2)} €). Aktivizoni kredinë për ta lejuar.`,
+          };
+        }
+
+        const id = uid();
+        const payment: Payment = {
+          id,
+          clientId: inv.clientId,
+          invoiceId: inv.id,
+          amount,
+          date: data.date,
+          method: data.method,
+          note: data.note,
+        };
+        const paidInFull = alreadyPaid + amount + MONEY_EPS >= total;
+        const credit = Math.max(0, Math.round((amount - outstanding) * 100) / 100);
+
+        set((st) => ({
+          payments: [payment, ...st.payments],
+          invoices: st.invoices.map((i) => {
+            if (i.id !== inv.id) return i;
+            if (paidInFull) return { ...i, status: "Paguar" as InvoiceStatus };
+            // Recording a payment on a Draft invoice issues it.
+            if (i.status === "Draft") return { ...i, status: "Dërguar" as InvoiceStatus };
+            return i;
+          }),
+        }));
+        return { ok: true, credit: credit > MONEY_EPS ? credit : undefined, paidInFull };
       },
       addNote: (clientId, text) =>
         set((s) => ({ notes: [{ id: uid(), clientId, text, at: todayIso() }, ...s.notes] })),
@@ -319,28 +389,43 @@ export const useStore = create<StoreState>()(
           notifications, company, pricing, selectedDesignId, guideDone, uiDismissals,
         } = s;
         return JSON.stringify(
-          { clients, projects, invoices, payments, notes, users, notifications, company, pricing, selectedDesignId, guideDone, uiDismissals },
+          { version: SCHEMA_VERSION, clients, projects, invoices, payments, notes, users, notifications, company, pricing, selectedDesignId, guideDone, uiDismissals },
           null,
           2,
         );
       },
       importData: (json) => {
+        let parsed: unknown;
         try {
-          const data = JSON.parse(json);
-          if (!data || typeof data !== "object" || !Array.isArray(data.clients) || !Array.isArray(data.projects)) {
-            return { ok: false, error: "Skedari nuk përmban të dhëna Kornizo të vlefshme." };
-          }
-          const base = seedData();
-          set({ ...base, ...data });
-          return { ok: true };
+          parsed = JSON.parse(json);
         } catch {
           return { ok: false, error: "Skedari JSON është i pavlefshëm." };
         }
+        const result = validateBackup(parsed);
+        if (!result.ok) return { ok: false, error: result.error };
+        // Start from a clean seed and overlay only validated, whitelisted keys.
+        const base = seedData();
+        const data = { ...result.data };
+        delete data.version;
+        set({ ...base, ...(data as Partial<DataSlice>) });
+        return { ok: true };
       },
     }),
     {
       name: "kornizo-demo-store",
-      version: 1,
+      version: SCHEMA_VERSION,
+      migrate: (persisted, fromVersion) => {
+        // Older persisted state may predate fields the app now reads. Merge onto
+        // a fresh seed shape so missing collections/fields never crash selectors.
+        if (!persisted || typeof persisted !== "object") return persisted as never;
+        const base = seedData();
+        const merged = { ...base, ...(persisted as Partial<DataSlice>) } as DataSlice;
+        if (fromVersion < 2 && Array.isArray(merged.invoices)) {
+          // v1 invoices had no projectId — nothing to backfill, just normalise.
+          merged.invoices = merged.invoices.map((inv) => ({ ...inv }));
+        }
+        return merged as never;
+      },
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
       partialize: (s) => {

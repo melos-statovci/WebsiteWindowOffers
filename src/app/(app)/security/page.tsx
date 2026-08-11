@@ -45,7 +45,11 @@ export default function SecurityPage() {
 
   return (
     <div>
-      <PageHeader title="Siguria" subtitle="Kush kyçet, nga cilat pajisje, dhe çdo qasje e support-it — transparencë e plotë." />
+      <PageHeader title="Siguria" subtitle="Kush kyçet, nga cilat pajisje, dhe çdo qasje e support-it — transparencë e plotë."
+        actions={<Badge tone="amber">Demo lokale</Badge>} />
+      <p className="mb-5 -mt-2 text-xs text-slate-400">
+        Ky ekran është një simulim lokal: veprimet e sigurisë (2FA, fjalëkalimi, dalja nga pajisjet) nuk ruajnë e nuk dërgojnë asgjë.
+      </p>
 
       <div className="space-y-5">
         <SectionCard title={<span className="flex items-center gap-2"><LockKeyhole className="size-5 text-slate-900" /> Qasja e support-it</span>}>

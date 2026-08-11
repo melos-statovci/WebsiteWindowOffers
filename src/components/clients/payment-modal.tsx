@@ -9,6 +9,8 @@ export interface PaymentDraft {
   date: string;
   method: string;
   note: string;
+  /** Set when the user knowingly pays more than the balance (→ client credit). */
+  allowCredit?: boolean;
 }
 
 const methods = ["Para në dorë", "Transfertë bankare", "Kartelë"];
@@ -18,27 +20,36 @@ export function PaymentModal({
   onClose,
   onSubmit,
   suggestedAmount,
+  maxAmount,
+  allowCreditToggle = false,
 }: {
   open: boolean;
   onClose: () => void;
   onSubmit: (draft: PaymentDraft) => void;
   suggestedAmount?: number;
+  /** Invoice balance — payments above it require the credit toggle. */
+  maxAmount?: number;
+  /** Show the "allow overpayment as credit" checkbox. */
+  allowCreditToggle?: boolean;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(today);
   const [method, setMethod] = useState(methods[0]);
   const [note, setNote] = useState("");
+  const [allowCredit, setAllowCredit] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (open) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      /* eslint-disable react-hooks/set-state-in-effect */
       setAmount(suggestedAmount ? suggestedAmount.toFixed(2) : "");
       setDate(new Date().toISOString().slice(0, 10));
       setMethod(methods[0]);
       setNote("");
+      setAllowCredit(false);
       setError("");
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [open, suggestedAmount]);
 
@@ -48,7 +59,11 @@ export function PaymentModal({
       setError("Shuma duhet të jetë më e madhe se zero.");
       return;
     }
-    onSubmit({ amount: value, date, method, note });
+    if (maxAmount != null && value > maxAmount + 0.005 && !allowCredit) {
+      setError(`Shuma tejkalon mbetjen e faturës (${maxAmount.toFixed(2)} €). Aktivizoni kredinë për ta lejuar.`);
+      return;
+    }
+    onSubmit({ amount: value, date, method, note, allowCredit });
   };
 
   return (
@@ -96,6 +111,15 @@ export function PaymentModal({
         <Field label="Shënim (opsional)">
           <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="P.sh. paradhënie 50%" />
         </Field>
+        {allowCreditToggle && (
+          <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+            <input type="checkbox" checked={allowCredit} onChange={(e) => setAllowCredit(e.target.checked)} className="mt-0.5 size-4 accent-slate-500" />
+            <span>
+              <span className="font-semibold text-slate-900">Lejo mbipagesë si kredi klienti</span>
+              <span className="mt-0.5 block text-xs text-slate-400">Nëse shuma tejkalon mbetjen, teprica ruhet si kredi për klientin.</span>
+            </span>
+          </label>
+        )}
       </div>
     </Modal>
   );

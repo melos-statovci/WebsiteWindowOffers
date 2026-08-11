@@ -131,6 +131,9 @@ export interface Invoice {
   number: string; // FAT-2026-001
   clientId: string;
   clientName: string;
+  /** Stable link to the originating project/offer (when created from one). */
+  projectId?: string;
+  /** Human-readable reference (offer number). Kept for display/back-compat. */
   reference?: string;
   issuedAt: string;
   dueAt: string;

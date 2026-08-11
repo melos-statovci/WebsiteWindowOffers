@@ -7,7 +7,7 @@ import { PageHeader, Button, Card, Badge, EmptyState } from "@/components/ui/kit
 import { InvoiceFormModal } from "@/components/invoices/invoice-form-modal";
 import { useStore } from "@/lib/store";
 import { eur, shortDate } from "@/lib/format";
-import { invoiceTotal } from "@/lib/selectors";
+import { invoiceTotal, invoicePaid, invoiceOutstanding } from "@/lib/selectors";
 import { useApp } from "@/components/providers/providers";
 import type { Invoice, InvoiceStatus } from "@/types";
 
@@ -27,22 +27,25 @@ export default function InvoicesPage() {
   const router = useRouter();
   const { toast, confirm } = useApp();
   const invoices = useStore((s) => s.invoices);
+  const payments = useStore((s) => s.payments);
   const deleteInvoice = useStore((s) => s.deleteInvoice);
 
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<(typeof STATUSES)[number]>("Të gjitha statuset");
   const [modalOpen, setModalOpen] = useState(false);
 
+  // Tiles reflect real money, not raw status: outstanding = unpaid balance,
+  // paid = payments actually received, overdue = outstanding on late invoices.
   const tiles = useMemo(() => {
     let unpaid = 0, paid = 0, overdue = 0;
     for (const inv of invoices) {
-      const t = invoiceTotal(inv);
-      if (inv.status === "Paguar") paid += t;
-      else if (inv.status === "Vonesë") { overdue += t; unpaid += t; }
-      else if (inv.status !== "Anuluar") unpaid += t;
+      paid += invoicePaid(inv.id, payments);
+      const out = invoiceOutstanding(inv, payments);
+      unpaid += out;
+      if (inv.status === "Vonesë") overdue += out;
     }
     return { unpaid, paid, overdue };
-  }, [invoices]);
+  }, [invoices, payments]);
 
   const rows = useMemo(() => {
     const query = q.trim().toLowerCase();

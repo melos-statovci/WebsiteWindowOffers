@@ -44,6 +44,7 @@ export function InvoiceFormModal({
 
   const [step, setStep] = useState<"choose" | "form">("choose");
   const [clientId, setClientId] = useState("");
+  const [projectId, setProjectId] = useState<string | undefined>(undefined);
   const [reference, setReference] = useState("");
   const today = new Date().toISOString().slice(0, 10);
   const [issuedAt, setIssuedAt] = useState(today);
@@ -57,6 +58,7 @@ export function InvoiceFormModal({
        
       setStep("choose");
       setClientId(clients[0]?.id ?? "");
+      setProjectId(undefined);
       setReference("");
       setIssuedAt(today);
       setDueAt(addDays(today, 15));
@@ -68,13 +70,15 @@ export function InvoiceFormModal({
   }, [open]);
 
   const startBlank = () => {
+    setProjectId(undefined);
     setStep("form");
     setLines([{ description: "", qty: 1, unitPrice: 0 }]);
   };
-  const startFromOffer = (projectId: string) => {
-    const p = projects.find((x) => x.id === projectId);
+  const startFromOffer = (pid: string) => {
+    const p = projects.find((x) => x.id === pid);
     if (!p) return;
     setClientId(p.clientId);
+    setProjectId(p.id);
     setReference(p.number);
     setLines(p.items.map((it) => ({ description: `${it.label} · ${it.widthMm}×${it.heightMm}mm`, qty: it.qty, unitPrice: it.unitPrice })));
     setStep("form");
@@ -90,11 +94,15 @@ export function InvoiceFormModal({
   const submit = () => {
     const client = clients.find((c) => c.id === clientId);
     if (!client) return setError("Zgjidhni një klient.");
+    if (dueAt < issuedAt) return setError("Afati i pagesës nuk mund të jetë para datës së lëshimit.");
     const valid = lines.filter((l) => l.description.trim() && l.qty > 0);
     if (valid.length === 0) return setError("Shtoni të paktën një pozicion me përshkrim dhe sasi.");
+    // Only keep the project link if it still belongs to the chosen client.
+    const linkedProject = projects.find((p) => p.id === projectId && p.clientId === client.id);
     const id = addInvoice({
       clientId: client.id,
       clientName: client.name,
+      projectId: linkedProject?.id,
       reference: reference || undefined,
       issuedAt,
       dueAt,
@@ -169,8 +177,9 @@ export function InvoiceFormModal({
               <Label>Statusi</Label>
               <select value={status} onChange={(e) => setStatus(e.target.value as InvoiceStatus)}
                 className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-neutral-500">
-                {(["Draft", "Dërguar", "Paguar", "Vonesë", "Anuluar"] as InvoiceStatus[]).map((s) => <option key={s}>{s}</option>)}
+                {(["Draft", "Dërguar", "Vonesë", "Anuluar"] as InvoiceStatus[]).map((s) => <option key={s}>{s}</option>)}
               </select>
+              <p className="mt-1 text-[11px] text-slate-400">Statusi &ldquo;Paguar&rdquo; vendoset automatikisht kur regjistrohen pagesat.</p>
             </div>
           </div>
 
