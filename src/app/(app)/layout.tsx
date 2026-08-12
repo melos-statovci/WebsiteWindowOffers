@@ -1,27 +1,31 @@
 import { requireAuthContext } from "@/auth/session";
 import { listClients } from "@/server/clients";
+import { getActivePricingCatalog } from "@/server/pricing";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { ClientsHydrator } from "@/components/providers/clients-hydrator";
+import { PricingHydrator } from "@/components/providers/pricing-hydrator";
 import { AppShell } from "@/components/shell/app-shell";
 
 // Server-side authoritative gate for the whole app shell. requireAuthContext
 // redirects to /sign-in (no session) or /onboarding (no organization) and
 // resolves the real identity/active-org/role passed into the client shell.
 //
-// We also fetch the active org's clients here (one indexed, RLS-scoped query) to
-// seed the store's read-only mirror app-wide, so still-local features that
-// reference clients (search, pickers, dashboard) keep working during the phased
-// migration.
+// We also fetch the active org's clients (Phase 4) and active PricingCatalog
+// (Phase 5) here, RLS-scoped, to hydrate the store's server-backed runtime
+// mirrors app-wide — so still-local features that reference clients (search,
+// pickers, dashboard) and the configurator's live pricing preview keep working.
+// Both are re-fetched on every layout render, so an org switch replaces them.
 export default async function AppGroupLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const ctx = await requireAuthContext();
-  const clients = await listClients();
+  const [clients, pricing] = await Promise.all([listClients(), getActivePricingCatalog()]);
   return (
     <SessionProvider value={ctx}>
       <ClientsHydrator clients={clients} />
+      <PricingHydrator pricing={pricing} />
       <AppShell>{children}</AppShell>
     </SessionProvider>
   );

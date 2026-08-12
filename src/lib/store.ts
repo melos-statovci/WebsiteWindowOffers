@@ -80,6 +80,11 @@ function seedData(): DataSlice {
     users: structuredClone(seed.users),
     notifications: structuredClone(seed.notifications),
     company: structuredClone(seed.company),
+    // Pricing is DB-backed (Phase 5). This is a NON-persisted, server-hydrated
+    // runtime MIRROR (via <PricingHydrator>) that the configurator reads
+    // synchronously for live preview. It seeds with the canonical default so the
+    // configurator never sees an empty catalog before hydration; Postgres is the
+    // authoritative source and the mirror is never persisted to localStorage.
     pricing: {
       systems: structuredClone(seed.pricingSystems),
       profilePriceRows: structuredClone(seed.profilePriceRows),
@@ -150,8 +155,11 @@ interface StoreState extends DataSlice {
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
 
-  // pricing / design / guide
-  savePricing: (pricing: PricingState) => void;
+  // pricing — DB-backed (Phase 5). The store holds only a server-hydrated,
+  // non-persisted mirror; the authoritative save goes through the server action
+  // in src/server/actions/pricing.action.ts. setPricing is hydration/mirror-only
+  // (no local authority, no dual-write), mirroring setClients.
+  setPricing: (pricing: PricingState) => void;
   setDesign: (id: string) => void;
   toggleGuideStep: (key: string, done: boolean) => void;
   dismissUi: (key: UiDismissalKey, mode: UiDismissalMode) => void;
@@ -332,7 +340,7 @@ export const useStore = create<StoreState>()(
       markAllNotificationsRead: () =>
         set((s) => ({ notifications: s.notifications.map((n) => ({ ...n, read: true })) })),
 
-      savePricing: (pricing) => set({ pricing }),
+      setPricing: (pricing) => set({ pricing }),
       setDesign: (id) => set({ selectedDesignId: id }),
       toggleGuideStep: (key, done) =>
         set((s) => ({ guideDone: { ...s.guideDone, [key]: done } })),
@@ -389,10 +397,12 @@ export const useStore = create<StoreState>()(
         if (!persisted || typeof persisted !== "object") return persisted as never;
         const base = seedData();
         const merged = { ...base, ...(persisted as Partial<DataSlice>) } as DataSlice;
-        // Clients are DB-backed. Ignore any clients an OLD persisted store still
-        // carries so stale localStorage can never re-become an authoritative
-        // source; the mirror is re-hydrated from the server after mount.
+        // Clients (Phase 4) and pricing (Phase 5) are DB-backed. Ignore anything
+        // an OLD persisted store still carries for them so stale localStorage can
+        // never re-become an authoritative source; both are re-hydrated from the
+        // server after mount.
         merged.clients = [];
+        merged.pricing = base.pricing;
         if (fromVersion < 2 && Array.isArray(merged.invoices)) {
           // v1 invoices had no projectId — nothing to backfill, just normalise.
           merged.invoices = merged.invoices.map((inv) => ({ ...inv }));
@@ -402,14 +412,15 @@ export const useStore = create<StoreState>()(
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
       partialize: (s) => {
-        // NOTE: clients are intentionally EXCLUDED — they live in Postgres, not
-        // localStorage. Persisting them would recreate a stale local source of
-        // truth and let clearing localStorage "delete" server data.
+        // NOTE: clients (Phase 4) and pricing (Phase 5) are intentionally
+        // EXCLUDED — they live in Postgres, not localStorage. Persisting them
+        // would recreate a stale local source of truth and let clearing
+        // localStorage "delete" server data. Both are server-hydrated at runtime.
         const {
           projects, invoices, payments, notes, users,
-          notifications, company, pricing, selectedDesignId, guideDone, uiDismissals,
+          notifications, company, selectedDesignId, guideDone, uiDismissals,
         } = s;
-        return { projects, invoices, payments, notes, users, notifications, company, pricing, selectedDesignId, guideDone, uiDismissals };
+        return { projects, invoices, payments, notes, users, notifications, company, selectedDesignId, guideDone, uiDismissals };
       },
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

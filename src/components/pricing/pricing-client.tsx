@@ -8,9 +8,11 @@ import { useApp } from "@/components/providers/providers";
 import { useStore, uid } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { eurAfter } from "@/lib/format";
+import { savePricing } from "@/server/actions/pricing.action";
 import type { CatalogRow, PricingSystem } from "@/domain/types";
+import type { PricingCatalog } from "@/domain/pricing/types";
 
-type Pricing = ReturnType<typeof useStore.getState>["pricing"];
+type Pricing = PricingCatalog;
 
 const TABS = [
   { value: "", label: "Sistemet" },
@@ -40,34 +42,65 @@ const TAB_DESC: Record<string, string> = {
 
 const VALID = new Set<string>(TABS.map((t) => t.value));
 
-export function PricingClient() {
+interface PricingClientProps {
+  /** Active organization pricing loaded server-side (the editor baseline). */
+  initialCatalog: PricingCatalog;
+  /** Active version number — the optimistic-concurrency baseVersion for saves. */
+  initialVersion: number;
+  /** Whether the current role may edit pricing (canonical can(role, pricing:edit)). */
+  canEdit: boolean;
+}
+
+export function PricingClient({ initialCatalog, initialVersion, canEdit }: PricingClientProps) {
   const router = useRouter();
   const params = useSearchParams();
   const { toast, confirm } = useApp();
-  const stored = useStore((s) => s.pricing);
-  const savePricing = useStore((s) => s.savePricing);
+  // Keep the runtime configurator mirror in sync when authoritative server data
+  // arrives/changes (e.g. after a save's router.refresh reloads this page).
+  const setPricing = useStore((s) => s.setPricing);
 
   const raw = params.get("tab") ?? "";
   const tab = VALID.has(raw) ? raw : "";
   const setTab = (v: string) => router.push(v ? `/pricing?tab=${v}` : "/pricing");
 
-  const [draft, setDraft] = useState<Pricing>(stored);
-  // keep draft in sync if store changes externally (e.g. reset demo)
+  const [draft, setDraft] = useState<Pricing>(initialCatalog);
+  const [saving, setSaving] = useState(false);
+  // Re-baseline the editor whenever the server sends a new active version.
   useEffect(() => {
-     
-    setDraft(stored);
-  }, [stored]);
+    setDraft(initialCatalog);
+    setPricing(initialCatalog);
+  }, [initialCatalog, setPricing]);
 
-  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(stored), [draft, stored]);
+  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(initialCatalog), [draft, initialCatalog]);
   const update = (fn: (d: Pricing) => Pricing) => setDraft((d) => fn(structuredClone(d)));
 
-  const save = () => {
-    savePricing(draft);
-    toast("Ndryshimet u ruajtën.");
+  const save = async () => {
+    if (!canEdit || !dirty || saving) return;
+    setSaving(true);
+    try {
+      // Postgres is authoritative: the server validates, versions, and activates.
+      const res = await savePricing({ catalog: draft, baseVersion: initialVersion });
+      if (res.ok) {
+        // Optimistic mirror update for instant configurator preview; the refresh
+        // then re-hydrates the authoritative active version app-wide.
+        setPricing(draft);
+        toast("Ndryshimet u ruajtën.");
+        router.refresh();
+      } else if (res.error.code === "CONFLICT") {
+        toast("Çmimet u ndryshuan nga dikush tjetër. U rifreskuan.");
+        router.refresh();
+      } else if (res.error.code === "FORBIDDEN") {
+        toast("Nuk keni leje për të ndryshuar çmimet.");
+      } else {
+        toast(res.error.message || "Ruajtja dështoi.");
+      }
+    } finally {
+      setSaving(false);
+    }
   };
   const discard = async () => {
     const ok = await confirm({ title: "Rikthe ndryshimet?", message: "Ndryshimet e paruajtura do të humbasin.", confirmLabel: "Rikthe", danger: true });
-    if (ok) setDraft(stored);
+    if (ok) setDraft(initialCatalog);
   };
 
   return (
@@ -87,30 +120,38 @@ export function PricingClient() {
             </button>
           ))}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {dirty && (
-            <button onClick={discard} className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-slate-700">
-              <RotateCcw className="size-3.5" /> Rikthe
-            </button>
-          )}
-          <Button onClick={save} disabled={!dirty}>
-            {dirty ? "Ruaj Ndryshimet •" : "Ruaj Ndryshimet"}
-          </Button>
-        </div>
+        {canEdit ? (
+          <div className="flex shrink-0 items-center gap-2">
+            {dirty && (
+              <button onClick={discard} className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-slate-700">
+                <RotateCcw className="size-3.5" /> Rikthe
+              </button>
+            )}
+            <Button onClick={save} disabled={!dirty || saving}>
+              {saving ? "Duke ruajtur…" : dirty ? "Ruaj Ndryshimet •" : "Ruaj Ndryshimet"}
+            </Button>
+          </div>
+        ) : (
+          <span className="shrink-0 text-xs font-semibold text-slate-400">Vetëm shikim</span>
+        )}
       </div>
 
       <p className="mb-5 max-w-3xl text-sm text-slate-400">{TAB_DESC[tab]}</p>
 
-      {tab === "" && <SystemsTab draft={draft} update={update} />}
-      {tab === "metals" && <MetalsTab draft={draft} update={update} />}
-      {tab === "mechanisms" && <MechanismsTab draft={draft} update={update} />}
-      {tab === "glass" && <PhotoTab draft={draft} update={update} coll="glass" title="Llojet e xhamave" addLabel="Shto Xham" showDesc importExcel />}
-      {tab === "door-panels" && <PhotoTab draft={draft} update={update} coll="panels" title="Panelet e dyerve" addLabel="Shto Panel" />}
-      {tab === "expansion-profiles" && <ExpansionsTab draft={draft} update={update} />}
-      {tab === "accessories" && <ParamsTab draft={draft} update={update} which="accessoryParams" heading="Aksesorët" />}
-      {tab === "production" && <ParamsTab draft={draft} update={update} which="productionParams" heading="Parametrat e prodhimit" />}
-      {tab === "roleta" && <RoletaTab draft={draft} update={update} />}
-      {tab === "doors" && <DoorsTab draft={draft} update={update} />}
+      {/* Non-editors get a fully read-only editor; the server action is the hard
+          gate, this just prevents pointless local edits. */}
+      <fieldset disabled={!canEdit} className="contents">
+        {tab === "" && <SystemsTab draft={draft} update={update} />}
+        {tab === "metals" && <MetalsTab draft={draft} update={update} />}
+        {tab === "mechanisms" && <MechanismsTab draft={draft} update={update} />}
+        {tab === "glass" && <PhotoTab draft={draft} update={update} coll="glass" title="Llojet e xhamave" addLabel="Shto Xham" showDesc importExcel />}
+        {tab === "door-panels" && <PhotoTab draft={draft} update={update} coll="panels" title="Panelet e dyerve" addLabel="Shto Panel" />}
+        {tab === "expansion-profiles" && <ExpansionsTab draft={draft} update={update} />}
+        {tab === "accessories" && <ParamsTab draft={draft} update={update} which="accessoryParams" heading="Aksesorët" />}
+        {tab === "production" && <ParamsTab draft={draft} update={update} which="productionParams" heading="Parametrat e prodhimit" />}
+        {tab === "roleta" && <RoletaTab draft={draft} update={update} />}
+        {tab === "doors" && <DoorsTab draft={draft} update={update} />}
+      </fieldset>
     </div>
   );
 }
