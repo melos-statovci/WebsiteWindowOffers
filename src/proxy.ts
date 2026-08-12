@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 
-// Optimistic edge gate: redirect based on session-cookie PRESENCE only (no DB).
-// Authoritative session validation happens server-side in the protected layouts
-// (requireAuthContext). This just stops unauthenticated users from ever loading
-// a protected page — including by typing the URL directly.
+// Next 16 "proxy" (formerly "middleware"). Optimistic edge gate: redirect based
+// on session-cookie PRESENCE only (no DB). Authoritative session validation
+// happens server-side in the protected layouts (requireAuthContext). This just
+// stops unauthenticated users from ever loading a protected page — including by
+// typing the URL directly.
 
 const AUTH_PAGES = ["/sign-in", "/sign-up"];
 
-export function middleware(req: NextRequest) {
+export default function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Only gate top-level page NAVIGATIONS (GET). Never touch Server Action POSTs
