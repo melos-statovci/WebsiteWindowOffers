@@ -69,7 +69,10 @@ interface DataSlice {
 
 function seedData(): DataSlice {
   return {
-    clients: structuredClone(seed.clients),
+    // Clients are DB-backed (Phase 4). The store keeps a NON-persisted,
+    // read-only MIRROR of the active org's clients, hydrated from the server by
+    // <ClientsHydrator>. It seeds empty and is never written locally.
+    clients: [],
     projects: structuredClone(seed.projects),
     invoices: structuredClone(seed.invoices),
     payments: structuredClone(seed.payments),
@@ -101,10 +104,10 @@ interface StoreState extends DataSlice {
   _hasHydrated: boolean;
   setHasHydrated: (v: boolean) => void;
 
-  // clients
-  addClient: (data: Omit<Client, "id" | "createdAt"> & { createdAt?: string }) => string;
-  updateClient: (id: string, patch: Partial<Client>) => void;
-  deleteClient: (id: string) => void;
+  // clients — DB-backed. The store holds only a read-only mirror; all writes go
+  // through the server actions in src/server/actions/client.action.ts. There is
+  // deliberately NO local add/update/delete (no dual-write).
+  setClients: (clients: Client[]) => void;
 
   // projects
   addProject: (data: Omit<Project, "id" | "number" | "createdAt"> & { createdAt?: string }) => string;
@@ -179,31 +182,8 @@ export const useStore = create<StoreState>()(
       _hasHydrated: false,
       setHasHydrated: (v) => set({ _hasHydrated: v }),
 
-      addClient: (data) => {
-        const id = uid();
-        const client: Client = { id, createdAt: data.createdAt ?? todayIso(), ...data };
-        set((s) => ({ clients: [client, ...s.clients] }));
-        return id;
-      },
-      updateClient: (id, patch) =>
-        set((s) => ({
-          clients: s.clients.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-          // keep denormalised clientName in sync on projects/invoices
-          projects: patch.name
-            ? s.projects.map((p) => (p.clientId === id ? { ...p, clientName: patch.name! } : p))
-            : s.projects,
-          invoices: patch.name
-            ? s.invoices.map((i) => (i.clientId === id ? { ...i, clientName: patch.name! } : i))
-            : s.invoices,
-        })),
-      deleteClient: (id) =>
-        set((s) => ({
-          clients: s.clients.filter((c) => c.id !== id),
-          projects: s.projects.filter((p) => p.clientId !== id),
-          invoices: s.invoices.filter((i) => i.clientId !== id),
-          payments: s.payments.filter((p) => p.clientId !== id),
-          notes: s.notes.filter((n) => n.clientId !== id),
-        })),
+      // Hydration only: replace the read-only mirror with the server's clients.
+      setClients: (clients) => set({ clients }),
 
       addProject: (data) => {
         const id = uid();
@@ -409,6 +389,10 @@ export const useStore = create<StoreState>()(
         if (!persisted || typeof persisted !== "object") return persisted as never;
         const base = seedData();
         const merged = { ...base, ...(persisted as Partial<DataSlice>) } as DataSlice;
+        // Clients are DB-backed. Ignore any clients an OLD persisted store still
+        // carries so stale localStorage can never re-become an authoritative
+        // source; the mirror is re-hydrated from the server after mount.
+        merged.clients = [];
         if (fromVersion < 2 && Array.isArray(merged.invoices)) {
           // v1 invoices had no projectId — nothing to backfill, just normalise.
           merged.invoices = merged.invoices.map((inv) => ({ ...inv }));
@@ -418,11 +402,14 @@ export const useStore = create<StoreState>()(
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
       partialize: (s) => {
+        // NOTE: clients are intentionally EXCLUDED — they live in Postgres, not
+        // localStorage. Persisting them would recreate a stale local source of
+        // truth and let clearing localStorage "delete" server data.
         const {
-          clients, projects, invoices, payments, notes, users,
+          projects, invoices, payments, notes, users,
           notifications, company, pricing, selectedDesignId, guideDone, uiDismissals,
         } = s;
-        return { clients, projects, invoices, payments, notes, users, notifications, company, pricing, selectedDesignId, guideDone, uiDismissals };
+        return { projects, invoices, payments, notes, users, notifications, company, pricing, selectedDesignId, guideDone, uiDismissals };
       },
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

@@ -6,6 +6,7 @@ import { ChevronRight, UserPlus, Users } from "lucide-react";
 import { Modal } from "@/components/ui/overlay";
 import { Button, Field, Input, Label } from "@/components/ui/kit";
 import { useStore } from "@/lib/store";
+import { createClient } from "@/server/actions/client.action";
 import { useApp } from "@/components/providers/providers";
 import { cn } from "@/lib/utils";
 import type { ClientType } from "@/domain/types";
@@ -18,8 +19,8 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
   const clients = useStore((s) => s.clients);
   const systems = useStore((s) => s.pricing.systems);
   const company = useStore((s) => s.company);
-  const addClient = useStore((s) => s.addClient);
   const addProject = useStore((s) => s.addProject);
+  const [busy, setBusy] = useState(false);
 
   const [step, setStep] = useState<"choose" | "existing" | "new">("choose");
   const [title, setTitle] = useState("");
@@ -70,13 +71,26 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
     create(c.id, c.name);
   };
 
-  const submitNew = () => {
-    if (!newName.trim()) {
+  // Client creation is now DB-backed: create the tenant client via the server
+  // action, then create the local project referencing its server-generated UUID.
+  // (Projects remain local this phase; navigating to the project re-fetches the
+  // clients mirror so the new client appears in pickers.)
+  const submitNew = async () => {
+    if (busy) return;
+    const name = newName.trim();
+    if (!name) {
       setError("Emri i klientit është i detyrueshëm.");
       return;
     }
-    const cid = addClient({ name: newName.trim(), type: newType });
-    create(cid, newName.trim());
+    setBusy(true);
+    setError("");
+    const res = await createClient({ name, type: newType });
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error.fieldErrors?.name?.[0] ?? res.error.message);
+      return;
+    }
+    create(res.data.id, name);
   };
 
   return (
@@ -91,7 +105,9 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
         ) : (
           <>
             <Button variant="ghost" onClick={() => setStep("choose")}>Prapa</Button>
-            <Button onClick={step === "existing" ? submitExisting : submitNew}>Krijo projektin</Button>
+            <Button disabled={busy} onClick={step === "existing" ? submitExisting : submitNew}>
+              {busy ? "Duke krijuar…" : "Krijo projektin"}
+            </Button>
           </>
         )
       }
