@@ -4,9 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut, Rocket, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { initials } from "@/lib/format";
 import { navGroups } from "@/lib/nav";
-import { currentUser } from "@/lib/mock/data";
 import { useApp } from "@/components/providers/providers";
+import { useAuth, useAuthActions } from "@/components/providers/session-provider";
+import type { OrgSummary } from "@/auth/types";
 
 function Logo({ collapsed }: { collapsed?: boolean }) {
   return (
@@ -37,26 +39,27 @@ function NavContent({
 }) {
   const pathname = usePathname();
   const { setOverlay } = useApp();
+  const { user, activeOrg, role, memberships } = useAuth();
+  const { signOut, switchOrg } = useAuthActions();
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
 
   return (
     <div className="flex h-full flex-col">
-      {/* User block */}
+      {/* User block — real identity from the Better Auth session */}
       {!collapsed && (
-        <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-4">
-          <span className="grid size-10 shrink-0 place-items-center rounded-full border border-slate-200 font-heading text-sm font-semibold text-slate-500">
-            {currentUser.initial}
-          </span>
-          <div className="min-w-0 leading-tight">
-            <div className="truncate text-sm font-semibold text-slate-900">
-              {currentUser.name}
-            </div>
-            <div className="text-xs text-slate-400">
-              {currentUser.sidebarRole}
+        <div className="border-b border-slate-200 px-4 py-4">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full border border-slate-200 font-heading text-sm font-semibold text-slate-500">
+              {initials(user.name || user.email)}
+            </span>
+            <div className="min-w-0 leading-tight">
+              <div className="truncate text-sm font-semibold text-slate-900">{user.name || user.email}</div>
+              <div className="text-xs text-slate-400 capitalize">{role}</div>
             </div>
           </div>
+          <OrgSwitcher activeOrg={activeOrg} memberships={memberships} onSwitch={switchOrg} />
         </div>
       )}
 
@@ -125,10 +128,13 @@ function NavContent({
         ))}
       </nav>
 
-      {/* Logout */}
+      {/* Logout — real Better Auth sign-out */}
       <div className="border-t border-slate-200 p-3">
         <button
-          onClick={onNavigate}
+          onClick={() => {
+            onNavigate?.();
+            void signOut();
+          }}
           className={cn(
             "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-200/50",
             collapsed && "justify-center px-0",
@@ -140,6 +146,38 @@ function NavContent({
         </button>
       </div>
     </div>
+  );
+}
+
+function OrgSwitcher({
+  activeOrg,
+  memberships,
+  onSwitch,
+}: {
+  activeOrg: OrgSummary;
+  memberships: OrgSummary[];
+  onSwitch: (organizationId: string) => void;
+}) {
+  if (memberships.length <= 1) {
+    return (
+      <div className="mt-3 truncate rounded-lg bg-slate-200/60 px-2.5 py-1.5 text-xs font-semibold text-slate-700" title={activeOrg.name}>
+        {activeOrg.name}
+      </div>
+    );
+  }
+  return (
+    <select
+      value={activeOrg.id}
+      onChange={(e) => onSwitch(e.target.value)}
+      aria-label="Ndrysho organizatën"
+      className="mt-3 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none focus:border-neutral-500"
+    >
+      {memberships.map((m) => (
+        <option key={m.id} value={m.id}>
+          {m.name}
+        </option>
+      ))}
+    </select>
   );
 }
 

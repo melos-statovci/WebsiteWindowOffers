@@ -15,6 +15,13 @@
       "when": 1786489705061,
       "tag": "0001_rls_organization_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786552654774,
+      "tag": "0002_grant_auth_tables_to_app_role",
+      "breakpoints": true
     }
   ]
 }

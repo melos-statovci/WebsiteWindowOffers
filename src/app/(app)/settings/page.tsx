@@ -231,13 +231,19 @@ function PerdoruesitPanel() {
 
   return (
     <Card className="p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="font-heading font-semibold text-slate-900">Përdoruesit e kompanisë</div>
+          <div className="flex items-center gap-2">
+            <div className="font-heading font-semibold text-slate-900">Përdoruesit e kompanisë</div>
+            <Badge tone="amber">Demo lokale</Badge>
+          </div>
           <div className="text-sm text-slate-400">{users.length} / {seatLimit} ulëse · Plani SOLO</div>
         </div>
         <Button onClick={() => setOpen(true)}>Shto Përdorues</Button>
       </div>
+      <p className="mb-4 text-xs text-slate-400">
+        Kjo listë është të dhëna lokale demo. Llogaritë reale, anëtarësimet dhe rolet menaxhohen përmes identitetit të vërtetë (Better Auth) — jo nga kjo tabelë.
+      </p>
       {atLimit && (
         <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-500">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
