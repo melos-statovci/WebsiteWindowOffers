@@ -13,6 +13,7 @@ import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { ac, roles } from "@/auth/permissions";
 import { ensureOrganizationProfile } from "@/auth/organization";
+import { ensureDefaultPricing } from "@/server/pricing-init";
 
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
@@ -37,8 +38,12 @@ export const auth = betterAuth({
         afterCreate: async ({ organization: org }: { organization: { id: string } }) => {
           try {
             await ensureOrganizationProfile(org.id);
+            // Seed default pricing (version 1) so the new org can configure/price
+            // immediately. Best-effort: the pricing read boundary re-ensures it
+            // authoritatively on first read, so this never blocks org creation.
+            await ensureDefaultPricing(org.id);
           } catch {
-            // Recovered lazily by requireAuthContext(); never block org creation.
+            // Recovered lazily by requireAuthContext()/getActivePriceList().
           }
         },
       },

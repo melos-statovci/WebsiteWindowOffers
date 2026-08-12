@@ -17,6 +17,7 @@ import { auth } from "@/auth";
 import * as schema from "@/db/schema";
 import { clients } from "@/db/schema/business";
 import { runWithOrg, type AppDatabase } from "@/db/tenant";
+import { TestCleanup, testRunId } from "@/db/testing/fixtures";
 import {
   createClientAction,
   updateClientAction,
@@ -26,13 +27,15 @@ import {
 const ownerPool = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL });
 const appPool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
 const appDb = drizzle(appPool, { schema }) as unknown as AppDatabase;
+const cleanup = new TestCleanup(ownerPool);
 
-const suffix = Math.random().toString(36).slice(2, 8);
+const suffix = testRunId();
 const PW = "password-12345";
 const email = (who: string) => `p4-${suffix}-${who}@example.test`;
 const H = (cookie: string) => new Headers({ cookie });
 
 async function signUp(who: string): Promise<{ cookie: string; userId: string }> {
+  cleanup.userEmail(email(who));
   const res = await auth.api.signUpEmail({ body: { email: email(who), password: PW, name: `P4 ${who}` }, asResponse: true });
   const cookie = res.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
   const s = await auth.api.getSession({ headers: H(cookie) });
@@ -72,11 +75,11 @@ beforeAll(async () => {
   const ownerA = await signUp("ownera");
   ownerACookie = ownerA.cookie;
   const oa = await auth.api.createOrganization({ headers: H(ownerACookie), body: { name: "Org A", slug: `p4a-${suffix}` } });
-  orgA = oa!.id;
+  orgA = cleanup.org(oa!.id);
 
   const ownerB = await signUp("ownerb");
   const ob = await auth.api.createOrganization({ headers: H(ownerB.cookie), body: { name: "Org B", slug: `p4b-${suffix}` } });
-  orgB = ob!.id;
+  orgB = cleanup.org(ob!.id);
 
   const sales = await signUp("sales");
   salesUserId = sales.userId;
@@ -99,7 +102,9 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
-  await ownerPool.query(`delete from "user" where email like $1`, [`p4-${suffix}-%`]);
+  // Delete only the orgs (cascades to member/profiles/clients) and users this
+  // test created — no memberless test orgs left behind (Phase 5 hygiene fix).
+  await cleanup.run();
   await appPool.end();
   await ownerPool.end();
 });

@@ -40,6 +40,13 @@ let orgAId = "";
 let orgBId = "";
 
 afterAll(async () => {
+  // Delete the organizations these tests created (cascades to member/invitation/
+  // organization_profiles) so no memberless test orgs are left behind, then the
+  // users. Scoped strictly to the ids/emails this run produced (Phase 5 hygiene).
+  const orgIds = [orgAId, orgBId].filter(isUuid);
+  if (orgIds.length > 0) {
+    await ownerPool.query(`delete from organization where id = any($1::uuid[])`, [orgIds]);
+  }
   await ownerPool.query(`delete from "user" where email = any($1)`, [[emailA, emailB]]);
   await ownerPool.end();
 });

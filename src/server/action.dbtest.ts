@@ -11,16 +11,19 @@ import { auth } from "@/auth";
 import { db } from "@/db/client";
 import { runWithOrg } from "@/db/tenant";
 import { ensureOrganizationProfile } from "@/auth/organization";
+import { TestCleanup, testRunId } from "@/db/testing/fixtures";
 import { createAction, type ActionResult } from "@/server/action";
 import { updateOrganizationProfileAction } from "@/server/actions/organization-profile";
 
 const ownerPool = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL });
-const suffix = Math.random().toString(36).slice(2, 8);
+const cleanup = new TestCleanup(ownerPool);
+const suffix = testRunId();
 const PW = "password-12345";
 const email = (who: string) => `p3-${suffix}-${who}@example.test`;
 const H = (cookie: string) => new Headers({ cookie });
 
 async function signUp(who: string): Promise<{ cookie: string; userId: string }> {
+  cleanup.userEmail(email(who));
   const res = await auth.api.signUpEmail({ body: { email: email(who), password: PW, name: `P3 ${who}` }, asResponse: true });
   const cookie = res.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
   const s = await auth.api.getSession({ headers: H(cookie) });
@@ -49,12 +52,12 @@ beforeAll(async () => {
   const owner = await signUp("owner");
   ownerCookie = owner.cookie;
   const oa = await auth.api.createOrganization({ headers: H(ownerCookie), body: { name: "Org A", slug: `p3a-${suffix}` } });
-  orgA = oa!.id;
+  orgA = cleanup.org(oa!.id);
   await ensureOrganizationProfile(orgA);
 
   const b = await signUp("ownerb");
   const ob = await auth.api.createOrganization({ headers: H(b.cookie), body: { name: "Org B", slug: `p3b-${suffix}` } });
-  orgB = ob!.id;
+  orgB = cleanup.org(ob!.id);
   await ensureOrganizationProfile(orgB);
 
   const admin = await signUp("admin");
@@ -69,7 +72,8 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
-  await ownerPool.query(`delete from "user" where email like $1`, [`p3-${suffix}-%`]);
+  // Remove only the orgs (cascades) and users this test created (Phase 5 hygiene).
+  await cleanup.run();
   await ownerPool.end();
 });
 

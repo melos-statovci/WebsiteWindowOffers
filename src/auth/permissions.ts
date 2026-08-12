@@ -42,12 +42,17 @@ const ALL_BUSINESS = {
 export const owner = ac.newRole({ ...ownerAc.statements, ...ALL_BUSINESS });
 export const admin = ac.newRole({ ...adminAc.statements, ...ALL_BUSINESS });
 
+// sales/operator build offers in the configurator, which must read the active
+// pricing to compute prices — so they need pricing:read (edit/activate stay with
+// owner/admin). Phase 5 added this; before, only owner/admin/accounting could
+// read pricing, which would have starved the configurator for these roles.
 export const sales = ac.newRole({
   ...memberAc.statements,
   client: ["read", "write"],
   project: ["read", "write", "accept", "archive"],
   invoice: ["read"],
   payment: ["read"],
+  pricing: ["read"],
   settings: ["read"],
 });
 
@@ -57,6 +62,7 @@ export const operator = ac.newRole({
   project: ["read", "write", "archive"],
   invoice: ["read"],
   payment: ["read"],
+  pricing: ["read"],
   settings: ["read"],
 });
 

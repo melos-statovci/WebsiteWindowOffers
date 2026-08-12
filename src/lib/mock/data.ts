@@ -12,6 +12,7 @@ import type {
   CatalogRow,
   CompanyProfile,
 } from "@/domain/types";
+import { defaultPricingCatalog } from "@/domain/pricing/defaults";
 
 // ---------------------------------------------------------------------------
 // Company / account (fictional — no real PII from the source account)
@@ -305,85 +306,22 @@ export const loginHistory: LoginEvent[] = [
 // ---------------------------------------------------------------------------
 // Pricing catalogs (editable seed)
 // ---------------------------------------------------------------------------
-export const pricingSystems: PricingSystem[] = [
-  { id: "s1", name: "Dritare PVC 70 mm (shembull)", brand: "Aluplast", material: "PVC", badges: ["PVC"], category: "Dritare" },
-  { id: "s2", name: "Dritare PVC 82 mm premium (shembull)", brand: "Salamander", material: "PVC", badges: ["PVC"], category: "Dritare" },
-  { id: "s3", name: "Derë PVC 70 mm (shembull)", brand: "Aluplast", material: "PVC", badges: ["PVC"], category: "Dyer" },
-  { id: "s4", name: "Rrëshqitëse Smart-Slide (shembull)", brand: "Aluplast", material: "PVC", badges: ["PVC", "SMART"], category: "Rrëshq." },
-  { id: "s5", name: "Rrëshqitëse HST 85 Lift & Slide (shembull)", brand: "Salamander", material: "PVC", badges: ["PVC", "HST"], category: "Rrëshq." },
-  { id: "s6", name: "Dritare/Derë ALU 70 me urë termike (shembull)", brand: "Aluplast", material: "ALU-TERMIK", badges: ["ALU-TERMIK"], category: "Dritare" },
-];
-
-export const profilePriceRows = [
-  { id: "pp1", profile: "Ram (Kasa)", code: "RAM-70", white: 6.2, whiteColor: 8.1, colorColor: 9.4 },
-  { id: "pp2", profile: "Krah", code: "KRH-70", white: 7.0, whiteColor: 9.2, colorColor: 10.8 },
-  { id: "pp3", profile: "T-Shtyllë", code: "TSH-70", white: 7.6, whiteColor: 9.9, colorColor: 11.5 },
-  { id: "pp4", profile: "Adapter", code: "ADP-70", white: 3.1, whiteColor: 4.0, colorColor: 4.7 },
-];
-
-export const metals: CatalogRow[] = [
-  { id: "m1", name: "Metal për PVC 70mm", brand: "Metal Standard", price: 3.2 },
-  { id: "m2", name: "Metal për PVC 82mm", brand: "Metal Standard", price: 3.8 },
-  { id: "m3", name: "Metal për Dyer 70mm", brand: "Metal Standard", price: 4.5 },
-];
-
-export const armingRows = [
-  { id: "ar1", component: "Armim Ram", code: "AR-RAM", price: 3.2 },
-  { id: "ar2", component: "Armim Krah", code: "AR-KRH", price: 3.6 },
-  { id: "ar3", component: "Armim T-Shtyllë", code: "AR-TSH", price: 4.1 },
-  { id: "ar4", component: "Armim Adapter", code: "AR-ADP", price: 1.9 },
-];
-
-export const glass: CatalogRow[] = [
-  { id: "g1", name: "Dopjo Low-E 4-16-4", brand: "Guardian", extra: "Termoizolues, Ug 1.1", price: 34.0, photo: true },
-  { id: "g2", name: "Trepjo Low-E 4-14-4-14-4", brand: "Sisecam", extra: "Ug 0.6, akustik", price: 58.5, photo: true },
-];
-
-export const panels: CatalogRow[] = [
-  { id: "p1", name: "Panel dekorativ Klasik", brand: "Panel Brand A", price: 120.0, photo: true },
-  { id: "p2", name: "Panel modern i lëmuar", brand: "Panel Brand B", price: 165.0, photo: true },
-];
-
-export const expansions = [
-  { id: "e1", name: "Shtesë 20mm", brand: "Expansion Brand A", widthMm: 20, price: 2.4 },
-  { id: "e2", name: "Shtesë 40mm", brand: "Expansion Brand A", widthMm: 40, price: 3.6 },
-];
-
-export const roletaVersions = [
-  { id: "r1", name: "E Bardhë", pricePerM2: 45.0 },
-  { id: "r2", name: "Antracit", pricePerM2: 52.0 },
-];
-
-export const doorModels = [
-  { id: "dm1", name: "Model Lira", mode: "FIKS" as const, basePrice: 620.0 },
-  { id: "dm2", name: "Model Onyx", mode: "TABELË" as const, basePrice: 780.0 },
-  { id: "dm3", name: "Model Terra", mode: "FIKS" as const, basePrice: 540.0 },
-];
-
-export const accessoryParams: Record<string, string> = {
-  "Dorezë (copë) — vetëm dritare": "4.50",
-  "Llajsne bardhë (€/m)": "0.80",
-  "Llajsne color (€/m)": "1.20",
-  "Lidhëse T-shtylle (copë)": "2.10",
-  "Pragu (copë)": "18.00",
-  "Doreza (copë)": "12.50",
-  "Bravë / mekanizmi i mbylljes (copë)": "22.00",
-  "Menteshat (për copë)": "3.40",
-};
-
-export const productionParams: Record<string, string> = {
-  "Humbja e saldimit në çmim (%)": "3",
-  "Humbja e prerjes ALU (%)": "",
-  "Gjatësia e profilit (m)": "6.5",
-  "Gjatësia e metalit (m)": "6",
-  "Shtesa e saldimit për skaj (mm)": "3",
-  "Trashësia e diskut të sharrës (mm)": "4",
-  "Pastrim skajesh për shufër (mm)": "10",
-  "Mbetja min. e shfrytëzueshme (mm)": "300",
-  "Tarifa e punës (€/h)": "12",
-  "Minuta pune për element (min)": "25",
-  "Shpenzimet e përgjithshme (%)": "8",
-};
+// Pricing seed data now lives in the shared domain layer as the canonical
+// server-side default catalog (src/domain/pricing/defaults.ts). These exports
+// re-slice that ONE source so the store's pre-hydration mirror, the window-calc
+// unit tests, and a new organization's DB version 1 all use identical numbers.
+const defaultPricing = defaultPricingCatalog();
+export const pricingSystems: PricingSystem[] = defaultPricing.systems;
+export const profilePriceRows = defaultPricing.profilePriceRows;
+export const metals: CatalogRow[] = defaultPricing.metals;
+export const armingRows = defaultPricing.armingRows;
+export const glass: CatalogRow[] = defaultPricing.glass;
+export const panels: CatalogRow[] = defaultPricing.panels;
+export const expansions = defaultPricing.expansions;
+export const roletaVersions = defaultPricing.roletaVersions;
+export const doorModels = defaultPricing.doorModels;
+export const accessoryParams: Record<string, string> = defaultPricing.accessoryParams;
+export const productionParams: Record<string, string> = defaultPricing.productionParams;
 
 // Sample offer used for the "Dizajni i Ofertës" PDF previews
 export const sampleOffer = {

@@ -301,6 +301,13 @@ export function validateConfig(config: WindowConfig): ConfigIssue[] {
   return issues;
 }
 
+// Monotonic version of the pricing CALCULATION contract implemented by
+// computePrice()/computeMaterials() below (constants, formulas, geometry). It is
+// persisted alongside each server pricing version so Phase 6 can record which
+// calc contract produced a stored monetary value and reproduce it exactly. Bump
+// this ONLY when the calculation behaviour deliberately changes.
+export const PRICING_CALCULATION_VERSION = 1;
+
 export function computePrice(config: WindowConfig, pricing: Pricing): number {
   if (config.manualPrice && config.manualPrice > 0) return round2(config.manualPrice);
 
