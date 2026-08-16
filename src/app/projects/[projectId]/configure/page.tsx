@@ -12,6 +12,14 @@ import { useStore } from "@/lib/store";
 import { eur, initials } from "@/lib/format";
 import { projectNet } from "@/domain/finance/selectors";
 import { printOffer } from "@/lib/print";
+import {
+  updateProject,
+  setProjectStatus,
+  addProjectItem,
+  updateProjectItem,
+  deleteProjectItem,
+  setProjectOption,
+} from "@/server/actions/project.action";
 import { useApp } from "@/components/providers/providers";
 import { cn } from "@/lib/utils";
 import type { OfferItem, OfferStatus, ProductType } from "@/domain/types";
@@ -47,12 +55,6 @@ export default function ConfigurePage({
 
   const project = useStore((s) => s.projects.find((p) => p.id === projectId));
   const company = useStore((s) => s.company);
-  const updateProject = useStore((s) => s.updateProject);
-  const setStatus = useStore((s) => s.setProjectStatus);
-  const addItem = useStore((s) => s.addProjectItem);
-  const updateItem = useStore((s) => s.updateProjectItem);
-  const removeItem = useStore((s) => s.removeProjectItem);
-  const setOption = useStore((s) => s.setProjectOption);
 
   const [step, setStep] = useState<Step>(() => stepFromParam(query.step) ?? "produkti");
   const [configuring, setConfiguring] = useState<null | "new" | string>(null);
@@ -77,14 +79,53 @@ export default function ConfigurePage({
   const openAdd = () => { setTypeMenu(true); };
   const pickType = (pt: ProductType) => { setNewType(pt); setConfiguring("new"); setTypeMenu(false); };
   const openEdit = (it: OfferItem) => { setConfiguring(it.id); };
-  const saveProduct = (data: Omit<OfferItem, "id">, id?: string) => {
-    if (id) { updateItem(project.id, id, data); toast("Produkti u përditësua."); }
-    else { addItem(project.id, data); toast("Produkti u shtua."); }
+
+  // Item saves go through the server, which recomputes the AUTHORITATIVE price
+  // from the config + the org's active pricing (the browser price is ignored).
+  const saveProduct = async (data: Omit<OfferItem, "id">, id?: string) => {
+    if (!data.config) { toast("Konfigurim i pavlefshëm."); return; }
+    const res = id
+      ? await updateProjectItem({ projectId: project.id, itemId: id, config: data.config, qty: data.qty })
+      : await addProjectItem({ projectId: project.id, config: data.config, qty: data.qty });
+    if (!res.ok) {
+      if (res.error.code === "CONFLICT") { toast("Çmimorja u përditësua ndërkohë — rishikoni çmimin."); router.refresh(); return; }
+      toast(res.error.message);
+      return;
+    }
+    toast(id ? "Produkti u përditësua." : "Produkti u shtua.");
     setConfiguring(null);
+    router.refresh();
   };
   const removeProduct = async (it: OfferItem) => {
     const ok = await confirm({ title: "Hiq produktin?", message: `“${it.label}” do të hiqet nga oferta.`, confirmLabel: "Hiq", danger: true });
-    if (ok) { removeItem(project.id, it.id); toast("Produkti u hoq."); }
+    if (!ok) return;
+    const res = await deleteProjectItem({ projectId: project.id, itemId: it.id });
+    if (!res.ok) { toast(res.error.message); return; }
+    toast("Produkti u hoq.");
+    router.refresh();
+  };
+  // Project detail edits (all server-backed; the mirror refreshes after each).
+  const saveDetails = async (patch: { profileSystem?: string; profileColor?: string }) => {
+    const res = await updateProject({
+      id: project.id,
+      title: project.title,
+      vatRate: project.vatRate,
+      profileSystem: patch.profileSystem ?? project.profileSystem,
+      profileColor: patch.profileColor ?? project.profileColor,
+    });
+    if (!res.ok) { toast(res.error.message); return; }
+    router.refresh();
+  };
+  const changeStatus = async (status: OfferStatus) => {
+    const res = await setProjectStatus({ id: project.id, status });
+    if (!res.ok) { toast(res.error.message); return; }
+    toast(status === "Pranuar" ? "Oferta u shënua e pranuar." : "Statusi u përditësua.");
+    router.refresh();
+  };
+  const changeOption = async (key: string, value: boolean) => {
+    const res = await setProjectOption({ id: project.id, key, value });
+    if (!res.ok) { toast(res.error.message); return; }
+    router.refresh();
   };
   const changeStep = (next: Step) => {
     setStep(next);
@@ -136,17 +177,17 @@ export default function ConfigurePage({
               <div className="text-xs font-semibold tracking-wide text-slate-400 uppercase">Profili</div>
               <label className="block">
                 <span className="text-sm text-slate-400">Sistemi i profilit</span>
-                <input value={project.profileSystem} onChange={(e) => updateProject(project.id, { profileSystem: e.target.value })}
+                <input defaultValue={project.profileSystem} onBlur={(e) => { if (e.target.value !== project.profileSystem) saveDetails({ profileSystem: e.target.value }); }}
                   className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500" />
               </label>
               <label className="block">
                 <span className="text-sm text-slate-400">Ngjyra e profilit</span>
-                <input value={project.profileColor} onChange={(e) => updateProject(project.id, { profileColor: e.target.value })}
+                <input defaultValue={project.profileColor} onBlur={(e) => { if (e.target.value !== project.profileColor) saveDetails({ profileColor: e.target.value }); }}
                   className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500" />
               </label>
               <label className="block">
                 <span className="text-sm text-slate-400">Statusi i ofertës</span>
-                <select value={project.status} onChange={(e) => setStatus(project.id, e.target.value as OfferStatus)}
+                <select value={project.status} onChange={(e) => changeStatus(e.target.value as OfferStatus)}
                   className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500">
                   {(["Draft", "Dërguar", "Pranuar", "Refuzuar"] as OfferStatus[]).map((s) => <option key={s}>{s}</option>)}
                 </select>
@@ -230,7 +271,7 @@ export default function ConfigurePage({
                 {OPTIONS.map((o) => (
                   <div key={o} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-100 px-5 py-4">
                     <span className="font-semibold text-slate-900">{o}</span>
-                    <Toggle checked={!!project.options?.[o]} onChange={(v) => setOption(project.id, o, v)} label={o} />
+                    <Toggle checked={!!project.options?.[o]} onChange={(v) => changeOption(o, v)} label={o} />
                   </div>
                 ))}
               </div>
@@ -240,7 +281,7 @@ export default function ConfigurePage({
               <Button variant="outline" onClick={() => printOffer(project, company)}><FileDown className="size-4" /> Oferta finale (PDF)</Button>
               <Button variant="outline" onClick={() => printOffer(project, company)}><Printer className="size-4" /> Shiko ofertën</Button>
               {project.status !== "Pranuar" ? (
-                <Button onClick={() => { setStatus(project.id, "Pranuar"); toast("Oferta u shënua e pranuar."); }}><Check className="size-4" /> Shëno e pranuar</Button>
+                <Button onClick={() => changeStatus("Pranuar")}><Check className="size-4" /> Shëno e pranuar</Button>
               ) : (
                 <Button variant="subtle" disabled><Check className="size-4" /> E pranuar</Button>
               )}

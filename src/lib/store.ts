@@ -10,8 +10,6 @@ import type {
   Note,
   User,
   AppNotification,
-  OfferItem,
-  OfferStatus,
   InvoiceStatus,
   CompanyProfile,
 } from "@/domain/types";
@@ -73,7 +71,11 @@ function seedData(): DataSlice {
     // read-only MIRROR of the active org's clients, hydrated from the server by
     // <ClientsHydrator>. It seeds empty and is never written locally.
     clients: [],
-    projects: structuredClone(seed.projects),
+    // Projects are DB-backed (Phase 6). Like clients, the store keeps a
+    // NON-persisted, read-only MIRROR of the active org's projects, hydrated from
+    // the server by <ProjectsHydrator>. It seeds empty and is never written
+    // locally (all writes go through the project server actions).
+    projects: [],
     invoices: structuredClone(seed.invoices),
     payments: structuredClone(seed.payments),
     notes: structuredClone(seed.notes),
@@ -114,17 +116,12 @@ interface StoreState extends DataSlice {
   // deliberately NO local add/update/delete (no dual-write).
   setClients: (clients: Client[]) => void;
 
-  // projects
-  addProject: (data: Omit<Project, "id" | "number" | "createdAt"> & { createdAt?: string }) => string;
-  updateProject: (id: string, patch: Partial<Project>) => void;
-  setProjectStatus: (id: string, status: OfferStatus) => void;
-  archiveProject: (id: string, archived: boolean) => void;
-  deleteProject: (id: string) => void;
-  addProjectItem: (pid: string, item: Omit<OfferItem, "id">) => void;
-  updateProjectItem: (pid: string, itemId: string, patch: Partial<OfferItem>) => void;
-  removeProjectItem: (pid: string, itemId: string) => void;
-  duplicateProjectItem: (pid: string, itemId: string) => void;
-  setProjectOption: (pid: string, key: string, value: boolean) => void;
+  // projects — DB-backed (Phase 6). The store holds only a read-only mirror; all
+  // writes go through the server actions in src/server/actions/project.action.ts.
+  // setProjects is hydration/mirror-only (no local authority, no dual-write),
+  // mirroring setClients/setPricing. There is deliberately NO local add/update/
+  // delete for projects or their items.
+  setProjects: (projects: Project[]) => void;
 
   // invoices
   addInvoice: (data: Omit<Invoice, "id" | "number">) => string;
@@ -193,64 +190,8 @@ export const useStore = create<StoreState>()(
       // Hydration only: replace the read-only mirror with the server's clients.
       setClients: (clients) => set({ clients }),
 
-      addProject: (data) => {
-        const id = uid();
-        const number = nextNumber("PRJ", get().projects);
-        const project: Project = {
-          id,
-          number,
-          createdAt: data.createdAt ?? todayIso(),
-          ...data,
-        };
-        set((s) => ({ projects: [project, ...s.projects] }));
-        return id;
-      },
-      updateProject: (id, patch) =>
-        set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
-      setProjectStatus: (id, status) =>
-        set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, status } : p)) })),
-      archiveProject: (id, archived) =>
-        set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, archived } : p)) })),
-      deleteProject: (id) => set((s) => ({ projects: s.projects.filter((p) => p.id !== id) })),
-      addProjectItem: (pid, item) =>
-        set((s) => ({
-          projects: s.projects.map((p) =>
-            p.id === pid ? { ...p, items: [...p.items, { ...item, id: uid() }] } : p,
-          ),
-        })),
-      updateProjectItem: (pid, itemId, patch) =>
-        set((s) => ({
-          projects: s.projects.map((p) =>
-            p.id === pid
-              ? { ...p, items: p.items.map((it) => (it.id === itemId ? { ...it, ...patch } : it)) }
-              : p,
-          ),
-        })),
-      removeProjectItem: (pid, itemId) =>
-        set((s) => ({
-          projects: s.projects.map((p) =>
-            p.id === pid ? { ...p, items: p.items.filter((it) => it.id !== itemId) } : p,
-          ),
-        })),
-      duplicateProjectItem: (pid, itemId) =>
-        set((s) => ({
-          projects: s.projects.map((p) => {
-            if (p.id !== pid) return p;
-            const it = p.items.find((x) => x.id === itemId);
-            if (!it) return p;
-            const idx = p.items.findIndex((x) => x.id === itemId);
-            const copy = { ...it, id: uid() };
-            const items = [...p.items];
-            items.splice(idx + 1, 0, copy);
-            return { ...p, items };
-          }),
-        })),
-      setProjectOption: (pid, key, value) =>
-        set((s) => ({
-          projects: s.projects.map((p) =>
-            p.id === pid ? { ...p, options: { ...(p.options ?? {}), [key]: value } } : p,
-          ),
-        })),
+      // Hydration only: replace the read-only mirror with the server's projects.
+      setProjects: (projects) => set({ projects }),
 
       addInvoice: (data) => {
         const id = uid();
@@ -403,6 +344,10 @@ export const useStore = create<StoreState>()(
         // server after mount.
         merged.clients = [];
         merged.pricing = base.pricing;
+        // Projects (Phase 6) are DB-backed too — ignore anything an OLD persisted
+        // store still carries so stale localStorage can never re-become an
+        // authoritative source; they are re-hydrated from the server after mount.
+        merged.projects = [];
         if (fromVersion < 2 && Array.isArray(merged.invoices)) {
           // v1 invoices had no projectId — nothing to backfill, just normalise.
           merged.invoices = merged.invoices.map((inv) => ({ ...inv }));
@@ -412,15 +357,16 @@ export const useStore = create<StoreState>()(
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
       partialize: (s) => {
-        // NOTE: clients (Phase 4) and pricing (Phase 5) are intentionally
-        // EXCLUDED — they live in Postgres, not localStorage. Persisting them
-        // would recreate a stale local source of truth and let clearing
-        // localStorage "delete" server data. Both are server-hydrated at runtime.
+        // NOTE: clients (Phase 4), pricing (Phase 5) and projects (Phase 6) are
+        // intentionally EXCLUDED — they live in Postgres, not localStorage.
+        // Persisting them would recreate a stale local source of truth and let
+        // clearing localStorage "delete" server data. All three are
+        // server-hydrated at runtime.
         const {
-          projects, invoices, payments, notes, users,
+          invoices, payments, notes, users,
           notifications, company, selectedDesignId, guideDone, uiDismissals,
         } = s;
-        return { projects, invoices, payments, notes, users, notifications, company, selectedDesignId, guideDone, uiDismissals };
+        return { invoices, payments, notes, users, notifications, company, selectedDesignId, guideDone, uiDismissals };
       },
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

@@ -8,6 +8,7 @@ import { NewProjectModal } from "@/components/projects/new-project-modal";
 import { useStore } from "@/lib/store";
 import { eur, shortDate } from "@/lib/format";
 import { projectTotal } from "@/domain/finance/selectors";
+import { archiveProject, deleteProject } from "@/server/actions/project.action";
 import { useApp } from "@/components/providers/providers";
 import type { Project, OfferStatus } from "@/domain/types";
 
@@ -22,8 +23,6 @@ export default function ProjectsPage() {
   const router = useRouter();
   const { toast, confirm } = useApp();
   const projects = useStore((s) => s.projects);
-  const archiveProject = useStore((s) => s.archiveProject);
-  const deleteProject = useStore((s) => s.deleteProject);
 
   const [q, setQ] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -45,21 +44,30 @@ export default function ProjectsPage() {
   }, [projects, q, showArchived, status]);
 
   const toggleArchive = async (p: Project) => {
-    archiveProject(p.id, !p.archived);
+    const res = await archiveProject({ id: p.id, archived: !p.archived });
+    if (!res.ok) {
+      toast(res.error.message);
+      return;
+    }
     toast(p.archived ? "Projekti u kthye nga arkivi." : "Projekti u arkivua.");
+    router.refresh();
   };
 
   const remove = async (p: Project) => {
     const ok = await confirm({
       title: "Fshi projektin?",
-      message: `“${p.number} · ${p.title}” do të fshihet lokalisht. Ky veprim nuk kthehet.`,
+      message: `“${p.number} · ${p.title}” do të fshihet. Ky veprim nuk kthehet.`,
       confirmLabel: "Fshi",
       danger: true,
     });
-    if (ok) {
-      deleteProject(p.id);
-      toast("Projekti u fshi.");
+    if (!ok) return;
+    const res = await deleteProject({ id: p.id });
+    if (!res.ok) {
+      toast(res.error.message);
+      return;
     }
+    toast("Projekti u fshi.");
+    router.refresh();
   };
 
   return (

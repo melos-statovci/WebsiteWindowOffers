@@ -7,6 +7,7 @@ import { Modal } from "@/components/ui/overlay";
 import { Button, Field, Input, Label } from "@/components/ui/kit";
 import { useStore } from "@/lib/store";
 import { createClient } from "@/server/actions/client.action";
+import { createProject } from "@/server/actions/project.action";
 import { useApp } from "@/components/providers/providers";
 import { cn } from "@/lib/utils";
 import type { ClientType } from "@/domain/types";
@@ -19,7 +20,6 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
   const clients = useStore((s) => s.clients);
   const systems = useStore((s) => s.pricing.systems);
   const company = useStore((s) => s.company);
-  const addProject = useStore((s) => s.addProject);
   const [busy, setBusy] = useState(false);
 
   const [step, setStep] = useState<"choose" | "existing" | "new">("choose");
@@ -45,21 +45,30 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
     }
   }, [open, clients, systems]);
 
-  const create = (finalClientId: string, finalClientName: string) => {
-    const id = addProject({
-      title: title.trim() || "Projekt i ri",
+  // Projects are DB-backed (Phase 6): create via the server action, which
+  // generates the tenant-safe number and computes nothing monetary here. The
+  // configurator route re-hydrates the projects mirror, so the new project is
+  // visible immediately after navigation.
+  const create = async (finalClientId: string) => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    const res = await createProject({
       clientId: finalClientId,
-      clientName: finalClientName,
-      status: "Draft",
-      archived: false,
-      items: [],
-      profileSystem: system || "Dritare PVC 70 mm (shembull)",
+      title: title.trim() || "Projekt i ri",
+      profileSystem: system || "",
       profileColor: color,
       vatRate: company.vatDefault / 100,
+      status: "Draft",
     });
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error.fieldErrors?.title?.[0] ?? res.error.message);
+      return;
+    }
     toast("Projekti u krijua.");
     onClose();
-    router.push(`/projects/${id}/configure?step=detajet`);
+    router.push(`/projects/${res.data.id}/configure?step=detajet`);
   };
 
   const submitExisting = () => {
@@ -68,13 +77,12 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
       setError("Zgjidhni një klient.");
       return;
     }
-    create(c.id, c.name);
+    void create(c.id);
   };
 
-  // Client creation is now DB-backed: create the tenant client via the server
-  // action, then create the local project referencing its server-generated UUID.
-  // (Projects remain local this phase; navigating to the project re-fetches the
-  // clients mirror so the new client appears in pickers.)
+  // Client creation is DB-backed: create the tenant client via its server action,
+  // then create the project referencing its server-generated UUID (the composite
+  // FK guarantees the client belongs to this org).
   const submitNew = async () => {
     if (busy) return;
     const name = newName.trim();
@@ -85,12 +93,13 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
     setBusy(true);
     setError("");
     const res = await createClient({ name, type: newType });
-    setBusy(false);
     if (!res.ok) {
+      setBusy(false);
       setError(res.error.fieldErrors?.name?.[0] ?? res.error.message);
       return;
     }
-    create(res.data.id, name);
+    setBusy(false);
+    await create(res.data.id);
   };
 
   return (
