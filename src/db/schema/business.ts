@@ -18,9 +18,12 @@ import {
   index,
   unique,
   uniqueIndex,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { PricingCatalog } from "@/domain/pricing/types";
+import type { WindowConfig } from "@/domain/types";
+import type { ProjectItemCalcSnapshot } from "@/domain/configurator/calc-snapshot";
 import { organization } from "../auth-schema";
 
 export const organizationProfiles = pgTable("organization_profiles", {
@@ -134,6 +137,10 @@ export const priceLists = pgTable(
   },
   (table) => [
     unique("price_lists_org_version_uidx").on(table.organizationId, table.version),
+    // Redundant for uniqueness (id is already the PK) but lets a Project Item
+    // carry a composite FK (organization_id, price_list_id) -> price_lists so a
+    // stored item can NEVER reference another organization's pricing version.
+    unique("price_lists_org_id_uidx").on(table.organizationId, table.id),
     // At most one active version per organization. Partial index -> only rows
     // with is_active = true participate, so historical (inactive) versions never
     // collide. Combined with the save transaction this yields EXACTLY one active.
@@ -141,5 +148,133 @@ export const priceLists = pgTable(
       .on(table.organizationId)
       .where(sql`${table.isActive}`),
     index("price_lists_org_idx").on(table.organizationId),
+  ],
+);
+
+// Projects (a.k.a. Offers) — tenant-owned business records migrated from
+// localStorage in Phase 6. Directly org-owned (organization_id is the RLS tenant
+// key). The Client relationship is DB-enforced same-tenant via a COMPOSITE FK
+// (organization_id, client_id) -> clients(organization_id, id): Org A can never
+// reference Org B's client even if application code is buggy. Client delete is
+// blocked while projects exist (NO ACTION, the FK default) rather than RESTRICT,
+// so a real client-delete with offers fails, yet deleting the whole organization
+// still cascades (org CASCADE removes projects AND clients in one statement, and
+// NO ACTION is satisfied once the projects are gone).
+//
+// Monetary totals are NOT stored: projectNet/projectTotal are DERIVED from the
+// items (see src/domain/finance/selectors.ts). Only per-item authoritative
+// unit_price lives in the DB. vat_rate is the 0..1 fraction the offer was priced
+// at. number is the human-readable PRJ-YYYY-NNN, unique per org.
+export const projects = pgTable(
+  "projects",
+  {
+    id: uuid("id")
+      .default(sql`gen_random_uuid()`)
+      .primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    clientId: uuid("client_id").notNull(),
+    // Human-readable offer number, unique per org (PRJ-YYYY-NNN).
+    number: text("number").notNull(),
+    title: text("title").notNull(),
+    // OfferStatus: 'Draft' | 'Dërguar' | 'Pranuar' | 'Refuzuar' (validated at the
+    // action boundary).
+    status: text("status").notNull().default("Draft"),
+    archived: boolean("archived").notNull().default(false),
+    profileSystem: text("profile_system").notNull().default(""),
+    profileColor: text("profile_color").notNull().default(""),
+    // Offer VAT fraction (0..1), e.g. 0.18. Priced-at rate for this offer.
+    vatRate: numeric("vat_rate", { precision: 5, scale: 4 }).notNull().default("0"),
+    // Record<string, boolean> of toggle options (Marzha, Zbritje, TVSH, ...).
+    options: jsonb("options").notNull().default({}),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    // Lets project_items carry a composite (organization_id, project_id) FK.
+    unique("projects_org_id_uidx").on(table.organizationId, table.id),
+    // Tenant-safe human-readable numbering: monotonic/unique per org.
+    unique("projects_org_number_uidx").on(table.organizationId, table.number),
+    // Same-tenant Client relationship, DB-enforced. Default ON DELETE NO ACTION:
+    // blocks deleting a client that still has projects, but org-delete cascade
+    // (which removes both) still succeeds.
+    foreignKey({
+      name: "projects_org_client_fk",
+      columns: [table.organizationId, table.clientId],
+      foreignColumns: [clients.organizationId, clients.id],
+    }),
+    index("projects_org_idx").on(table.organizationId),
+    index("projects_org_client_idx").on(table.organizationId, table.clientId),
+    index("projects_org_status_idx").on(table.organizationId, table.status),
+  ],
+);
+
+// Project Items — the configured offer line items (one per configured product).
+// Directly org-owned AND tenant-linked to their parent Project by a COMPOSITE FK
+// (organization_id, project_id) -> projects(organization_id, id) ON DELETE
+// CASCADE, so an item can never attach to another org's project and deleting a
+// project removes its items. The pricing provenance is likewise tenant-safe: a
+// composite FK (organization_id, price_list_id) -> price_lists(organization_id,
+// id) makes it impossible to reference another org's pricing version.
+//
+// unit_price is SERVER-AUTHORITATIVE: computed on save via the shared
+// computePrice(config, catalog) using the org's active price_lists version. The
+// browser never supplies it. price_list_id + price_list_version pin the exact
+// immutable catalog used; calculation_version pins the algorithm; calc_snapshot
+// stores the server-generated materials/intermediates so the price is
+// reproducible/explainable later without duplicating the whole catalog.
+export const projectItems = pgTable(
+  "project_items",
+  {
+    id: uuid("id")
+      .default(sql`gen_random_uuid()`)
+      .primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id").notNull(),
+    // OfferItem.kind: 'Dritare' | 'Derë' | 'Rrëshqitëse' | 'Roletë'.
+    kind: text("kind").notNull(),
+    label: text("label").notNull(),
+    widthMm: integer("width_mm").notNull(),
+    heightMm: integer("height_mm").notNull(),
+    qty: integer("qty").notNull().default(1),
+    // Server-authoritative unit price in EUR.
+    unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
+    // Full WindowConfig (validated at the action boundary before insert).
+    config: jsonb("config").$type<WindowConfig>().notNull(),
+    // Immutable pricing version used to compute unit_price.
+    priceListId: uuid("price_list_id").notNull(),
+    priceListVersion: integer("price_list_version").notNull(),
+    // PRICING_CALCULATION_VERSION at compute time.
+    calculationVersion: integer("calculation_version").notNull().default(1),
+    // Server-generated snapshot (materials + key intermediates + pricing meta).
+    calcSnapshot: jsonb("calc_snapshot").$type<ProjectItemCalcSnapshot>().notNull(),
+    // Stable display order within a project (append-on-add). Avoids relying on
+    // insertion timestamp for ordering.
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "project_items_org_project_fk",
+      columns: [table.organizationId, table.projectId],
+      foreignColumns: [projects.organizationId, projects.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "project_items_org_price_list_fk",
+      columns: [table.organizationId, table.priceListId],
+      foreignColumns: [priceLists.organizationId, priceLists.id],
+    }),
+    index("project_items_org_idx").on(table.organizationId),
+    index("project_items_org_project_idx").on(table.organizationId, table.projectId),
   ],
 );

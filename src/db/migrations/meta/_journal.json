@@ -64,6 +64,13 @@
       "when": 1786570144497,
       "tag": "0008_grant_price_lists_to_app_role",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786629659711,
+      "tag": "0009_projects_offers_and_items",
+      "breakpoints": true
     }
   ]
 }
