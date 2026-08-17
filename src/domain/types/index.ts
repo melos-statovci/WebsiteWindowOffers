@@ -142,6 +142,29 @@ export interface InvoiceClientSnapshot {
   phone?: string;
 }
 
+/**
+ * Point-in-time snapshot of the ISSUER (our organization) frozen onto an invoice
+ * at creation. Re-printing a historical invoice must not silently adopt the org's
+ * later address / bank / fiscal details. Sourced server-side from the authoritative
+ * organization identity (organization.name + organization_profiles) — never the
+ * browser. Captures exactly the fields the printed/on-screen invoice renders plus
+ * the standard legal fiscal identifiers. All optional so a legacy pre-snapshot row
+ * ({}) degrades gracefully to the live profile.
+ */
+export interface InvoiceCompanySnapshot {
+  name?: string;
+  address?: string;
+  city?: string;
+  postalCode?: string;
+  phone?: string;
+  email?: string;
+  nui?: string;
+  vatNo?: string;
+  bank?: string;
+  swift?: string;
+  iban?: string;
+}
+
 export interface Invoice {
   id: string;
   number: string; // FAT-2026-001
@@ -156,6 +179,8 @@ export interface Invoice {
   status: InvoiceStatus;
   lines: InvoiceLine[];
   vatRate: number;
+  /** Frozen issuer identity for historical print stability (see InvoiceCompanySnapshot). */
+  companySnapshot?: InvoiceCompanySnapshot;
 }
 
 export interface Payment {

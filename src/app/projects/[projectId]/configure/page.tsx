@@ -74,11 +74,15 @@ export default function ConfigurePage({
 
   const net = projectNet(project);
   const vat = net * project.vatRate;
+  // Accepted offers are FROZEN server-side (RULE_VIOLATION on value edits). Reflect
+  // that in the UI: hide value-changing controls and offer an explicit Reopen.
+  const locked = project.status === "Pranuar";
+  const reopen = () => changeStatus("Dërguar");
 
   const editingItem = configuring && configuring !== "new" ? project.items.find((i) => i.id === configuring) ?? null : null;
-  const openAdd = () => { setTypeMenu(true); };
+  const openAdd = () => { if (locked) return; setTypeMenu(true); };
   const pickType = (pt: ProductType) => { setNewType(pt); setConfiguring("new"); setTypeMenu(false); };
-  const openEdit = (it: OfferItem) => { setConfiguring(it.id); };
+  const openEdit = (it: OfferItem) => { if (locked) return; setConfiguring(it.id); };
 
   // Item saves go through the server, which recomputes the AUTHORITATIVE price
   // from the config + the org's active pricing (the browser price is ignored).
@@ -177,14 +181,15 @@ export default function ConfigurePage({
               <div className="text-xs font-semibold tracking-wide text-slate-400 uppercase">Profili</div>
               <label className="block">
                 <span className="text-sm text-slate-400">Sistemi i profilit</span>
-                <input defaultValue={project.profileSystem} onBlur={(e) => { if (e.target.value !== project.profileSystem) saveDetails({ profileSystem: e.target.value }); }}
-                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500" />
+                <input defaultValue={project.profileSystem} disabled={locked} onBlur={(e) => { if (e.target.value !== project.profileSystem) saveDetails({ profileSystem: e.target.value }); }}
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500 disabled:opacity-60" />
               </label>
               <label className="block">
                 <span className="text-sm text-slate-400">Ngjyra e profilit</span>
-                <input defaultValue={project.profileColor} onBlur={(e) => { if (e.target.value !== project.profileColor) saveDetails({ profileColor: e.target.value }); }}
-                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500" />
+                <input defaultValue={project.profileColor} disabled={locked} onBlur={(e) => { if (e.target.value !== project.profileColor) saveDetails({ profileColor: e.target.value }); }}
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500 disabled:opacity-60" />
               </label>
+              {locked && <p className="text-[11px] text-emerald-700">Oferta e pranuar është e kyçur. Ndryshoni statusin në “Dërguar” për ta rihapur.</p>}
               <label className="block">
                 <span className="text-sm text-slate-400">Statusi i ofertës</span>
                 <select value={project.status} onChange={(e) => changeStatus(e.target.value as OfferStatus)}
@@ -221,23 +226,34 @@ export default function ConfigurePage({
             </div>
           ) : (
             <div className="relative">
-              <ProductListHeader count={project.items.length} onNext={() => changeStep("permbledhje")} onAdd={openAdd} />
-              {typeMenu && <ProductTypeMenu onPick={pickType} onClose={() => setTypeMenu(false)} />}
+              <ProductListHeader count={project.items.length} locked={locked} onNext={() => changeStep("permbledhje")} onAdd={openAdd} />
+              {!locked && typeMenu && <ProductTypeMenu onPick={pickType} onClose={() => setTypeMenu(false)} />}
+              {locked && <LockedBanner onReopen={reopen} />}
               <ul className="space-y-3">
                 {project.items.map((item) => (
                   <li key={item.id} className="relative flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-100 p-3">
-                    <button onClick={() => openEdit(item)} className="grid size-16 shrink-0 place-items-center rounded-xl bg-slate-50 p-2" aria-label="Edito produktin"><WindowGlyph item={item} /></button>
-                    <button onClick={() => openEdit(item)} className="flex-1 text-left">
-                      <div className="font-semibold text-slate-900">{item.label}</div>
-                      <div className="text-sm text-slate-400">{item.widthMm} × {item.heightMm} mm · {item.qty} copë</div>
-                      <div className="font-heading font-semibold text-slate-900">{eur(item.qty * item.unitPrice)}</div>
-                    </button>
-                    <button onClick={() => openEdit(item)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-200/60">
-                      <Pencil className="size-4" /> Edito
-                    </button>
-                    <button onClick={() => removeProduct(item)} className="grid size-9 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-500" aria-label="Hiq produktin">
-                      <Trash2 className="size-4" />
-                    </button>
+                    <div className="grid size-16 shrink-0 place-items-center rounded-xl bg-slate-50 p-2"><WindowGlyph item={item} /></div>
+                    {locked ? (
+                      <div className="flex-1">
+                        <div className="font-semibold text-slate-900">{item.label}</div>
+                        <div className="text-sm text-slate-400">{item.widthMm} × {item.heightMm} mm · {item.qty} copë</div>
+                        <div className="font-heading font-semibold text-slate-900">{eur(item.qty * item.unitPrice)}</div>
+                      </div>
+                    ) : (
+                      <>
+                        <button onClick={() => openEdit(item)} className="flex-1 text-left">
+                          <div className="font-semibold text-slate-900">{item.label}</div>
+                          <div className="text-sm text-slate-400">{item.widthMm} × {item.heightMm} mm · {item.qty} copë</div>
+                          <div className="font-heading font-semibold text-slate-900">{eur(item.qty * item.unitPrice)}</div>
+                        </button>
+                        <button onClick={() => openEdit(item)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-200/60">
+                          <Pencil className="size-4" /> Edito
+                        </button>
+                        <button onClick={() => removeProduct(item)} className="grid size-9 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-500" aria-label="Hiq produktin">
+                          <Trash2 className="size-4" />
+                        </button>
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -267,7 +283,7 @@ export default function ConfigurePage({
 
             <div>
               <div className="mb-2 px-1 text-xs font-bold tracking-widest text-slate-400 uppercase">Opsionet</div>
-              <div className="space-y-2">
+              <div className={cn("space-y-2", locked && "pointer-events-none opacity-60")}>
                 {OPTIONS.map((o) => (
                   <div key={o} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-100 px-5 py-4">
                     <span className="font-semibold text-slate-900">{o}</span>
@@ -329,7 +345,7 @@ function ProductTypeMenu({
   );
 }
 
-function ProductListHeader({ count, onNext, onAdd }: { count: number; onNext: () => void; onAdd: () => void }) {
+function ProductListHeader({ count, locked, onNext, onAdd }: { count: number; locked: boolean; onNext: () => void; onAdd: () => void }) {
   return (
     <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div>
@@ -338,8 +354,22 @@ function ProductListHeader({ count, onNext, onAdd }: { count: number; onNext: ()
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" onClick={onNext}>Vazhdo te Përmbledhja</Button>
-        <Button onClick={onAdd}><Plus className="size-4" /> Shto produkt</Button>
+        {!locked && <Button onClick={onAdd}><Plus className="size-4" /> Shto produkt</Button>}
       </div>
+    </div>
+  );
+}
+
+// Shown on an accepted (locked) offer's product list. Value edits are blocked
+// server-side; reopening returns the offer to "Dërguar" so it can be edited again.
+function LockedBanner({ onReopen }: { onReopen: () => void }) {
+  return (
+    <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-2 text-sm text-emerald-800">
+        <Check className="size-4 shrink-0" />
+        <span>Oferta është e pranuar dhe e kyçur. Rihapeni për të ndryshuar artikujt ose çmimet.</span>
+      </div>
+      <Button variant="outline" onClick={onReopen}><Undo2 className="size-4" /> Rihap ofertën</Button>
     </div>
   );
 }

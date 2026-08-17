@@ -78,6 +78,13 @@
       "when": 1786894227631,
       "tag": "0010_finance",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786989309269,
+      "tag": "0011_company_snapshot",
+      "breakpoints": true
     }
   ]
 }

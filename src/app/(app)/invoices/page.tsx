@@ -7,7 +7,7 @@ import { PageHeader, Button, Card, Badge, EmptyState } from "@/components/ui/kit
 import { InvoiceFormModal } from "@/components/invoices/invoice-form-modal";
 import { useStore } from "@/lib/store";
 import { eur, shortDate } from "@/lib/format";
-import { invoiceTotal, invoicePaid, invoiceOutstanding } from "@/domain/finance/selectors";
+import { invoiceTotal, invoicePaid, invoiceOutstanding, isOverdue } from "@/domain/finance/selectors";
 import { deleteInvoice } from "@/server/actions/invoice.action";
 import { useApp } from "@/components/providers/providers";
 import type { Invoice, InvoiceStatus } from "@/domain/types";
@@ -42,7 +42,9 @@ export default function InvoicesPage() {
       paid += invoicePaid(inv.id, payments);
       const out = invoiceOutstanding(inv, payments);
       unpaid += out;
-      if (inv.status === "Vonesë") overdue += out;
+      // Overdue is DERIVED (due date passed + still outstanding), never the stored
+      // status, so the figure can't go stale.
+      if (isOverdue(inv, payments)) overdue += out;
     }
     return { unpaid, paid, overdue };
   }, [invoices, payments]);
@@ -50,7 +52,12 @@ export default function InvoicesPage() {
   const rows = useMemo(() => {
     const query = q.trim().toLowerCase();
     return invoices.filter((inv) => {
-      if (status !== "Të gjitha statuset" && inv.status !== status) return false;
+      // "Vonesë" is a DERIVED filter (overdue now), not a stored status match.
+      if (status === "Vonesë") {
+        if (!isOverdue(inv, payments)) return false;
+      } else if (status !== "Të gjitha statuset" && inv.status !== status) {
+        return false;
+      }
       if (!query) return true;
       return (
         inv.number.toLowerCase().includes(query) ||
@@ -58,7 +65,7 @@ export default function InvoicesPage() {
         (inv.reference ?? "").toLowerCase().includes(query)
       );
     });
-  }, [invoices, q, status]);
+  }, [invoices, payments, q, status]);
 
   const remove = async (inv: Invoice) => {
     const ok = await confirm({ title: "Fshi faturën?", message: `“${inv.number}” do të fshihet përgjithmonë.`, confirmLabel: "Fshi", danger: true });
@@ -121,11 +128,17 @@ export default function InvoicesPage() {
                     <td className="px-5 py-4 text-slate-500">{inv.clientName}</td>
                     <td className="px-5 py-4 text-slate-500">{shortDate(inv.issuedAt)}</td>
                     <td className="px-5 py-4 text-slate-500">{shortDate(inv.dueAt)}</td>
-                    <td className="px-5 py-4"><Badge tone={statusTone[inv.status]}>{inv.status}</Badge></td>
+                    <td className="px-5 py-4">
+                      {isOverdue(inv, payments)
+                        ? <Badge tone="rose">Vonesë</Badge>
+                        : <Badge tone={statusTone[inv.status]}>{inv.status === "Vonesë" ? "Dërguar" : inv.status}</Badge>}
+                    </td>
                     <td className="px-5 py-4 text-right font-semibold text-slate-900">{eur(invoiceTotal(inv), { symbolAfter: true })}</td>
                     <td className="px-5 py-4">
                       <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={() => remove(inv)} className="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-400" aria-label="Fshi"><Trash2 className="size-4" /></button>
+                        {(inv.status === "Draft" || inv.status === "Anuluar") && invoicePaid(inv.id, payments) <= 0.005 && (
+                          <button onClick={() => remove(inv)} className="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-400" aria-label="Fshi"><Trash2 className="size-4" /></button>
+                        )}
                       </div>
                     </td>
                   </tr>

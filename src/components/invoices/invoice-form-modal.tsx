@@ -12,9 +12,10 @@ import { projectTotal } from "@/domain/finance/selectors";
 import { createInvoiceFromProject, createManualInvoice } from "@/server/actions/invoice.action";
 import type { InvoiceLine, InvoiceStatus } from "@/domain/types";
 
-// Statuses a new invoice may start in ("Paguar" is payment-derived, never manual).
-type SettableStatus = Exclude<InvoiceStatus, "Paguar">;
-const NEW_STATUSES: SettableStatus[] = ["Draft", "Dërguar", "Vonesë", "Anuluar"];
+// Statuses a new invoice may start in. "Paguar" (payment-derived) and "Vonesë"
+// (overdue, due-date-derived) are never set by hand.
+type SettableStatus = Exclude<InvoiceStatus, "Paguar" | "Vonesë">;
+const NEW_STATUSES: SettableStatus[] = ["Draft", "Dërguar", "Anuluar"];
 
 const addDays = (iso: string, days: number) => {
   const d = new Date(iso);

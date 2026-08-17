@@ -16,9 +16,11 @@
 
 import { z } from "zod";
 
-// Manual/settable statuses. "Paguar" (paid) is DERIVED from payments, never set
-// by hand, so it is intentionally absent here.
-export const INVOICE_SETTABLE_STATUSES = ["Draft", "Dërguar", "Vonesë", "Anuluar"] as const;
+// Manual/settable statuses. Two states are intentionally absent because they are
+// DERIVED, never set by hand: "Paguar" (from payments) and "Vonesë" (overdue =
+// issued + outstanding + due date passed, see isOverdue). Manually storing either
+// would let them go stale / disagree with the money.
+export const INVOICE_SETTABLE_STATUSES = ["Draft", "Dërguar", "Anuluar"] as const;
 
 const isoDate = z
   .string()

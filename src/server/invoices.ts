@@ -42,6 +42,7 @@ function toInvoice(row: InvoiceRow, lines: InvoiceLine[]): Invoice {
     status: row.status as InvoiceStatus,
     lines,
     vatRate: Number(row.vatRate),
+    companySnapshot: row.companySnapshot ?? undefined,
   };
 }
 

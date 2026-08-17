@@ -24,7 +24,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { PricingCatalog } from "@/domain/pricing/types";
-import type { WindowConfig, InvoiceClientSnapshot } from "@/domain/types";
+import type { WindowConfig, InvoiceClientSnapshot, InvoiceCompanySnapshot } from "@/domain/types";
 import type { ProjectItemCalcSnapshot } from "@/domain/configurator/calc-snapshot";
 import { organization } from "../auth-schema";
 
@@ -329,6 +329,13 @@ export const invoices = pgTable(
     clientName: text("client_name").notNull(),
     // Richer fiscal snapshot for the legal/printed document (name, NUI, address …).
     clientSnapshot: jsonb("client_snapshot").$type<InvoiceClientSnapshot>().notNull(),
+    // ISSUER snapshot frozen at creation (organization.name + organization_profiles)
+    // so re-printing a historical invoice never adopts the org's later details.
+    // Default '{}' lets a pre-snapshot row degrade to the live profile on print.
+    companySnapshot: jsonb("company_snapshot")
+      .$type<InvoiceCompanySnapshot>()
+      .notNull()
+      .default({}),
     // Human-readable reference to the source offer (PRJ/OF number) — a snapshot
     // string that survives even if the project link is later NULLed.
     reference: text("reference"),

@@ -78,6 +78,25 @@ export function invoiceOutstanding(
   return money(Math.max(0, invoiceTotal(inv) - invoicePaid(inv.id, payments)));
 }
 
+/**
+ * Is this invoice OVERDUE right now? DERIVED, never a stored flag, so it can never
+ * go stale: an invoice becomes overdue the moment the calendar passes its due date
+ * while it is still a receivable with an outstanding balance. Draft/cancelled
+ * invoices (not receivable) and fully-paid invoices (no outstanding) are never
+ * overdue. `dueAt` is an ISO 'YYYY-MM-DD' date, so a lexicographic compare is a
+ * correct date compare. `now` is injectable for testing.
+ */
+export function isOverdue(
+  inv: Pick<Invoice, "id" | "lines" | "vatRate" | "status" | "dueAt">,
+  payments: Payment[],
+  now: Date = new Date(),
+): boolean {
+  if (!isReceivable(inv)) return false;
+  if (invoiceOutstanding(inv, payments) <= EPS) return false;
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return inv.dueAt < today;
+}
+
 export type InvoicePaymentState =
   | "draft"
   | "cancelled"

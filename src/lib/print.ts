@@ -70,6 +70,17 @@ export function printOffer(project: Project, company: CompanyProfile): boolean {
 export function printInvoice(inv: Invoice, company: CompanyProfile): boolean {
   const net = invoiceNet(inv);
   const vat = net * inv.vatRate;
+  // Issuer identity is read from the invoice's FROZEN snapshot so re-printing a
+  // historical invoice never adopts the org's later details. Fall back to the live
+  // profile only for a legacy pre-snapshot invoice ({} snapshot).
+  const cs = inv.companySnapshot;
+  const issuer = {
+    name: cs?.name ?? company.name,
+    address: cs?.address ?? company.address,
+    nui: cs?.nui ?? company.nui,
+    bank: cs?.bank ?? company.bank,
+    iban: cs?.iban ?? company.iban,
+  };
   const rows = inv.lines
     .map(
       (l) => `<tr><td>${l.description}</td><td class="num">${l.qty}</td><td class="num">${money(l.unitPrice)}</td><td class="num">${money(l.qty * l.unitPrice)}</td></tr>`,
@@ -78,7 +89,7 @@ export function printInvoice(inv: Invoice, company: CompanyProfile): boolean {
   const body = `
   <div class="head">
     <div><h1>FATURË</h1><div class="muted">${inv.number}</div><div class="muted">Ref: ${inv.reference ?? "—"}</div></div>
-    <div class="right"><strong>${company.name}</strong><div class="muted">${company.address}</div><div class="muted">NUI ${company.nui}</div></div>
+    <div class="right"><strong>${issuer.name}</strong><div class="muted">${issuer.address}</div><div class="muted">NUI ${issuer.nui}</div></div>
   </div>
   <div><strong>Klienti:</strong> ${inv.clientName}</div>
   <div class="muted">Lëshuar: ${inv.issuedAt} · Afati: ${inv.dueAt}</div>
@@ -89,6 +100,6 @@ export function printInvoice(inv: Invoice, company: CompanyProfile): boolean {
     <div class="row"><span class="muted">TVSH (${Math.round(inv.vatRate * 100)}%)</span><span>+${money(vat)}</span></div>
     <div class="grand"><div class="row" style="padding:0"><span>TOTALI</span><span>${money(invoiceTotal(inv))}</span></div></div>
   </div>
-  <div class="terms">Pagesa: 50% paradhënie në konfirmim, 50% para montimit. · ${company.bank} · IBAN ${company.iban}</div>`;
+  <div class="terms">Pagesa: 50% paradhënie në konfirmim, 50% para montimit. · ${issuer.bank} · IBAN ${issuer.iban}</div>`;
   return openPrint(`Fatura ${inv.number}`, body);
 }

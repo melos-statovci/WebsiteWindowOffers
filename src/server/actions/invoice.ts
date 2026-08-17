@@ -15,7 +15,8 @@
 // ad-hoc invoices) but recomputes all totals server-side and validates every field.
 
 import { and, asc, eq, sql } from "drizzle-orm";
-import { invoices, invoiceLines, projects, projectItems, clients } from "@/db/schema/business";
+import { invoices, invoiceLines, projects, projectItems, clients, payments, organizationProfiles } from "@/db/schema/business";
+import { organization } from "@/db/auth-schema";
 import {
   invoiceFromProjectSchema,
   invoiceManualSchema,
@@ -25,7 +26,7 @@ import {
 import { createAction, fail } from "@/server/action";
 import { can } from "@/server/authz";
 import type { TenantTx } from "@/db/tenant";
-import type { InvoiceClientSnapshot } from "@/domain/types";
+import type { InvoiceClientSnapshot, InvoiceCompanySnapshot } from "@/domain/types";
 
 const currentYear = () => new Date().getFullYear();
 
@@ -94,6 +95,38 @@ async function clientSnapshot(
   return { name: c.name, snapshot };
 }
 
+/**
+ * Freeze the ISSUER identity from the authoritative server sources
+ * (organization.name + the org's organization_profiles row). Never the browser.
+ * Missing profile fields simply stay undefined in the snapshot.
+ */
+async function companySnapshot(tx: TenantTx, orgId: string): Promise<InvoiceCompanySnapshot> {
+  const orgRows = await tx
+    .select({ name: organization.name })
+    .from(organization)
+    .where(eq(organization.id, orgId))
+    .limit(1);
+  const profRows = await tx
+    .select()
+    .from(organizationProfiles)
+    .where(eq(organizationProfiles.organizationId, orgId))
+    .limit(1);
+  const p = profRows[0];
+  return {
+    name: orgRows[0]?.name ?? undefined,
+    address: p?.address ?? undefined,
+    city: p?.city ?? undefined,
+    postalCode: p?.postalCode ?? undefined,
+    phone: p?.phone ?? undefined,
+    email: p?.businessEmail ?? undefined,
+    nui: p?.nui ?? undefined,
+    vatNo: p?.vatNo ?? undefined,
+    bank: p?.bank ?? undefined,
+    swift: p?.swift ?? undefined,
+    iban: p?.iban ?? undefined,
+  };
+}
+
 /** Insert an invoice header + its lines atomically; returns the new invoice id. */
 async function insertInvoice(
   tx: TenantTx,
@@ -103,6 +136,7 @@ async function insertInvoice(
     projectId: string | null;
     clientName: string;
     clientSnapshot: InvoiceClientSnapshot;
+    companySnapshot: InvoiceCompanySnapshot;
     reference: string | null;
     issuedAt: string;
     dueAt: string;
@@ -123,6 +157,7 @@ async function insertInvoice(
         number,
         clientName: values.clientName,
         clientSnapshot: values.clientSnapshot,
+        companySnapshot: values.companySnapshot,
         reference: values.reference,
         issuedAt: values.issuedAt,
         dueAt: values.dueAt,
@@ -195,12 +230,14 @@ export const createInvoiceFromProjectAction = createAction({
     }));
 
     const { name, snapshot } = await clientSnapshot(tx, orgId, project.clientId);
+    const company = await companySnapshot(tx, orgId);
     const id = await insertInvoice(tx, {
       orgId,
       clientId: project.clientId,
       projectId: project.id,
       clientName: name,
       clientSnapshot: snapshot,
+      companySnapshot: company,
       reference: project.number,
       issuedAt: input.issuedAt,
       dueAt: input.dueAt,
@@ -223,6 +260,7 @@ export const createManualInvoiceAction = createAction({
   handler: async ({ input, ctx, tx }) => {
     const orgId = ctx.organizationId;
     const { name, snapshot } = await clientSnapshot(tx, orgId, input.clientId);
+    const company = await companySnapshot(tx, orgId);
     const lines: LineSnapshot[] = input.lines.map((l) => ({
       description: l.description,
       qty: l.qty,
@@ -235,6 +273,7 @@ export const createManualInvoiceAction = createAction({
       projectId: null,
       clientName: name,
       clientSnapshot: snapshot,
+      companySnapshot: company,
       reference: input.reference?.trim() ? input.reference.trim() : null,
       issuedAt: input.issuedAt,
       dueAt: input.dueAt,
@@ -268,17 +307,46 @@ export const setInvoiceStatusAction = createAction({
   },
 });
 
+// Invoice deletion is DELIBERATELY narrow. An invoice is a historical accounting
+// document: destroying an issued/paid one — or one with payments — is not a normal
+// workflow and (via the payments SET NULL FK) would silently convert real payments
+// into generic client credit. So a hard delete is permitted ONLY for a Draft or
+// already-Cancelled invoice that has NO payments linked. To remove an issued
+// invoice, CANCEL it (setInvoiceStatus -> Anuluar). The payments SET NULL FK
+// remains a defensive fallback, never the intended path. Server-enforced — hiding
+// the UI button is not sufficient.
 export const deleteInvoiceAction = createAction({
   input: invoiceDeleteSchema,
   permission: { invoice: ["delete"] },
   revalidate: ["/invoices", "/dashboard"],
   handler: async ({ input, ctx, tx }) => {
-    // Lines cascade; payments are SET NULL (unlinked -> client credit) by the FK.
+    const orgId = ctx.organizationId;
     const rows = await tx
-      .delete(invoices)
-      .where(and(eq(invoices.id, input.id), eq(invoices.organizationId, ctx.organizationId)))
-      .returning({ id: invoices.id });
+      .select({ id: invoices.id, status: invoices.status })
+      .from(invoices)
+      .where(and(eq(invoices.id, input.id), eq(invoices.organizationId, orgId)))
+      .limit(1)
+      .for("update");
     if (rows.length === 0) throw fail("NOT_FOUND", "Fatura nuk u gjet.");
-    return { id: rows[0].id };
+    const status = rows[0].status;
+
+    const payRows = await tx
+      .select({ id: payments.id })
+      .from(payments)
+      .where(and(eq(payments.invoiceId, input.id), eq(payments.organizationId, orgId)))
+      .limit(1);
+    if (payRows.length > 0) {
+      throw fail(
+        "RULE_VIOLATION",
+        "Fatura ka pagesa të lidhura. Hiqni pagesat ose anuloni faturën në vend që ta fshini.",
+      );
+    }
+    if (status !== "Draft" && status !== "Anuluar") {
+      throw fail("RULE_VIOLATION", "Faturat e lëshuara duhet të anulohen, jo të fshihen.");
+    }
+
+    // Lines cascade via the composite FK.
+    await tx.delete(invoices).where(and(eq(invoices.id, input.id), eq(invoices.organizationId, orgId)));
+    return { id: input.id };
   },
 });

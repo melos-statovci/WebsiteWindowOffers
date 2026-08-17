@@ -325,10 +325,17 @@ describe("status / cancel rules", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe("VALIDATION");
   });
+  it("'Vonesë' cannot be set by hand (overdue is derived)", async () => {
+    const c = await createManualInvoiceAction({ clientId: clientA, ...DATES, vatRate: 0.18, lines: [{ description: "V", qty: 1, unitPrice: 5 }] }, H(ownerCookie));
+    if (!c.ok) throw new Error("setup");
+    const r = await setInvoiceStatusAction({ id: c.data.id, status: "Vonesë" as never }, H(ownerCookie));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("VALIDATION");
+  });
   it("accounting can cancel; a normal status change works", async () => {
     const c = await createManualInvoiceAction({ clientId: clientA, ...DATES, vatRate: 0.18, lines: [{ description: "S", qty: 1, unitPrice: 5 }] }, H(ownerCookie));
     if (!c.ok) throw new Error("setup");
-    const upd = await setInvoiceStatusAction({ id: c.data.id, status: "Vonesë" }, H(accountingCookie));
+    const upd = await setInvoiceStatusAction({ id: c.data.id, status: "Dërguar" }, H(accountingCookie));
     expect(upd.ok).toBe(true);
     const cancel = await setInvoiceStatusAction({ id: c.data.id, status: "Anuluar" }, H(accountingCookie));
     expect(cancel.ok).toBe(true);

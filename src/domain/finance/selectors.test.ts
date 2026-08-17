@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   projectNet, projectTotal, invoiceNet, invoiceTotal,
-  invoicePaid, invoiceOutstanding, invoicePaymentState,
+  invoicePaid, invoiceOutstanding, invoicePaymentState, isOverdue,
   clientStats, dashboardStats,
 } from "./selectors";
 import type { Project, Invoice, Payment } from "@/domain/types";
@@ -71,6 +71,27 @@ describe("invoice totals & balances", () => {
     expect(invoicePaymentState(inv, pay(400))).toBe("overpaid");
     expect(invoicePaymentState(mkInvoice({ status: "Draft" }), pay(100))).toBe("draft");
     expect(invoicePaymentState(mkInvoice({ status: "Anuluar" }), pay(100))).toBe("cancelled");
+  });
+});
+
+describe("isOverdue (derived, never stored)", () => {
+  const past = new Date("2026-02-01T12:00:00Z"); // after due 2026-01-15
+  it("issued + outstanding + due passed => overdue", () => {
+    expect(isOverdue(mkInvoice(), [], past)).toBe(true);
+  });
+  it("fully paid => not overdue (no outstanding)", () => {
+    const pay: Payment[] = [{ id: "a", clientId: "c1", invoiceId: "f1", amount: 354, date: "d", method: "m" }];
+    expect(isOverdue(mkInvoice(), pay, past)).toBe(false);
+  });
+  it("draft / cancelled => never overdue", () => {
+    expect(isOverdue(mkInvoice({ status: "Draft" }), [], past)).toBe(false);
+    expect(isOverdue(mkInvoice({ status: "Anuluar" }), [], past)).toBe(false);
+  });
+  it("due in the future => not overdue", () => {
+    expect(isOverdue(mkInvoice(), [], new Date("2026-01-10T12:00:00Z"))).toBe(false);
+  });
+  it("on the due date itself => not yet overdue", () => {
+    expect(isOverdue(mkInvoice(), [], new Date("2026-01-15T12:00:00Z"))).toBe(false);
   });
 });
 

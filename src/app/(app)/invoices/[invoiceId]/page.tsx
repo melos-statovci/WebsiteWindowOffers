@@ -8,7 +8,7 @@ import { Button, Card, Badge, EmptyState } from "@/components/ui/kit";
 import { PaymentModal, type PaymentDraft } from "@/components/clients/payment-modal";
 import { useStore } from "@/lib/store";
 import { eurAfter, shortDate } from "@/lib/format";
-import { invoiceNet, invoicePaid, invoiceOutstanding, invoicePaymentState } from "@/domain/finance/selectors";
+import { invoiceNet, invoicePaid, invoiceOutstanding, invoicePaymentState, isOverdue } from "@/domain/finance/selectors";
 import { printInvoice } from "@/lib/print";
 import { setInvoiceStatus, deleteInvoice } from "@/server/actions/invoice.action";
 import { recordInvoicePayment, markInvoicePaid } from "@/server/actions/payment.action";
@@ -21,8 +21,10 @@ const statusTone: Record<InvoiceStatus, "neutral" | "blue" | "emerald" | "rose" 
 // Workflow statuses the user sets by hand. "Paguar" is intentionally absent:
 // paid state is derived from recorded payments, never set manually (that is what
 // used to allow duplicate full-value payments).
-type SettableStatus = Exclude<InvoiceStatus, "Paguar">;
-const WORKFLOW_STATUSES: SettableStatus[] = ["Draft", "Dërguar", "Vonesë", "Anuluar"];
+// "Paguar" (payment-derived) and "Vonesë" (overdue, due-date-derived) are never
+// set by hand.
+type SettableStatus = Exclude<InvoiceStatus, "Paguar" | "Vonesë">;
+const WORKFLOW_STATUSES: SettableStatus[] = ["Draft", "Dërguar", "Anuluar"];
 
 export default function InvoiceDetailPage({ params }: { params: Promise<{ invoiceId: string }> }) {
   const { invoiceId } = use(params);
@@ -55,6 +57,20 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ invoic
   const payState = invoicePaymentState(inv, payments);
   const isSettled = payState === "paid" || payState === "overpaid";
   const canPay = inv.status !== "Anuluar" && outstanding > 0.005;
+  // A hard delete is only for a Draft/Cancelled invoice with no payments; anything
+  // else must be cancelled (mirrors the server rule so the button never lies).
+  const deletable = (inv.status === "Draft" || inv.status === "Anuluar") && paid <= 0.005;
+  const overdue = isOverdue(inv, payments);
+
+  // Frozen issuer identity (falls back to the live profile only for a legacy
+  // pre-snapshot invoice), matching what printInvoice renders.
+  const cs = inv.companySnapshot;
+  const issuer = {
+    name: cs?.name ?? company.name,
+    address: cs?.address ?? company.address,
+    phone: cs?.phone ?? company.phone,
+    nui: cs?.nui ?? company.nui,
+  };
 
   const changeStatus = async (status: SettableStatus) => {
     setBusy(true);
@@ -105,7 +121,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ invoic
           <Button variant="outline" onClick={() => printInvoice(inv, company)}><FileDown className="size-4" /> PDF</Button>
           {canPay && <Button variant="outline" disabled={busy} onClick={() => setPayOpen(true)}><Plus className="size-4" /> Shto pagesë</Button>}
           {canPay && <Button disabled={busy} onClick={markPaid}><Check className="size-4" /> Shëno të paguar</Button>}
-          <button onClick={remove} className="grid size-10 place-items-center rounded-lg border border-slate-200 text-slate-400 hover:bg-rose-500/10 hover:text-rose-400" aria-label="Fshi faturën"><Trash2 className="size-4" /></button>
+          {deletable && <button onClick={remove} disabled={busy} className="grid size-10 place-items-center rounded-lg border border-slate-200 text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 disabled:opacity-60" aria-label="Fshi faturën"><Trash2 className="size-4" /></button>}
         </div>
       </div>
 
@@ -131,16 +147,17 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ invoic
                     {WORKFLOW_STATUSES.map((s) => <option key={s}>{s}</option>)}
                   </select>
                   <Badge tone={statusTone[inv.status]}>{inv.status}</Badge>
+                  {overdue && <Badge tone="rose">Vonesë</Badge>}
                   {payState === "partial" && <Badge tone="amber">Pjesërisht e paguar</Badge>}
                 </>
               )}
             </div>
           </div>
           <div className="text-right text-sm">
-            <div className="font-heading font-semibold text-slate-900">{company.name}</div>
-            <div className="text-slate-400">{company.address}</div>
-            <div className="text-slate-400">{company.phone}</div>
-            <div className="mt-2 text-slate-400">NUI {company.nui}</div>
+            <div className="font-heading font-semibold text-slate-900">{issuer.name}</div>
+            <div className="text-slate-400">{issuer.address}</div>
+            <div className="text-slate-400">{issuer.phone}</div>
+            <div className="mt-2 text-slate-400">NUI {issuer.nui}</div>
           </div>
         </div>
 
