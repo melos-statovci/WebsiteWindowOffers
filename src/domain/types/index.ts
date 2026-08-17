@@ -235,26 +235,6 @@ export interface CompanyProfile {
   logoDataUrl?: string;
 }
 
-export interface Device {
-  id: string;
-  owner: string;
-  browser: string;
-  os: string;
-  ip: string;
-  lastActive: string;
-  loggedInAt: string;
-  current?: boolean;
-}
-
-export interface LoginEvent {
-  id: string;
-  kind: "success" | "failure";
-  who: string;
-  device: string;
-  ip: string;
-  at: string;
-}
-
 export interface PricingSystem {
   id: string;
   name: string;

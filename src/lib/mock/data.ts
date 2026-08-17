@@ -6,8 +6,6 @@ import type {
   Note,
   User,
   AppNotification,
-  Device,
-  LoginEvent,
   PricingSystem,
   CatalogRow,
   CompanyProfile,
@@ -283,24 +281,6 @@ export const notifications: AppNotification[] = [
   { id: "nt1", title: "Ofertë e pranuar", body: "Arben Krasniqi pranoi ofertën OF-2026-0142.", at: "2026-06-11", read: false, href: "/clients/arbenkrq1" },
   { id: "nt2", title: "Faturë në vonesë", body: "FAT-2026-003 (Euro Home Interiors) kaloi afatin e pagesës.", at: "2026-07-17", read: false, href: "/invoices/fat-2026-003" },
   { id: "nt3", title: "Pagesë e re", body: "U regjistrua një pagesë prej €1.890,00 nga Lumturije Gashi.", at: "2026-07-16", read: true, href: "/clients/lumturije3" },
-];
-
-// ---------------------------------------------------------------------------
-// Security (fully fictional device / login data)
-// ---------------------------------------------------------------------------
-export const devices: Device[] = [
-  { id: "d1", owner: "Milaim Hasani", browser: "Chrome", os: "Mac", ip: "10.0.12.4", lastActive: "05/08/2026, 15:23", loggedInAt: "05/08/2026, 13:34", current: true },
-  { id: "d2", owner: "Milaim Hasani", browser: "Chrome", os: "Mac", ip: "10.0.12.4", lastActive: "05/08/2026, 13:33", loggedInAt: "05/08/2026, 13:33" },
-  { id: "d3", owner: "Milaim Hasani", browser: "Edge", os: "Windows", ip: "10.0.44.9", lastActive: "02/08/2026, 16:27", loggedInAt: "02/08/2026, 15:51" },
-  { id: "d4", owner: "Milaim Hasani", browser: "Safari", os: "iPhone/iPad", ip: "10.0.44.9", lastActive: "02/08/2026, 16:06", loggedInAt: "02/08/2026, 15:34" },
-];
-
-export const loginHistory: LoginEvent[] = [
-  { id: "l1", kind: "success", who: "Milaim Hasani", device: "Chrome · Mac", ip: "10.0.12.4", at: "05/08/2026, 13:34" },
-  { id: "l2", kind: "success", who: "Milaim Hasani", device: "Chrome · Mac", ip: "10.0.12.4", at: "05/08/2026, 13:33" },
-  { id: "l3", kind: "failure", who: "milaim@kornizo-demo.io", device: "Chrome · Mac", ip: "10.0.12.4", at: "05/08/2026, 13:33" },
-  { id: "l4", kind: "failure", who: "milaim@kornizo-demo.io", device: "Chrome · Mac", ip: "10.0.12.4", at: "05/08/2026, 13:32" },
-  { id: "l5", kind: "success", who: "Milaim Hasani", device: "Edge · Windows", ip: "10.0.44.9", at: "02/08/2026, 15:51" },
 ];
 
 // ---------------------------------------------------------------------------

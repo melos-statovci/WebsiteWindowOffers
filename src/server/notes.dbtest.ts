@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import * as schema from "@/db/schema";
 import { notes } from "@/db/schema/business";
