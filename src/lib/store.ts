@@ -8,14 +8,13 @@ import type {
   Invoice,
   Payment,
   Note,
-  User,
   AppNotification,
   CompanyProfile,
 } from "@/domain/types";
 import type { PricingCatalog } from "@/domain/pricing/types";
 import * as seed from "@/lib/mock/data";
 import { guideStepKeys } from "@/lib/plan";
-import { validateBackup, SCHEMA_VERSION } from "@/domain/backup/backup";
+import { SCHEMA_VERSION } from "@/domain/backup/backup";
 
 export const uid = (): string =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -49,7 +48,6 @@ interface DataSlice {
   invoices: Invoice[];
   payments: Payment[];
   notes: Note[];
-  users: User[];
   notifications: AppNotification[];
   company: CompanyProfile;
   pricing: PricingState;
@@ -81,8 +79,10 @@ function seedData(): DataSlice {
     // server by <NotesHydrator>. It seeds empty and is never written locally (all
     // writes go through the note server actions).
     notes: [],
-    users: structuredClone(seed.users),
-    notifications: structuredClone(seed.notifications),
+    // Notifications have no server source yet (Phase 8): the bell shows an honest
+    // empty state instead of fake seeded events. The slice + mark-read methods are
+    // kept for when real notifications land.
+    notifications: [],
     company: structuredClone(seed.company),
     // Pricing is DB-backed (Phase 5). This is a NON-persisted, server-hydrated
     // runtime MIRROR (via <PricingHydrator>) that the configurator reads
@@ -148,10 +148,6 @@ interface StoreState extends DataSlice {
   // company write method.
   setCompany: (company: CompanyProfile) => void;
 
-  // users
-  addUser: (data: Omit<User, "id">) => void;
-  removeUser: (id: string) => void;
-
   // notifications
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
@@ -166,10 +162,11 @@ interface StoreState extends DataSlice {
   dismissUi: (key: UiDismissalKey, mode: UiDismissalMode) => void;
   clearUiDismissal: (key: UiDismissalKey) => void;
 
-  // demo data mgmt
-  resetDemo: () => void;
+  // Read-only local snapshot (JSON) of the org's currently-loaded data. This is
+  // a convenience export, NOT a backup/restore point — the authoritative data
+  // lives in Postgres. There is deliberately no import/restore (it could not
+  // write back to the database) and no "reset demo".
   exportData: () => string;
-  importData: (json: string) => { ok: boolean; error?: string };
 }
 
 export const useStore = create<StoreState>()(
@@ -194,8 +191,6 @@ export const useStore = create<StoreState>()(
 
       // Hydration only: replace the read-only mirror with the server's profile.
       setCompany: (company) => set({ company }),
-      addUser: (data) => set((s) => ({ users: [...s.users, { id: uid(), ...data }] })),
-      removeUser: (id) => set((s) => ({ users: s.users.filter((u) => u.id !== id) })),
 
       markNotificationRead: (id) =>
         set((s) => ({
@@ -222,34 +217,17 @@ export const useStore = create<StoreState>()(
           return { uiDismissals };
         }),
 
-      resetDemo: () => set({ ...seedData(), uiDismissals: get().uiDismissals }),
       exportData: () => {
         const s = get();
         const {
-          clients, projects, invoices, payments, notes, users,
-          notifications, company, pricing, selectedDesignId, guideDone, uiDismissals,
+          clients, projects, invoices, payments, notes,
+          company, pricing, selectedDesignId, guideDone, uiDismissals,
         } = s;
         return JSON.stringify(
-          { version: SCHEMA_VERSION, clients, projects, invoices, payments, notes, users, notifications, company, pricing, selectedDesignId, guideDone, uiDismissals },
+          { version: SCHEMA_VERSION, clients, projects, invoices, payments, notes, company, pricing, selectedDesignId, guideDone, uiDismissals },
           null,
           2,
         );
-      },
-      importData: (json) => {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(json);
-        } catch {
-          return { ok: false, error: "Skedari JSON është i pavlefshëm." };
-        }
-        const result = validateBackup(parsed);
-        if (!result.ok) return { ok: false, error: result.error };
-        // Start from a clean seed and overlay only validated, whitelisted keys.
-        const base = seedData();
-        const data = { ...result.data };
-        delete data.version;
-        set({ ...base, ...(data as Partial<DataSlice>) });
-        return { ok: true };
       },
     }),
     {
@@ -284,6 +262,8 @@ export const useStore = create<StoreState>()(
         // Notes (Phase 8) are DB-backed too — wipe any stale localStorage copy so
         // it can never re-become authoritative; re-hydrated from the server.
         merged.notes = [];
+        // Drop any stale fake notifications a previous demo build persisted.
+        merged.notifications = [];
         void fromVersion;
         return merged as never;
       },
@@ -297,9 +277,9 @@ export const useStore = create<StoreState>()(
         // truth and let clearing localStorage "delete" server data. All are
         // server-hydrated at runtime.
         const {
-          users, notifications, selectedDesignId, guideDone, uiDismissals,
+          notifications, selectedDesignId, guideDone, uiDismissals,
         } = s;
-        return { users, notifications, selectedDesignId, guideDone, uiDismissals };
+        return { notifications, selectedDesignId, guideDone, uiDismissals };
       },
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

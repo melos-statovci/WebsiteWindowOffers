@@ -3,9 +3,6 @@ import type {
   Project,
   Invoice,
   Payment,
-  Note,
-  User,
-  AppNotification,
   PricingSystem,
   CatalogRow,
   CompanyProfile,
@@ -36,18 +33,6 @@ export const account = {
   trialEndsAt: "2026-08-16",
   trialDaysLeft: 11,
 };
-
-export const currentUser = {
-  name: "Milaim Hasani",
-  email: "milaim@kornizo-demo.io",
-  role: "PRONAR",
-  initial: "M",
-  sidebarRole: "Operator",
-};
-
-export const users: User[] = [
-  { id: "u1", name: "Milaim Hasani", email: "milaim@kornizo-demo.io", role: "PRONAR" },
-];
 
 // ---------------------------------------------------------------------------
 // Clients (identity only — financials derived from projects/invoices/payments)
@@ -271,16 +256,6 @@ export const payments: Payment[] = [
   { id: "pay2", clientId: "arbenkrq1", invoiceId: "fat-2026-001", amount: 3004.28, date: "2026-06-13", method: "Transfertë bankare", note: "Faturë FAT-2026-001" },
   { id: "pay4", clientId: "ndertimic2", invoiceId: "fat-2026-002", amount: 3000.0, date: "2026-07-02", method: "Transfertë bankare", note: "Këst i parë" },
   { id: "pay3", clientId: "lumturije3", amount: 1890.0, date: "2026-07-16", method: "Kartelë", note: "Parapagim (pa faturë)" },
-];
-
-export const notes: Note[] = [
-  { id: "n1", clientId: "arbenkrq1", text: "Kërkoi ofertë të re për ballkonin. Preferon ngjyrën antracit.", at: "2026-06-11" },
-];
-
-export const notifications: AppNotification[] = [
-  { id: "nt1", title: "Ofertë e pranuar", body: "Arben Krasniqi pranoi ofertën OF-2026-0142.", at: "2026-06-11", read: false, href: "/clients/arbenkrq1" },
-  { id: "nt2", title: "Faturë në vonesë", body: "FAT-2026-003 (Euro Home Interiors) kaloi afatin e pagesës.", at: "2026-07-17", read: false, href: "/invoices/fat-2026-003" },
-  { id: "nt3", title: "Pagesë e re", body: "U regjistrua një pagesë prej €1.890,00 nga Lumturije Gashi.", at: "2026-07-16", read: true, href: "/clients/lumturije3" },
 ];
 
 // ---------------------------------------------------------------------------

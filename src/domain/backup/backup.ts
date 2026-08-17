@@ -12,7 +12,7 @@
 // each record carries the fields the app relies on.
 
 import type {
-  Client, Project, Invoice, Payment, Note, User, AppNotification, CompanyProfile,
+  Client, Project, Invoice, Payment, Note, AppNotification, CompanyProfile,
 } from "@/domain/types";
 
 /** Bumped whenever the persisted shape changes in a breaking way. */
@@ -26,7 +26,6 @@ export interface PersistedShape {
   invoices: Invoice[];
   payments: Payment[];
   notes: Note[];
-  users: User[];
   notifications: AppNotification[];
   company: CompanyProfile;
   pricing: unknown;
@@ -60,12 +59,11 @@ const okInvoice = (i: Record<string, unknown>) =>
 const okPayment = (p: Record<string, unknown>) =>
   nonEmptyString(p.id) && isString(p.clientId) && isFiniteNumber(p.amount);
 const okNote = (n: Record<string, unknown>) => nonEmptyString(n.id) && isString(n.clientId);
-const okUser = (u: Record<string, unknown>) => nonEmptyString(u.id) && isString(u.name);
 const okNotification = (n: Record<string, unknown>) => nonEmptyString(n.id) && isString(n.title);
 
 /** Fields we accept from a backup. Anything else is dropped on purpose. */
 const KNOWN_KEYS: (keyof PersistedShape)[] = [
-  "version", "clients", "projects", "invoices", "payments", "notes", "users",
+  "version", "clients", "projects", "invoices", "payments", "notes",
   "notifications", "company", "pricing", "selectedDesignId", "guideDone", "uiDismissals",
 ];
 
@@ -98,7 +96,6 @@ export function validateBackup(raw: unknown): ParseResult {
     ["invoices", okInvoice],
     ["payments", okPayment],
     ["notes", okNote],
-    ["users", okUser],
     ["notifications", okNotification],
   ];
   for (const [key, check] of optional) {

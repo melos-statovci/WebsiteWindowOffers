@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Building2, Palette, Users, CreditCard, Download, Upload, ChevronRight,
-  ArrowLeft, ImageIcon, Check, TriangleAlert, RotateCcw, Trash2, Lock,
+  Building2, Palette, Users, CreditCard, Download, ChevronRight,
+  ArrowLeft, ImageIcon, Check, RotateCcw, Lock,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button, Card, Badge, Field, Input, Label } from "@/components/ui/kit";
@@ -238,76 +238,66 @@ function DizajniPanel() {
   );
 }
 
-function PerdoruesitPanel() {
-  const { toast, confirm } = useApp();
-  const users = useStore((s) => s.users);
-  const addUser = useStore((s) => s.addUser);
-  const removeUser = useStore((s) => s.removeUser);
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const seatLimit = 1;
-  const atLimit = users.length >= seatLimit;
+interface OrgMember {
+  id: string;
+  role: string;
+  userId: string;
+  user: { name: string; email: string };
+}
 
-  const submit = () => {
-    if (!name.trim() || !email.trim()) { toast("Plotësoni emrin dhe email-in."); return; }
-    addUser({ name: name.trim(), email: email.trim(), role: "Operator" });
-    setName(""); setEmail(""); setOpen(false);
-    toast("Përdoruesi u shtua (simulim lokal — mbi limitin e planit SOLO).");
-  };
-  const remove = async (id: string, uname: string) => {
-    const ok = await confirm({ title: "Hiq përdoruesin?", message: `“${uname}” do të hiqet.`, confirmLabel: "Hiq", danger: true });
-    if (ok) { removeUser(id); toast("Përdoruesi u hoq."); }
-  };
+const ROLE_LABELS: Record<string, string> = {
+  owner: "Pronar",
+  admin: "Administrator",
+  sales: "Shitje",
+  operator: "Operator",
+  accounting: "Kontabilitet",
+  member: "Anëtar",
+};
+
+function PerdoruesitPanel() {
+  const { user } = useAuth();
+  const [members, setMembers] = useState<OrgMember[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const res = await authClient.organization.listMembers();
+      if (alive && !res.error && res.data) {
+        setMembers((res.data.members ?? []) as unknown as OrgMember[]);
+      }
+      if (alive) setLoading(false);
+    })();
+    return () => { alive = false; };
+  }, []);
 
   return (
     <Card className="p-5">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="font-heading font-semibold text-slate-900">Përdoruesit e kompanisë</div>
-            <Badge tone="amber">Demo lokale</Badge>
-          </div>
-          <div className="text-sm text-slate-400">{users.length} / {seatLimit} ulëse · Plani SOLO</div>
-        </div>
-        <Button onClick={() => setOpen(true)}>Shto Përdorues</Button>
-      </div>
+      <div className="mb-1 font-heading font-semibold text-slate-900">Anëtarët e organizatës</div>
+      <div className="mb-3 text-sm text-slate-400">{members.length} anëtar{members.length === 1 ? "" : "ë"}</div>
       <p className="mb-4 text-xs text-slate-400">
-        Kjo listë është të dhëna lokale demo. Llogaritë reale, anëtarësimet dhe rolet menaxhohen përmes identitetit të vërtetë (Better Auth) — jo nga kjo tabelë.
+        Kjo listë vjen nga identiteti i vërtetë (Better Auth). Ftimi i anëtarëve të rinj do të aktivizohet kur të konfigurohet dërgimi i email-eve.
       </p>
-      {atLimit && (
-        <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-500">
-          <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-          Keni arritur limitin e përdoruesve për planin tuaj (Plani SOLO: 1). Përmirësoni planin ose shtoni një përdorues si simulim lokal.
+      {loading ? (
+        <p className="text-sm text-slate-400">Duke ngarkuar anëtarët…</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px] text-sm">
+            <thead><tr className="border-b border-slate-200 text-left text-xs font-semibold tracking-wide text-slate-400 uppercase"><th className="py-3 pr-4">Emri</th><th className="py-3 pr-4">Email</th><th className="py-3">Roli</th></tr></thead>
+            <tbody>
+              {members.map((m) => (
+                <tr key={m.id} className="border-b border-slate-200">
+                  <td className="py-3 pr-4 font-semibold text-slate-900">
+                    <span className="inline-flex items-center gap-2">{m.user.name}{m.userId === user.id && <Badge tone="emerald">Ju</Badge>}</span>
+                  </td>
+                  <td className="py-3 pr-4 text-slate-500">{m.user.email}</td>
+                  <td className="py-3"><Badge tone="indigo">{ROLE_LABELS[m.role] ?? m.role}</Badge></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[420px] text-sm">
-          <thead><tr className="border-b border-slate-200 text-left text-xs font-semibold tracking-wide text-slate-400 uppercase"><th className="py-3 pr-4">Emri</th><th className="py-3 pr-4">Email</th><th className="py-3">Roli</th><th /></tr></thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="border-b border-slate-200">
-                <td className="py-3 pr-4 font-semibold text-slate-900">{u.name}</td>
-                <td className="py-3 pr-4 text-slate-500">{u.email}</td>
-                <td className="py-3"><Badge tone="indigo">{u.role}</Badge></td>
-                <td className="py-3 text-right">
-                  {u.role !== "PRONAR" && (
-                    <button onClick={() => remove(u.id, u.name)} className="text-slate-400 hover:text-rose-400" aria-label="Hiq"><Trash2 className="size-4" /></button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <Modal open={open} onClose={() => setOpen(false)} title="Shto Përdorues" description="Në planin SOLO shtimi bëhet vetëm si simulim lokal."
-        footer={<><Button variant="ghost" onClick={() => setOpen(false)}>Anulo</Button><Button onClick={submit}>Shto (demo)</Button></>}>
-        <div className="space-y-4">
-          <Field label="Emri i plotë"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="P.sh. Arta Berisha" /></Field>
-          <Field label="Email"><Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="P.sh. arta@example.com" /></Field>
-        </div>
-      </Modal>
     </Card>
   );
 }
@@ -383,11 +373,8 @@ function AbonimiPanel() {
 }
 
 function BackupPanel() {
-  const { toast, confirm } = useApp();
+  const { toast } = useApp();
   const exportData = useStore((s) => s.exportData);
-  const importData = useStore((s) => s.importData);
-  const resetDemo = useStore((s) => s.resetDemo);
-  const fileRef = useRef<HTMLInputElement>(null);
   const [lastExport, setLastExport] = useState<string | null>(null);
 
   const doExport = () => {
@@ -396,45 +383,31 @@ function BackupPanel() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `kornizo-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `kornizo-export-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
     setLastExport(new Date().toLocaleString("sq"));
-    toast("Backup u shkarkua.");
-  };
-  const onImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    const ok = await confirm({ title: "Ngarko backup?", message: "Të dhënat aktuale lokale do të zëvendësohen me ato nga skedari.", confirmLabel: "Ngarko" });
-    if (!ok) return;
-    const text = await file.text();
-    const res = importData(text);
-    toast(res.ok ? "Backup u ngarkua me sukses." : res.error ?? "Ngarkimi dështoi.");
-  };
-  const doReset = async () => {
-    const ok = await confirm({ title: "Rikthe të dhënat demo?", message: "Të gjitha ndryshimet lokale do të fshihen dhe të dhënat fillestare do të rikthehen.", confirmLabel: "Rikthe", danger: true });
-    if (ok) { resetDemo(); toast("Të dhënat demo u rikthyen."); }
+    toast("Eksporti u shkarkua.");
   };
 
   return (
     <div className="space-y-5">
       <Card className="p-5">
-        <div className="font-heading font-semibold text-slate-900">Backup i të Dhënave</div>
-        <p className="mt-1 mb-4 max-w-lg text-sm text-slate-400">Shkarkoni të gjitha të dhënat tuaja lokale (klientët, projektet, ofertat, çmimet) në një skedar JSON.</p>
-        <Button onClick={doExport}><Download className="size-4" /> Shkarko Backup</Button>
+        <div className="font-heading font-semibold text-slate-900">Eksporto të dhënat</div>
+        <p className="mt-1 mb-4 max-w-lg text-sm text-slate-400">
+          Shkarkoni një kopje (snapshot) të të dhënave aktuale të organizatës suaj — klientët, projektet, faturat, pagesat, shënimet dhe çmimet — në një skedar JSON.
+        </p>
+        <Button onClick={doExport}><Download className="size-4" /> Shkarko eksportin (JSON)</Button>
         {lastExport && <p className="mt-2 text-xs text-slate-400">Eksporti i fundit: {lastExport}</p>}
       </Card>
       <Card className="p-5">
-        <div className="font-heading font-semibold text-slate-900">Rikthimi i të Dhënave (Restore)</div>
-        <p className="mt-1 mb-4 max-w-lg text-sm text-slate-400">Ngarkoni skedarin e backup-it për të rikthyer të dhënat tuaja lokale.</p>
-        <Button variant="outline" onClick={() => fileRef.current?.click()}><Upload className="size-4" /> Ngarko Backup</Button>
-        <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={onImport} />
-      </Card>
-      <Card className="p-5">
-        <div className="font-heading font-semibold text-slate-900">Rikthe të dhënat demo</div>
-        <p className="mt-1 mb-4 max-w-lg text-sm text-slate-400">Fshini të gjitha ndryshimet lokale dhe rikthejini të dhënat fillestare demonstruese.</p>
-        <Button variant="danger" onClick={doReset}><RotateCcw className="size-4" /> Reset demo data</Button>
+        <div className="flex items-center gap-2">
+          <div className="font-heading font-semibold text-slate-900">Rikthimi &amp; kopjet rezervë</div>
+          <Badge tone="amber">Automatik</Badge>
+        </div>
+        <p className="mt-1 max-w-lg text-sm text-slate-400">
+          Të dhënat tuaja ruhen në mënyrë të sigurt në bazën e të dhënave (PostgreSQL), me kopje rezervë automatike në nivel infrastrukture. Eksporti JSON më lart është një kopje për arkivin tuaj, jo një pikë rikthimi — nuk ka ngarkim/restore manual që mund të mbishkruajë të dhënat e serverit.
+        </p>
       </Card>
     </div>
   );
