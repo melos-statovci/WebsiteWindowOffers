@@ -126,6 +126,22 @@ export interface InvoiceLine {
   unitPrice: number;
 }
 
+/**
+ * Point-in-time snapshot of the client's fiscal identity, frozen onto an invoice
+ * at issue. An invoice is a historical accounting document: renaming, re-addressing
+ * or deleting the live Client must never rewrite what a past invoice says. Only the
+ * fields a printed/legal invoice needs are captured (never arbitrary CRM data).
+ */
+export interface InvoiceClientSnapshot {
+  name: string;
+  type: ClientType;
+  nui?: string;
+  address?: string;
+  city?: string;
+  email?: string;
+  phone?: string;
+}
+
 export interface Invoice {
   id: string;
   number: string; // FAT-2026-001

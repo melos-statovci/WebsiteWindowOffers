@@ -15,14 +15,16 @@ import {
   integer,
   boolean,
   timestamp,
+  date,
   index,
   unique,
   uniqueIndex,
   foreignKey,
+  check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { PricingCatalog } from "@/domain/pricing/types";
-import type { WindowConfig } from "@/domain/types";
+import type { WindowConfig, InvoiceClientSnapshot } from "@/domain/types";
 import type { ProjectItemCalcSnapshot } from "@/domain/configurator/calc-snapshot";
 import { organization } from "../auth-schema";
 
@@ -276,5 +278,191 @@ export const projectItems = pgTable(
     }),
     index("project_items_org_idx").on(table.organizationId),
     index("project_items_org_project_idx").on(table.organizationId, table.projectId),
+  ],
+);
+
+// ===========================================================================
+// FINANCE (Phase 7) — Invoices, Invoice Lines, Payments.
+//
+// Invoices are historical accounting documents: once issued, what a past invoice
+// SAYS must never change because a live business record (client name, project,
+// pricing) later changes. That drives two design choices:
+//   1. Snapshot: the client's fiscal identity is FROZEN onto the invoice
+//      (client_name + client_snapshot JSONB) and the line values are copied at
+//      creation. The printed document reads these, not a live JOIN.
+//   2. Non-destructive relationships: deleting a Client or Project must never
+//      delete an invoice. Client delete is BLOCKED while invoices exist (NO
+//      ACTION); Project delete NULLS the invoice's project link (column-scoped
+//      ON DELETE SET NULL (project_id)) while the invoice + its `reference`
+//      snapshot survive. Only org-delete cascades finance away.
+//
+// Totals are NOT stored: invoiceNet/invoiceVat/invoiceTotal are DERIVED from the
+// stored lines + invoice vat_rate in src/domain/finance/selectors.ts (the single
+// source of truth every consumer already shares). The browser can never submit an
+// authoritative total.
+// ===========================================================================
+
+// Invoices — directly org-owned (organization_id is the RLS tenant key). The
+// Client relationship is DB-enforced same-tenant via a COMPOSITE FK
+// (organization_id, client_id) -> clients(organization_id, id); NO ACTION blocks
+// deleting a client that still has invoices (org-delete cascade still works). The
+// optional Project relationship is likewise composite/same-tenant, with a
+// column-scoped ON DELETE SET NULL (project_id) so deleting a source offer nulls
+// the link but keeps the historical invoice and its human `reference`.
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: uuid("id")
+      .default(sql`gen_random_uuid()`)
+      .primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    clientId: uuid("client_id").notNull(),
+    // Nullable link to the originating offer. Kept tenant-safe by the composite
+    // FK below; NULLed (not cascaded) if the project is later deleted.
+    projectId: uuid("project_id"),
+    // Human-readable invoice number, unique per org (FAT-YYYY-NNN).
+    number: text("number").notNull(),
+    // SNAPSHOT of the client name at issue (the printed document reads this, not a
+    // live JOIN, so renaming/deleting the client never rewrites history).
+    clientName: text("client_name").notNull(),
+    // Richer fiscal snapshot for the legal/printed document (name, NUI, address …).
+    clientSnapshot: jsonb("client_snapshot").$type<InvoiceClientSnapshot>().notNull(),
+    // Human-readable reference to the source offer (PRJ/OF number) — a snapshot
+    // string that survives even if the project link is later NULLed.
+    reference: text("reference"),
+    // Pure dates (no time/tz). `date` mode:'string' returns 'YYYY-MM-DD' verbatim,
+    // matching the domain Invoice.issuedAt/dueAt string shape.
+    issuedAt: date("issued_at", { mode: "string" }).notNull(),
+    dueAt: date("due_at", { mode: "string" }).notNull(),
+    // InvoiceStatus: 'Draft'|'Dërguar'|'Paguar'|'Vonesë'|'Anuluar'. 'Paguar' is
+    // payment-DERIVED (set when a payment settles the balance), never a free-form
+    // manual status. Validated at the action boundary.
+    status: text("status").notNull().default("Draft"),
+    // Invoice VAT fraction (0..1), e.g. 0.18. Frozen at issue.
+    vatRate: numeric("vat_rate", { precision: 5, scale: 4 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    // Lets invoice_lines + payments carry a composite (organization_id, invoice_id) FK.
+    unique("invoices_org_id_uidx").on(table.organizationId, table.id),
+    // Tenant-safe human-readable numbering: unique per org.
+    unique("invoices_org_number_uidx").on(table.organizationId, table.number),
+    // Same-tenant Client relationship, DB-enforced. ON DELETE NO ACTION (default)
+    // blocks deleting a client that still has invoices; org-delete cascade still
+    // removes both. An accounting document is never destroyed by a client delete.
+    foreignKey({
+      name: "invoices_org_client_fk",
+      columns: [table.organizationId, table.clientId],
+      foreignColumns: [clients.organizationId, clients.id],
+    }),
+    // Same-tenant, OPTIONAL Project relationship. Column-scoped SET NULL: deleting
+    // a project nulls project_id (not organization_id, which is NOT NULL) so the
+    // invoice survives with its `reference` snapshot intact.
+    foreignKey({
+      name: "invoices_org_project_fk",
+      columns: [table.organizationId, table.projectId],
+      foreignColumns: [projects.organizationId, projects.id],
+    }).onDelete("set null"),
+    index("invoices_org_idx").on(table.organizationId),
+    index("invoices_org_client_idx").on(table.organizationId, table.clientId),
+    index("invoices_org_status_idx").on(table.organizationId, table.status),
+    index("invoices_org_project_idx").on(table.organizationId, table.projectId),
+  ],
+);
+
+// Invoice Lines — the historical line items. Directly org-owned AND tenant-linked
+// to their parent Invoice by a COMPOSITE FK (organization_id, invoice_id) ->
+// invoices(organization_id, id) ON DELETE CASCADE (a line can never attach to
+// another org's invoice; deleting an invoice removes its lines). Values are
+// SNAPSHOTS copied at creation (from offer items or manual entry) — they never
+// re-derive from a live project. Per-line VAT is NOT modelled: VAT is an
+// invoice-level rate (matches the existing InvoiceLine shape).
+export const invoiceLines = pgTable(
+  "invoice_lines",
+  {
+    id: uuid("id")
+      .default(sql`gen_random_uuid()`)
+      .primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    invoiceId: uuid("invoice_id").notNull(),
+    description: text("description").notNull(),
+    qty: integer("qty").notNull().default(1),
+    // Snapshot unit price in EUR. For from-project invoices this is copied from the
+    // authoritative project item; for manual invoices it is validated user input.
+    unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
+    // Provenance only (NOT a FK): the project item this line was snapshotted from,
+    // if any. Kept as a bare id so item deletion never touches invoice history.
+    sourceProjectItemId: uuid("source_project_item_id"),
+    // Stable display order within the invoice (append-on-add).
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "invoice_lines_org_invoice_fk",
+      columns: [table.organizationId, table.invoiceId],
+      foreignColumns: [invoices.organizationId, invoices.id],
+    }).onDelete("cascade"),
+    index("invoice_lines_org_idx").on(table.organizationId),
+    index("invoice_lines_org_invoice_idx").on(table.organizationId, table.invoiceId),
+  ],
+);
+
+// Payments — directly org-owned. Belongs to a Client (same-tenant composite FK,
+// NO ACTION so a client with payment history cannot be deleted). MAY reference one
+// Invoice (nullable): a linked payment settles that invoice; an unlinked payment
+// is a customer ADVANCE / available credit. The invoice link is column-scoped ON
+// DELETE SET NULL (invoice_id) so deleting an invoice UNLINKS its payments (the
+// money survives as client credit) exactly as the current store does — it never
+// deletes the payment. amount is a positive money value (DB CHECK), so a negative
+// or zero payment can never be persisted even if application code is bypassed.
+export const payments = pgTable(
+  "payments",
+  {
+    id: uuid("id")
+      .default(sql`gen_random_uuid()`)
+      .primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    clientId: uuid("client_id").notNull(),
+    invoiceId: uuid("invoice_id"),
+    amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+    // Pure date (no time/tz), 'YYYY-MM-DD'.
+    date: date("date", { mode: "string" }).notNull(),
+    // Payment method free text (Para në dorë / Transfertë bankare / Kartelë …).
+    method: text("method").notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    // Same-tenant Client relationship, NO ACTION (blocks client delete while
+    // payments exist; org-delete cascade still removes both).
+    foreignKey({
+      name: "payments_org_client_fk",
+      columns: [table.organizationId, table.clientId],
+      foreignColumns: [clients.organizationId, clients.id],
+    }),
+    // Same-tenant, OPTIONAL Invoice relationship. Column-scoped SET NULL: deleting
+    // an invoice unlinks its payments (money -> client advance/credit) rather than
+    // destroying them.
+    foreignKey({
+      name: "payments_org_invoice_fk",
+      columns: [table.organizationId, table.invoiceId],
+      foreignColumns: [invoices.organizationId, invoices.id],
+    }).onDelete("set null"),
+    // Money integrity: a persisted payment is always strictly positive.
+    check("payments_amount_positive", sql`${table.amount} > 0`),
+    index("payments_org_idx").on(table.organizationId),
+    index("payments_org_client_idx").on(table.organizationId, table.clientId),
+    index("payments_org_invoice_idx").on(table.organizationId, table.invoiceId),
   ],
 );

@@ -65,14 +65,34 @@ function kindOf(pt: ProductType): OfferItem["kind"] {
   return "Derë";
 }
 
-/** Assert the project exists in the active org (RLS-scoped); throws NOT_FOUND. */
-async function requireProject(tx: TenantTx, orgId: string, projectId: string): Promise<void> {
+/** Assert the project exists in the active org (RLS-scoped); returns its status. */
+async function requireProject(tx: TenantTx, orgId: string, projectId: string): Promise<string> {
   const rows = await tx
-    .select({ id: projects.id })
+    .select({ status: projects.status })
     .from(projects)
     .where(and(eq(projects.id, projectId), eq(projects.organizationId, orgId)))
     .limit(1);
   if (rows.length === 0) throw fail("NOT_FOUND", "Projekti nuk u gjet.");
+  return rows[0].status;
+}
+
+// ACCEPTED-OFFER FREEZE (Phase 7 hard precondition). An offer with status
+// "Pranuar" (accepted) is a committed commercial document: its VALUE must not
+// silently drift, because that is exactly what an invoice is generated from. So
+// value-changing edits (add/edit/duplicate/delete items, edit commercial fields,
+// toggle options) are blocked while accepted. The user must first REOPEN it
+// (setProjectStatus back to a non-accepted status) — a deliberate action — then
+// edit. Accepting, archiving, and deleting remain allowed. Editing an item still
+// re-quotes at current pricing (the Phase 6 rule), which is precisely why an
+// accepted offer must be frozen: otherwise a later pricing change would rewrite an
+// accepted value with no explicit decision.
+function assertEditable(status: string): void {
+  if (status === "Pranuar") {
+    throw fail(
+      "RULE_VIOLATION",
+      "Oferta është e pranuar. Rihapeni ofertën para se ta ndryshoni.",
+    );
+  }
 }
 
 interface PricedItem {
@@ -214,6 +234,8 @@ export const updateProjectAction = createAction({
   permission: { project: ["write"] },
   revalidate: ["/projects", "/dashboard"],
   handler: async ({ input, ctx, tx }) => {
+    // Frozen while accepted (commercial fields incl. vatRate change the value).
+    assertEditable(await requireProject(tx, ctx.organizationId, input.id));
     const rows = await tx
       .update(projects)
       .set({
@@ -286,11 +308,12 @@ export const setProjectOptionAction = createAction({
   revalidate: ["/projects"],
   handler: async ({ input, ctx, tx }) => {
     const rows = await tx
-      .select({ options: projects.options })
+      .select({ options: projects.options, status: projects.status })
       .from(projects)
       .where(and(eq(projects.id, input.id), eq(projects.organizationId, ctx.organizationId)))
       .limit(1);
     if (rows.length === 0) throw fail("NOT_FOUND", "Projekti nuk u gjet.");
+    assertEditable(rows[0].status);
     const options = { ...((rows[0].options ?? {}) as Record<string, boolean>), [input.key]: input.value };
     await tx
       .update(projects)
@@ -309,7 +332,7 @@ export const addProjectItemAction = createAction({
   revalidate: ["/projects", "/dashboard"],
   handler: async ({ input, ctx, tx }) => {
     const orgId = ctx.organizationId;
-    await requireProject(tx, orgId, input.projectId);
+    assertEditable(await requireProject(tx, orgId, input.projectId));
     const priced = await priceItem(tx, orgId, ctx.userId, input.config as WindowConfig, input.previewedPriceListVersion);
     const sortOrder = await nextSortOrder(tx, input.projectId);
     const rows = await tx
@@ -341,7 +364,7 @@ export const updateProjectItemAction = createAction({
   revalidate: ["/projects", "/dashboard"],
   handler: async ({ input, ctx, tx }) => {
     const orgId = ctx.organizationId;
-    await requireProject(tx, orgId, input.projectId);
+    assertEditable(await requireProject(tx, orgId, input.projectId));
     // Re-quote: recompute against the CURRENT active pricing and record the new
     // version/snapshot (deliberate edit=reprice rule).
     const priced = await priceItem(tx, orgId, ctx.userId, input.config as WindowConfig, input.previewedPriceListVersion);
@@ -380,6 +403,7 @@ export const duplicateProjectItemAction = createAction({
   revalidate: ["/projects", "/dashboard"],
   handler: async ({ input, ctx, tx }) => {
     const orgId = ctx.organizationId;
+    assertEditable(await requireProject(tx, orgId, input.projectId));
     const src = await tx
       .select()
       .from(projectItems)
@@ -425,6 +449,7 @@ export const deleteProjectItemAction = createAction({
   permission: { project: ["write"] },
   revalidate: ["/projects", "/dashboard"],
   handler: async ({ input, ctx, tx }) => {
+    assertEditable(await requireProject(tx, ctx.organizationId, input.projectId));
     const rows = await tx
       .delete(projectItems)
       .where(
