@@ -1,8 +1,58 @@
 # Phase 7 — Invoices / Invoice Lines / Payments → PostgreSQL
 
-Status: **server layer complete + UI cut over** (Checkpoints A–D code done; browser
-validation is the last remaining verification — see "Next exact step").
+Status: **Checkpoints A–D + CLOSEOUT complete; authenticated browser E2E run.**
 Branch `clone/proferto`.
+
+## Authenticated browser E2E (concern 4) — DONE (local, real sign-in)
+Driven in the in-app Browser against LOCAL after a human signed up a dev user +
+org (the agent cannot create accounts / enter passwords). Verified end to end:
+- Create DB **Client** (server action + hydration) → shows in list.
+- **Manual invoice** create: server number **FAT-2026-001**, server-computed totals
+  (2×100 → net 200 / VAT 18% 36 / **236**), client + **issuer snapshot** rendered
+  (org name from snapshot, live fallback for unset profile fields), status select
+  offers only Draft/Dërguar/Anuluar (**Vonesë/Paguar are derived — closeout live**).
+- **Partial payment** 100 → badge "Pjesërisht e paguar", Paguar −100, **Mbetje 136**.
+- **Mark paid** → settles remaining 136 → **Paguar**, Mbetje 0; pay/mark buttons
+  disappear (no duplicate possible); dashboard shows **"2 pagesa"** (exactly one
+  settling payment added).
+- **Dashboard** KPIs DB-backed: Invoiced 236, Received 236, Unpaid 0, Debt 0.
+- **Client detail** DB-backed: Invoiced 236, Paid 236, Debt 0, Pagesat 2, and the
+  old "lokale" finance badge is gone.
+- **localStorage cleared** (`kornizo-demo-store` removed) + reload → FAT-2026-001
+  still present (served from Postgres).
+NOT re-done in the browser (already rigorously DB-proven, and heavy to set up in a
+flaky small pane): invoice-from-project (needs a configured project item), the
+print pop-up window, and cross-org isolation (needs a 2nd org/session). All are
+covered by the 40 finance DB tests.
+
+## CLOSEOUT (commit `95ab2a8`, on top of A–D)
+Three historical-integrity concerns + one UX follow-up, all server-authoritative:
+- **Issuer/company historical snapshot.** Migration **0011** adds
+  `invoices.company_snapshot` (jsonb, DEFAULT '{}'). At invoice CREATION the server
+  freezes the issuer identity from the authoritative sources — `organization.name`
+  + `organization_profiles` (address/city/postalCode/phone/businessEmail/nui/vatNo/
+  bank/swift/iban). Lifecycle = **creation** (symmetric with the client snapshot;
+  invoices print at any status incl. Draft and there is no separate issue event).
+  `print.ts` + the invoice detail issuer block render the frozen snapshot, falling
+  back to the live profile only for a legacy `{}` row. Proven: change org profile
+  after issue → historical invoice snapshot unchanged.
+- **Invoice deletion lifecycle.** Hard delete restricted (row-locked, server-side)
+  to Draft/Cancelled invoices with **no payments**; issued invoices must be
+  cancelled; an invoice with payments can never be deleted — so the payments
+  `SET NULL` FK can never silently turn real payments into client credit. UI delete
+  buttons gated to match.
+- **Overdue derived.** New `isOverdue(inv, payments, now)` selector (issued +
+  outstanding + due date passed; paid/cancelled/draft never overdue). **"Vonesë"
+  removed from the settable statuses** (validation + modal + detail select); the
+  list KPI / filter / badge derive overdue so it can never go stale.
+- **Accepted-offer UI follow-up.** The configurator now hides/disables value
+  controls for an accepted (`Pranuar`) offer and offers a **"Rihap ofertën"**
+  (reopen → Dërguar) action, instead of only failing server-side.
+
+Closeout tests: unit **48** (+5 `isOverdue`); new `src/server/invoice-closeout.dbtest.ts`
+(4: issuer-snapshot stability, deletion lifecycle, payments-never-become-credit);
+`invoices.dbtest.ts` updated (Vonesë no longer settable). Migration 0011 applied to
+Neon dev, idempotent, `drizzle-kit check` clean.
 
 ## Commits
 - Phase 6 application baseline: `775d181`.
