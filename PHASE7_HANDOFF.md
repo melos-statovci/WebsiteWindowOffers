@@ -118,8 +118,14 @@ set an authoritative invoice total or line price for an offer-based invoice.
   next-invoice debt offset, mark-paid idempotency, **two SIMULTANEOUS mark-paid →
   exactly one 250 payment (not 500)**, advance→credit, delete restores/reverts,
   same-org sharing, cross-org isolation, accepted-offer freeze+reopen.
-- Full `test:db` run: see `git log` / rerun (was green per-file; full-suite
-  confirmation was in progress at handoff time — rerun `npm run test:db`).
+- Full `test:db` run: **148 passed (11 files)** — 108 prior + 40 new finance; no
+  regression from the accepted-offer guard.
+- Browser smoke (no-auth): dev server boots, `/` serves, the new invoices/payments
+  hydrators + finance layout load with NO server or console errors (only the
+  benign pre-existing pg `sslmode` deprecation warning) and no hydration mismatch.
+  Authenticated finance-flow browser validation was NOT run here — it needs sign-in
+  (creating an account / entering a password), which the agent must not do in an
+  unattended session; it is the one remaining manual verification (checklist below).
 
 ## Next exact step
 1. Confirm full `npm run test:db` is green (all ~148 DB tests).
