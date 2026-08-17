@@ -5,6 +5,7 @@ import { listProjects } from "@/server/projects";
 import { listInvoices } from "@/server/invoices";
 import { listPayments } from "@/server/payments";
 import { getOrganizationProfile } from "@/server/organization-profile";
+import { listNotes } from "@/server/notes";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { ClientsHydrator } from "@/components/providers/clients-hydrator";
 import { PricingHydrator } from "@/components/providers/pricing-hydrator";
@@ -12,6 +13,7 @@ import { ProjectsHydrator } from "@/components/providers/projects-hydrator";
 import { InvoicesHydrator } from "@/components/providers/invoices-hydrator";
 import { PaymentsHydrator } from "@/components/providers/payments-hydrator";
 import { CompanyHydrator } from "@/components/providers/company-hydrator";
+import { NotesHydrator } from "@/components/providers/notes-hydrator";
 import { AppShell } from "@/components/shell/app-shell";
 
 // Server-side authoritative gate for the whole app shell. requireAuthContext
@@ -29,13 +31,14 @@ export default async function AppGroupLayout({
   children: React.ReactNode;
 }) {
   const ctx = await requireAuthContext();
-  const [clients, pricing, projects, invoices, payments, company] = await Promise.all([
+  const [clients, pricing, projects, invoices, payments, company, notes] = await Promise.all([
     listClients(),
     getActivePricingCatalog(),
     listProjects(),
     listInvoices(),
     listPayments(),
     getOrganizationProfile(),
+    listNotes(),
   ]);
   return (
     <SessionProvider value={ctx}>
@@ -45,6 +48,7 @@ export default async function AppGroupLayout({
       <InvoicesHydrator invoices={invoices} />
       <PaymentsHydrator payments={payments} />
       <CompanyHydrator company={company} />
+      <NotesHydrator notes={notes} />
       <AppShell>{children}</AppShell>
     </SessionProvider>
   );

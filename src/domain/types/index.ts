@@ -198,6 +198,8 @@ export interface Note {
   clientId: string;
   text: string;
   at: string;
+  // Display name of the member who wrote the note (snapshotted server-side).
+  authorName?: string;
 }
 
 export interface AppNotification {

@@ -473,3 +473,39 @@ export const payments = pgTable(
     index("payments_org_invoice_idx").on(table.organizationId, table.invoiceId),
   ],
 );
+
+// Notes — free-text notes attached to a Client, shared across the organization
+// (Phase 8; previously browser-local Zustand state). Directly org-owned
+// (organization_id is the RLS tenant key) AND tenant-linked to their Client by a
+// COMPOSITE FK (organization_id, client_id) -> clients(organization_id, id)
+// ON DELETE CASCADE, so a note can never attach to another org's client and
+// deleting a client removes its notes. The author is snapshotted (author_name)
+// so the note keeps showing who wrote it even if that member later leaves;
+// author_user_id is bare provenance (no FK to the Better Auth user table).
+export const notes = pgTable(
+  "notes",
+  {
+    id: uuid("id")
+      .default(sql`gen_random_uuid()`)
+      .primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    clientId: uuid("client_id").notNull(),
+    text: text("text").notNull(),
+    authorUserId: uuid("author_user_id"),
+    authorName: text("author_name").notNull().default(""),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    // Same-tenant Client relationship, ON DELETE CASCADE: deleting a client
+    // removes its notes; org-delete cascade removes both.
+    foreignKey({
+      name: "notes_org_client_fk",
+      columns: [table.organizationId, table.clientId],
+      foreignColumns: [clients.organizationId, clients.id],
+    }).onDelete("cascade"),
+    index("notes_org_idx").on(table.organizationId),
+    index("notes_org_client_idx").on(table.organizationId, table.clientId),
+  ],
+);

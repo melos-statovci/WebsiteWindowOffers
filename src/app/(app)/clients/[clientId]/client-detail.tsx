@@ -2,10 +2,10 @@
 
 // Client card. The IDENTITY (name/type/contact) is DB-backed and arrives as a
 // prop; edit/delete go through the tenant server actions. Projects/offers
-// (Phase 6) and invoices/payments (Phase 7) are also DB-backed — read from the
-// store's server-hydrated mirrors, filtered by this client's UUID — so the
-// financial summary is server-authoritative. Only Notes remain local; that tab
-// still carries a transitional treatment.
+// (Phase 6), invoices/payments (Phase 7) and Notes (Phase 8) are also DB-backed —
+// read from the store's server-hydrated mirrors, filtered by this client's UUID —
+// so the financial summary and notes are server-authoritative and shared across
+// same-org members.
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -20,6 +20,7 @@ import { ClientFormModal, type ClientDraft } from "@/components/clients/client-f
 import { PaymentModal, type PaymentDraft } from "@/components/clients/payment-modal";
 import { updateClient, deleteClient } from "@/server/actions/client.action";
 import { recordAdvancePayment } from "@/server/actions/payment.action";
+import { createNote, deleteNote as deleteNoteAction } from "@/server/actions/note.action";
 import { useStore } from "@/lib/store";
 import { eur, initials, shortDate } from "@/lib/format";
 import { clientStats, projectTotal } from "@/domain/finance/selectors";
@@ -38,8 +39,6 @@ export function ClientDetail({ client, clientId }: { client: Client | null; clie
   const invoices = useStore((s) => s.invoices);
   const payments = useStore((s) => s.payments);
   const notes = useStore((s) => s.notes);
-  const addNote = useStore((s) => s.addNote);
-  const deleteNote = useStore((s) => s.deleteNote);
 
   const [tab, setTab] = useState<Tab>("Përmbledhje");
   const [editOpen, setEditOpen] = useState(false);
@@ -267,7 +266,15 @@ export function ClientDetail({ client, clientId }: { client: Client | null; clie
             <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Shkruani një shënim për klientin..."
               className="min-h-24 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900 outline-none focus:border-neutral-500" />
             <div className="mt-3 flex justify-end">
-              <Button disabled={!noteText.trim()} onClick={() => { addNote(client.id, noteText.trim()); setNoteText(""); toast("Shënimi u ruajt."); }}>
+              <Button disabled={!noteText.trim() || busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    const res = await createNote({ clientId: client.id, text: noteText.trim() });
+                    if (!res.ok) { toast(res.error.fieldErrors?.text?.[0] ?? res.error.message); return; }
+                    setNoteText(""); toast("Shënimi u ruajt."); router.refresh();
+                  } finally { setBusy(false); }
+                }}>
                 Ruaj shënimin
               </Button>
             </div>
@@ -278,9 +285,20 @@ export function ClientDetail({ client, clientId }: { client: Client | null; clie
                 <div key={n.id} className="flex items-start justify-between gap-3 px-5 py-4">
                   <div>
                     <p className="text-sm text-slate-700">{n.text}</p>
-                    <p className="mt-1 text-xs text-slate-400">{shortDate(n.at)}</p>
+                    <p className="mt-1 text-xs text-slate-400">{shortDate(n.at)}{n.authorName ? ` · ${n.authorName}` : ""}</p>
                   </div>
-                  <button onClick={() => deleteNote(n.id)} className="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-400" aria-label="Fshi shënimin">
+                  <button disabled={busy}
+                    onClick={async () => {
+                      const ok = await confirm({ title: "Fshi shënimin?", message: "Shënimi do të hiqet për të gjithë ekipin.", confirmLabel: "Fshi", danger: true });
+                      if (!ok) return;
+                      setBusy(true);
+                      try {
+                        const res = await deleteNoteAction({ id: n.id });
+                        if (!res.ok) { toast(res.error.message); return; }
+                        toast("Shënimi u fshi."); router.refresh();
+                      } finally { setBusy(false); }
+                    }}
+                    className="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 disabled:opacity-50" aria-label="Fshi shënimin">
                     <Trash2 className="size-4" />
                   </button>
                 </div>

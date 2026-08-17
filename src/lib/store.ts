@@ -22,8 +22,6 @@ export const uid = (): string =>
     ? crypto.randomUUID()
     : "id-" + Math.abs(Math.floor(performance.now() * 1000)).toString(36) + Date.now().toString(36);
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
-
 export type UiDismissalKey = "configGuide" | "trialBanner";
 export type UiDismissalMode = "tomorrow" | "forever";
 type UiDismissals = Partial<Record<UiDismissalKey, string>>;
@@ -78,7 +76,11 @@ function seedData(): DataSlice {
     // payment server actions).
     invoices: [],
     payments: [],
-    notes: structuredClone(seed.notes),
+    // Notes are DB-backed (Phase 8). Like clients/projects, the store keeps a
+    // NON-persisted, read-only MIRROR of the active org's notes, hydrated from the
+    // server by <NotesHydrator>. It seeds empty and is never written locally (all
+    // writes go through the note server actions).
+    notes: [],
     users: structuredClone(seed.users),
     notifications: structuredClone(seed.notifications),
     company: structuredClone(seed.company),
@@ -132,9 +134,11 @@ interface StoreState extends DataSlice {
   setInvoices: (invoices: Invoice[]) => void;
   setPayments: (payments: Payment[]) => void;
 
-  // notes
-  addNote: (clientId: string, text: string) => void;
-  deleteNote: (id: string) => void;
+  // notes — DB-backed (Phase 8). The store holds only a read-only mirror; all
+  // writes go through the server actions in src/server/actions/note.action.ts.
+  // setNotes is hydration/mirror-only (no local authority, no dual-write). There
+  // is deliberately NO local add/delete for notes.
+  setNotes: (notes: Note[]) => void;
 
   // company — DB-backed (Phase 8). The store holds only a NON-persisted,
   // server-hydrated mirror (via <CompanyHydrator>); the authoritative write goes
@@ -185,9 +189,8 @@ export const useStore = create<StoreState>()(
       setInvoices: (invoices) => set({ invoices }),
       setPayments: (payments) => set({ payments }),
 
-      addNote: (clientId, text) =>
-        set((s) => ({ notes: [{ id: uid(), clientId, text, at: todayIso() }, ...s.notes] })),
-      deleteNote: (id) => set((s) => ({ notes: s.notes.filter((n) => n.id !== id) })),
+      // Hydration only: replace the read-only mirror with the server's notes.
+      setNotes: (notes) => set({ notes }),
 
       // Hydration only: replace the read-only mirror with the server's profile.
       setCompany: (company) => set({ company }),
@@ -278,6 +281,9 @@ export const useStore = create<StoreState>()(
         // localStorage copy can never re-become authoritative; it is re-hydrated
         // from the server after mount.
         merged.company = base.company;
+        // Notes (Phase 8) are DB-backed too — wipe any stale localStorage copy so
+        // it can never re-become authoritative; re-hydrated from the server.
+        merged.notes = [];
         void fromVersion;
         return merged as never;
       },
@@ -285,15 +291,15 @@ export const useStore = create<StoreState>()(
       skipHydration: true,
       partialize: (s) => {
         // NOTE: clients (Phase 4), pricing (Phase 5), projects (Phase 6),
-        // invoices + payments (Phase 7) and now the company profile (Phase 8) are
-        // intentionally EXCLUDED — they live in Postgres, not localStorage.
-        // Persisting them would recreate a stale local source of truth and let
-        // clearing localStorage "delete" server data. All are server-hydrated at
-        // runtime.
+        // invoices + payments (Phase 7) and now the company profile + notes
+        // (Phase 8) are intentionally EXCLUDED — they live in Postgres, not
+        // localStorage. Persisting them would recreate a stale local source of
+        // truth and let clearing localStorage "delete" server data. All are
+        // server-hydrated at runtime.
         const {
-          notes, users, notifications, selectedDesignId, guideDone, uiDismissals,
+          users, notifications, selectedDesignId, guideDone, uiDismissals,
         } = s;
-        return { notes, users, notifications, selectedDesignId, guideDone, uiDismissals };
+        return { users, notifications, selectedDesignId, guideDone, uiDismissals };
       },
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
