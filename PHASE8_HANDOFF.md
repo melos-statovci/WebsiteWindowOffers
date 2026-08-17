@@ -110,8 +110,8 @@ Classification & disposition:
 
 ## Verification (rerun these)
 - `npm test` → 48 unit ✓
-- `npm run test:db` → <FILL: run in progress at handoff; prior full run exit 0; expected 153 prior + 13
-  new notes = ~166; action.dbtest +2 (clearable/empty businessEmail)>
+- `npm run test:db` → **167 passed (13 files)** (up from 153 at Phase 7: +13 notes vertical-slice,
+  +2 company businessEmail cases, net +14 after consolidation)
 - `npm run lint` ✓ · `npm run typecheck` ✓ · `npm run build` ✓ · `npm run check` (rerun)
 - `npx drizzle-kit check` → Everything's fine ✓
 - New tests: `src/server/notes.dbtest.ts` (13: RLS isolation, composite-FK cross-client rejection,
