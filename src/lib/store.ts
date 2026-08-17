@@ -21,6 +21,13 @@ export const uid = (): string =>
     ? crypto.randomUUID()
     : "id-" + Math.abs(Math.floor(performance.now() * 1000)).toString(36) + Date.now().toString(36);
 
+/** Neutral company profile for the pre-hydration mirror — never fake mock data. */
+const EMPTY_COMPANY: CompanyProfile = {
+  name: "", address: "", phone: "", email: "", nui: "", vatNo: "",
+  postalCode: "", city: "", bank: "", swift: "", iban: "",
+  marginDefault: 0, vatDefault: 0,
+};
+
 export type UiDismissalKey = "configGuide" | "trialBanner";
 export type UiDismissalMode = "tomorrow" | "forever";
 type UiDismissals = Partial<Record<UiDismissalKey, string>>;
@@ -83,7 +90,10 @@ function seedData(): DataSlice {
     // empty state instead of fake seeded events. The slice + mark-read methods are
     // kept for when real notifications land.
     notifications: [],
-    company: structuredClone(seed.company),
+    // Company profile is DB-backed (Phase 8). NON-persisted, server-hydrated
+    // mirror (via <CompanyHydrator>). It seeds NEUTRAL/empty — never the fictional
+    // mock company — so nothing fake is ever shown before hydration completes.
+    company: { ...EMPTY_COMPANY },
     // Pricing is DB-backed (Phase 5). This is a NON-persisted, server-hydrated
     // runtime MIRROR (via <PricingHydrator>) that the configurator reads
     // synchronously for live preview. It seeds with the canonical default so the

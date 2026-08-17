@@ -15,8 +15,11 @@ import type {
   Client, Project, Invoice, Payment, Note, AppNotification, CompanyProfile,
 } from "@/domain/types";
 
-/** Bumped whenever the persisted shape changes in a breaking way. */
-export const SCHEMA_VERSION = 2;
+/** Bumped whenever the persisted shape changes in a breaking way. v3 (Phase 8):
+ *  company/notes moved to Postgres and dropped from the persisted set, and the
+ *  fake seeded notifications were removed — the bump forces the store's persist
+ *  `migrate` to wipe any stale copy an older localStorage still carries. */
+export const SCHEMA_VERSION = 3;
 
 /** The subset of store state that is persisted / exported. */
 export interface PersistedShape {
