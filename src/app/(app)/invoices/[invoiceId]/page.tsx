@@ -10,6 +10,8 @@ import { useStore } from "@/lib/store";
 import { eurAfter, shortDate } from "@/lib/format";
 import { invoiceNet, invoicePaid, invoiceOutstanding, invoicePaymentState } from "@/domain/finance/selectors";
 import { printInvoice } from "@/lib/print";
+import { setInvoiceStatus, deleteInvoice } from "@/server/actions/invoice.action";
+import { recordInvoicePayment, markInvoicePaid } from "@/server/actions/payment.action";
 import { useApp } from "@/components/providers/providers";
 import type { InvoiceStatus } from "@/domain/types";
 
@@ -19,7 +21,8 @@ const statusTone: Record<InvoiceStatus, "neutral" | "blue" | "emerald" | "rose" 
 // Workflow statuses the user sets by hand. "Paguar" is intentionally absent:
 // paid state is derived from recorded payments, never set manually (that is what
 // used to allow duplicate full-value payments).
-const WORKFLOW_STATUSES: InvoiceStatus[] = ["Draft", "Dërguar", "Vonesë", "Anuluar"];
+type SettableStatus = Exclude<InvoiceStatus, "Paguar">;
+const WORKFLOW_STATUSES: SettableStatus[] = ["Draft", "Dërguar", "Vonesë", "Anuluar"];
 
 export default function InvoiceDetailPage({ params }: { params: Promise<{ invoiceId: string }> }) {
   const { invoiceId } = use(params);
@@ -29,10 +32,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ invoic
   const company = useStore((s) => s.company);
   const payments = useStore((s) => s.payments);
   const project = useStore((s) => s.projects.find((p) => p.id === inv?.projectId));
-  const setInvoiceStatus = useStore((s) => s.setInvoiceStatus);
-  const deleteInvoice = useStore((s) => s.deleteInvoice);
-  const recordInvoicePayment = useStore((s) => s.recordInvoicePayment);
   const [payOpen, setPayOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   if (!inv) {
     return (
@@ -55,29 +56,44 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ invoic
   const isSettled = payState === "paid" || payState === "overpaid";
   const canPay = inv.status !== "Anuluar" && outstanding > 0.005;
 
-  // Idempotent: records only the remaining balance, so it can never create a
-  // duplicate full-value payment. Disabled once nothing is outstanding.
-  const markPaid = () => {
-    const res = recordInvoicePayment(inv.id, {
-      amount: outstanding,
-      date: new Date().toISOString().slice(0, 10),
-      method: "Transfertë bankare",
-      note: `Shlyerje e plotë · ${inv.number}`,
-    });
-    if (!res.ok) return toast(res.error ?? "Pagesa nuk u regjistrua.");
-    toast("Fatura u shlye plotësisht dhe pagesa u regjistrua.");
+  const changeStatus = async (status: SettableStatus) => {
+    setBusy(true);
+    const res = await setInvoiceStatus({ id: inv.id, status });
+    setBusy(false);
+    if (!res.ok) return toast(res.error.message);
+    toast("Statusi u përditësua.");
+    router.refresh();
   };
 
-  const submitPayment = (d: PaymentDraft & { allowCredit?: boolean }) => {
-    const res = recordInvoicePayment(inv.id, { amount: d.amount, date: d.date, method: d.method, note: d.note || undefined, allowCredit: d.allowCredit });
-    if (!res.ok) { toast(res.error ?? "Pagesa nuk u regjistrua."); return; }
+  // Idempotent server-side: settles only the REMAINING balance under a row lock,
+  // so it can never create a duplicate full-value payment even on double-click.
+  const markPaid = async () => {
+    setBusy(true);
+    const res = await markInvoicePaid({ invoiceId: inv.id });
+    setBusy(false);
+    if (!res.ok) return toast(res.error.message);
+    toast(res.data.created ? "Fatura u shlye plotësisht dhe pagesa u regjistrua." : "Fatura ishte tashmë e paguar.");
+    router.refresh();
+  };
+
+  const submitPayment = async (d: PaymentDraft & { allowCredit?: boolean }) => {
+    setBusy(true);
+    const res = await recordInvoicePayment({ invoiceId: inv.id, amount: d.amount, date: d.date, method: d.method, note: d.note || undefined, allowCredit: d.allowCredit });
+    setBusy(false);
+    if (!res.ok) { toast(res.error.message); return; }
     setPayOpen(false);
-    toast(res.credit ? `Pagesa u regjistrua. Kredi klienti: ${res.credit.toFixed(2)} €.` : res.paidInFull ? "Fatura u shlye plotësisht." : "Pagesa u regjistrua.");
+    toast(res.data.credit ? `Pagesa u regjistrua. Kredi klienti: ${res.data.credit.toFixed(2)} €.` : res.data.paidInFull ? "Fatura u shlye plotësisht." : "Pagesa u regjistrua.");
+    router.refresh();
   };
 
   const remove = async () => {
-    const ok = await confirm({ title: "Fshi faturën?", message: `“${inv.number}” do të fshihet lokalisht.`, confirmLabel: "Fshi", danger: true });
-    if (ok) { deleteInvoice(inv.id); toast("Fatura u fshi."); router.push("/invoices"); }
+    const ok = await confirm({ title: "Fshi faturën?", message: `“${inv.number}” do të fshihet përgjithmonë.`, confirmLabel: "Fshi", danger: true });
+    if (!ok) return;
+    const res = await deleteInvoice({ id: inv.id });
+    if (!res.ok) return toast(res.error.message);
+    toast("Fatura u fshi.");
+    router.push("/invoices");
+    router.refresh();
   };
 
   return (
@@ -87,8 +103,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ invoic
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => printInvoice(inv, company)}><Printer className="size-4" /> Printo</Button>
           <Button variant="outline" onClick={() => printInvoice(inv, company)}><FileDown className="size-4" /> PDF</Button>
-          {canPay && <Button variant="outline" onClick={() => setPayOpen(true)}><Plus className="size-4" /> Shto pagesë</Button>}
-          {canPay && <Button onClick={markPaid}><Check className="size-4" /> Shëno të paguar</Button>}
+          {canPay && <Button variant="outline" disabled={busy} onClick={() => setPayOpen(true)}><Plus className="size-4" /> Shto pagesë</Button>}
+          {canPay && <Button disabled={busy} onClick={markPaid}><Check className="size-4" /> Shëno të paguar</Button>}
           <button onClick={remove} className="grid size-10 place-items-center rounded-lg border border-slate-200 text-slate-400 hover:bg-rose-500/10 hover:text-rose-400" aria-label="Fshi faturën"><Trash2 className="size-4" /></button>
         </div>
       </div>
@@ -110,8 +126,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ invoic
                 <Badge tone="emerald">{payState === "overpaid" ? "Paguar (mbipagesë)" : "Paguar"}</Badge>
               ) : (
                 <>
-                  <select value={inv.status} onChange={(e) => { setInvoiceStatus(inv.id, e.target.value as InvoiceStatus); toast("Statusi u përditësua."); }}
-                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500">
+                  <select value={inv.status} disabled={busy} onChange={(e) => changeStatus(e.target.value as SettableStatus)}
+                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500 disabled:opacity-60">
                     {WORKFLOW_STATUSES.map((s) => <option key={s}>{s}</option>)}
                   </select>
                   <Badge tone={statusTone[inv.status]}>{inv.status}</Badge>

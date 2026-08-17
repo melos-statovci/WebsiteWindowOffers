@@ -10,17 +10,12 @@ import type {
   Note,
   User,
   AppNotification,
-  InvoiceStatus,
   CompanyProfile,
 } from "@/domain/types";
 import type { PricingCatalog } from "@/domain/pricing/types";
 import * as seed from "@/lib/mock/data";
 import { guideStepKeys } from "@/lib/plan";
-import { invoiceTotal, invoicePaid } from "@/domain/finance/selectors";
 import { validateBackup, SCHEMA_VERSION } from "@/domain/backup/backup";
-
-/** Half-a-cent tolerance, matching selectors. */
-const MONEY_EPS = 0.005;
 
 export const uid = (): string =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -76,8 +71,13 @@ function seedData(): DataSlice {
     // the server by <ProjectsHydrator>. It seeds empty and is never written
     // locally (all writes go through the project server actions).
     projects: [],
-    invoices: structuredClone(seed.invoices),
-    payments: structuredClone(seed.payments),
+    // Invoices + payments are DB-backed (Phase 7). Like clients/projects, the
+    // store keeps a NON-persisted, read-only MIRROR of the active org's finance,
+    // hydrated from the server by <InvoicesHydrator>/<PaymentsHydrator>. It seeds
+    // empty and is never written locally (all writes go through the invoice /
+    // payment server actions).
+    invoices: [],
+    payments: [],
     notes: structuredClone(seed.notes),
     users: structuredClone(seed.users),
     notifications: structuredClone(seed.notifications),
@@ -123,23 +123,16 @@ interface StoreState extends DataSlice {
   // delete for projects or their items.
   setProjects: (projects: Project[]) => void;
 
-  // invoices
-  addInvoice: (data: Omit<Invoice, "id" | "number">) => string;
-  updateInvoice: (id: string, patch: Partial<Invoice>) => void;
-  setInvoiceStatus: (id: string, status: InvoiceStatus) => void;
-  deleteInvoice: (id: string) => void;
+  // invoices + payments — DB-backed (Phase 7). The store holds only read-only
+  // mirrors; all writes go through the server actions in
+  // src/server/actions/invoice.action.ts / payment.action.ts. setInvoices /
+  // setPayments are hydration/mirror-only (no local authority, no dual-write),
+  // mirroring setClients/setProjects. There is deliberately NO local
+  // add/update/delete/record for invoices or payments.
+  setInvoices: (invoices: Invoice[]) => void;
+  setPayments: (payments: Payment[]) => void;
 
-  // payments / notes
-  addPayment: (data: Omit<Payment, "id">) => string;
-  /**
-   * Record a payment against a specific invoice. Idempotent by design: it can
-   * only ever settle the *remaining* balance, so "mark paid" cannot create
-   * duplicate full-value payments. Overpayment is rejected unless allowCredit.
-   */
-  recordInvoicePayment: (
-    invoiceId: string,
-    data: { amount: number; date: string; method: string; note?: string; allowCredit?: boolean },
-  ) => { ok: boolean; error?: string; credit?: number; paidInFull?: boolean };
+  // notes
   addNote: (clientId: string, text: string) => void;
   deleteNote: (id: string) => void;
 
@@ -168,18 +161,6 @@ interface StoreState extends DataSlice {
   importData: (json: string) => { ok: boolean; error?: string };
 }
 
-function nextNumber(prefix: string, existing: { number: string }[]): string {
-  const year = 2026;
-  const nums = existing
-    .map((e) => {
-      const m = e.number.match(/(\d+)$/);
-      return m ? parseInt(m[1], 10) : 0;
-    })
-    .filter((n) => !Number.isNaN(n));
-  const next = (nums.length ? Math.max(...nums) : 0) + 1;
-  return `${prefix}-${year}-${String(next).padStart(3, "0")}`;
-}
-
 export const useStore = create<StoreState>()(
   persist(
     (set, get) => ({
@@ -193,79 +174,10 @@ export const useStore = create<StoreState>()(
       // Hydration only: replace the read-only mirror with the server's projects.
       setProjects: (projects) => set({ projects }),
 
-      addInvoice: (data) => {
-        const id = uid();
-        const number = nextNumber("FAT", get().invoices);
-        set((s) => ({ invoices: [{ id, number, ...data }, ...s.invoices] }));
-        return id;
-      },
-      updateInvoice: (id, patch) =>
-        set((s) => ({ invoices: s.invoices.map((i) => (i.id === id ? { ...i, ...patch } : i)) })),
-      setInvoiceStatus: (id, status) =>
-        set((s) => ({ invoices: s.invoices.map((i) => (i.id === id ? { ...i, status } : i)) })),
-      // Deleting an invoice must not orphan its payments. They are kept but
-      // unlinked, so the money survives as client credit (an advance) instead
-      // of pointing at a non-existent invoice.
-      deleteInvoice: (id) =>
-        set((s) => ({
-          invoices: s.invoices.filter((i) => i.id !== id),
-          payments: s.payments.map((p) =>
-            p.invoiceId === id ? { ...p, invoiceId: undefined } : p,
-          ),
-        })),
+      // Hydration only: replace the read-only mirrors with the server's finance.
+      setInvoices: (invoices) => set({ invoices }),
+      setPayments: (payments) => set({ payments }),
 
-      addPayment: (data) => {
-        const id = uid();
-        set((s) => ({ payments: [{ id, ...data }, ...s.payments] }));
-        return id;
-      },
-      recordInvoicePayment: (invoiceId, data) => {
-        const s = get();
-        const inv = s.invoices.find((i) => i.id === invoiceId);
-        if (!inv) return { ok: false, error: "Fatura nuk u gjet." };
-        if (inv.status === "Anuluar") return { ok: false, error: "Fatura është e anuluar." };
-        const amount = Math.round(data.amount * 100) / 100;
-        if (!(amount > 0)) return { ok: false, error: "Shuma duhet të jetë më e madhe se zero." };
-
-        const total = invoiceTotal(inv);
-        const alreadyPaid = invoicePaid(inv.id, s.payments);
-        const outstanding = Math.max(0, Math.round((total - alreadyPaid) * 100) / 100);
-
-        if (outstanding <= MONEY_EPS && !data.allowCredit) {
-          return { ok: false, error: "Kjo faturë është tashmë e paguar plotësisht." };
-        }
-        if (amount > outstanding + MONEY_EPS && !data.allowCredit) {
-          return {
-            ok: false,
-            error: `Shuma tejkalon mbetjen e faturës (${outstanding.toFixed(2)} €). Aktivizoni kredinë për ta lejuar.`,
-          };
-        }
-
-        const id = uid();
-        const payment: Payment = {
-          id,
-          clientId: inv.clientId,
-          invoiceId: inv.id,
-          amount,
-          date: data.date,
-          method: data.method,
-          note: data.note,
-        };
-        const paidInFull = alreadyPaid + amount + MONEY_EPS >= total;
-        const credit = Math.max(0, Math.round((amount - outstanding) * 100) / 100);
-
-        set((st) => ({
-          payments: [payment, ...st.payments],
-          invoices: st.invoices.map((i) => {
-            if (i.id !== inv.id) return i;
-            if (paidInFull) return { ...i, status: "Paguar" as InvoiceStatus };
-            // Recording a payment on a Draft invoice issues it.
-            if (i.status === "Draft") return { ...i, status: "Dërguar" as InvoiceStatus };
-            return i;
-          }),
-        }));
-        return { ok: true, credit: credit > MONEY_EPS ? credit : undefined, paidInFull };
-      },
       addNote: (clientId, text) =>
         set((s) => ({ notes: [{ id: uid(), clientId, text, at: todayIso() }, ...s.notes] })),
       deleteNote: (id) => set((s) => ({ notes: s.notes.filter((n) => n.id !== id) })),
@@ -348,25 +260,26 @@ export const useStore = create<StoreState>()(
         // store still carries so stale localStorage can never re-become an
         // authoritative source; they are re-hydrated from the server after mount.
         merged.projects = [];
-        if (fromVersion < 2 && Array.isArray(merged.invoices)) {
-          // v1 invoices had no projectId — nothing to backfill, just normalise.
-          merged.invoices = merged.invoices.map((inv) => ({ ...inv }));
-        }
+        // Invoices + payments (Phase 7) are DB-backed too — wipe any stale
+        // localStorage copy so it can never re-become authoritative; both are
+        // re-hydrated from the server after mount.
+        merged.invoices = [];
+        merged.payments = [];
+        void fromVersion;
         return merged as never;
       },
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
       partialize: (s) => {
-        // NOTE: clients (Phase 4), pricing (Phase 5) and projects (Phase 6) are
-        // intentionally EXCLUDED — they live in Postgres, not localStorage.
-        // Persisting them would recreate a stale local source of truth and let
-        // clearing localStorage "delete" server data. All three are
-        // server-hydrated at runtime.
+        // NOTE: clients (Phase 4), pricing (Phase 5), projects (Phase 6) and now
+        // invoices + payments (Phase 7) are intentionally EXCLUDED — they live in
+        // Postgres, not localStorage. Persisting them would recreate a stale local
+        // source of truth and let clearing localStorage "delete" server data. All
+        // are server-hydrated at runtime.
         const {
-          invoices, payments, notes, users,
-          notifications, company, selectedDesignId, guideDone, uiDismissals,
+          notes, users, notifications, company, selectedDesignId, guideDone, uiDismissals,
         } = s;
-        return { invoices, payments, notes, users, notifications, company, selectedDesignId, guideDone, uiDismissals };
+        return { notes, users, notifications, company, selectedDesignId, guideDone, uiDismissals };
       },
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

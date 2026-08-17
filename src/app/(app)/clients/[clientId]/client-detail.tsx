@@ -1,11 +1,11 @@
 "use client";
 
 // Client card. The IDENTITY (name/type/contact) is DB-backed and arrives as a
-// prop; edit/delete go through the tenant server actions. The related tabs
-// (projects/offers/payments/notes) are STILL local this phase and are read from
-// the store, filtered by this client's UUID — a transitional mixed state, so
-// those sections carry a "lokale" label and a fresh DB client legitimately shows
-// none of them until local records reference it.
+// prop; edit/delete go through the tenant server actions. Projects/offers
+// (Phase 6) and invoices/payments (Phase 7) are also DB-backed — read from the
+// store's server-hydrated mirrors, filtered by this client's UUID — so the
+// financial summary is server-authoritative. Only Notes remain local; that tab
+// still carries a transitional treatment.
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -19,6 +19,7 @@ import { Button, Card, Badge, Avatar, EmptyState } from "@/components/ui/kit";
 import { ClientFormModal, type ClientDraft } from "@/components/clients/client-form-modal";
 import { PaymentModal, type PaymentDraft } from "@/components/clients/payment-modal";
 import { updateClient, deleteClient } from "@/server/actions/client.action";
+import { recordAdvancePayment } from "@/server/actions/payment.action";
 import { useStore } from "@/lib/store";
 import { eur, initials, shortDate } from "@/lib/format";
 import { clientStats, projectTotal } from "@/domain/finance/selectors";
@@ -37,7 +38,6 @@ export function ClientDetail({ client, clientId }: { client: Client | null; clie
   const invoices = useStore((s) => s.invoices);
   const payments = useStore((s) => s.payments);
   const notes = useStore((s) => s.notes);
-  const addPayment = useStore((s) => s.addPayment);
   const addNote = useStore((s) => s.addNote);
   const deleteNote = useStore((s) => s.deleteNote);
 
@@ -98,11 +98,16 @@ export function ClientDetail({ client, clientId }: { client: Client | null; clie
     router.refresh();
   };
 
-  const submitPayment = (d: PaymentDraft) => {
-    // Payments remain local this phase; keyed by the DB client's UUID.
-    addPayment({ clientId: client.id, amount: d.amount, date: d.date, method: d.method, note: d.note || undefined });
+  const submitPayment = async (d: PaymentDraft) => {
+    if (busy) return;
+    setBusy(true);
+    // An unlinked advance payment (no invoice) -> becomes client credit.
+    const res = await recordAdvancePayment({ clientId: client.id, amount: d.amount, date: d.date, method: d.method, note: d.note || undefined });
+    setBusy(false);
+    if (!res.ok) { toast(res.error.message); return; }
     setPayOpen(false);
     toast(`Pagesa prej ${eur(d.amount)} u regjistrua.`);
+    router.refresh();
   };
 
   const remove = async () => {
@@ -187,7 +192,6 @@ export function ClientDetail({ client, clientId }: { client: Client | null; clie
           <Card className="p-5 sm:p-6">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="font-heading text-base font-semibold text-slate-900">Përmbledhje financiare</h3>
-              <Badge tone="neutral">lokale</Badge>
             </div>
             <dl className="divide-y divide-slate-200 text-sm">
               <FinRow label="Oferta gjithsej" value={String(stats.offersTotal)} />

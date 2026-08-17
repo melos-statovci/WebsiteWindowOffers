@@ -8,6 +8,7 @@ import { InvoiceFormModal } from "@/components/invoices/invoice-form-modal";
 import { useStore } from "@/lib/store";
 import { eur, shortDate } from "@/lib/format";
 import { invoiceTotal, invoicePaid, invoiceOutstanding } from "@/domain/finance/selectors";
+import { deleteInvoice } from "@/server/actions/invoice.action";
 import { useApp } from "@/components/providers/providers";
 import type { Invoice, InvoiceStatus } from "@/domain/types";
 
@@ -28,7 +29,6 @@ export default function InvoicesPage() {
   const { toast, confirm } = useApp();
   const invoices = useStore((s) => s.invoices);
   const payments = useStore((s) => s.payments);
-  const deleteInvoice = useStore((s) => s.deleteInvoice);
 
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<(typeof STATUSES)[number]>("Të gjitha statuset");
@@ -61,8 +61,12 @@ export default function InvoicesPage() {
   }, [invoices, q, status]);
 
   const remove = async (inv: Invoice) => {
-    const ok = await confirm({ title: "Fshi faturën?", message: `“${inv.number}” do të fshihet lokalisht.`, confirmLabel: "Fshi", danger: true });
-    if (ok) { deleteInvoice(inv.id); toast("Fatura u fshi."); }
+    const ok = await confirm({ title: "Fshi faturën?", message: `“${inv.number}” do të fshihet përgjithmonë.`, confirmLabel: "Fshi", danger: true });
+    if (!ok) return;
+    const res = await deleteInvoice({ id: inv.id });
+    if (!res.ok) return toast(res.error.message);
+    toast("Fatura u fshi.");
+    router.refresh();
   };
 
   return (
