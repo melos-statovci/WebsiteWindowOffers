@@ -39,6 +39,10 @@ async function profileNui(orgId: string): Promise<string | null> {
   const r = await ownerPool.query(`select nui from organization_profiles where organization_id=$1`, [orgId]);
   return r.rows[0]?.nui ?? null;
 }
+async function profileEmail(orgId: string): Promise<string | null> {
+  const r = await ownerPool.query(`select business_email from organization_profiles where organization_id=$1`, [orgId]);
+  return r.rows[0]?.business_email ?? null;
+}
 
 let ownerCookie = "";
 let orgA = "";
@@ -132,6 +136,12 @@ describe("validation", () => {
   it("accepts a valid partial update", async () => {
     const r = await updateOrganizationProfileAction({ businessEmail: `hi-${suffix}@example.com` }, H(ownerCookie));
     expect(r.ok).toBe(true);
+    expect(await profileEmail(orgA)).toBe(`hi-${suffix}@example.com`);
+  });
+  it("accepts an empty businessEmail so the field can be cleared", async () => {
+    const r = await updateOrganizationProfileAction({ businessEmail: "" }, H(ownerCookie));
+    expect(r.ok).toBe(true);
+    expect(await profileEmail(orgA)).toBe("");
   });
 });
 

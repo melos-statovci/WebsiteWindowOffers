@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Building2, Palette, Users, CreditCard, Download, Upload, ChevronRight,
-  ArrowLeft, ImageIcon, Check, TriangleAlert, RotateCcw, Trash2,
+  ArrowLeft, ImageIcon, Check, TriangleAlert, RotateCcw, Trash2, Lock,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button, Card, Badge, Field, Input, Label } from "@/components/ui/kit";
@@ -13,6 +14,10 @@ import { account, sampleOffer } from "@/lib/mock/data";
 import { plans, offerDesigns } from "@/lib/plan";
 import { eurAfter } from "@/lib/format";
 import { useApp } from "@/components/providers/providers";
+import { useAuth } from "@/components/providers/session-provider";
+import { authClient } from "@/auth/client";
+import { updateOrganizationProfile } from "@/server/actions/organization-profile.action";
+import type { OrganizationProfileUpdate } from "@/domain/validation/organization-profile";
 import { cn } from "@/lib/utils";
 import type { CompanyProfile } from "@/domain/types";
 
@@ -79,83 +84,109 @@ export default function SettingsPage() {
 }
 
 function ProfiliPanel() {
-  const { toast, confirm } = useApp();
+  const { toast } = useApp();
+  const router = useRouter();
+  const { activeOrg, role } = useAuth();
+  const canEdit = role === "owner" || role === "admin";
   const company = useStore((s) => s.company);
-  const updateCompany = useStore((s) => s.updateCompany);
   const [draft, setDraft] = useState<CompanyProfile>(company);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [saving, setSaving] = useState(false);
 
-   
+  // Re-sync the editable draft whenever the server-hydrated mirror changes
+  // (initial hydration, org switch, or after a save + router.refresh()).
   useEffect(() => { setDraft(company); }, [company]);
   const dirty = JSON.stringify(draft) !== JSON.stringify(company);
   const set = (k: keyof CompanyProfile, v: string | number) => setDraft((d) => ({ ...d, [k]: v }));
 
-  const onLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) { toast("Ju lutem zgjidhni një skedar imazhi."); return; }
-    const reader = new FileReader();
-    reader.onload = () => setDraft((d) => ({ ...d, logoDataUrl: String(reader.result) }));
-    reader.readAsDataURL(file);
-  };
-  const removeLogo = async () => {
-    const ok = await confirm({ title: "Fshi logon?", message: "Logo do të hiqet nga ofertat dhe dokumentet.", confirmLabel: "Fshi", danger: true });
-    if (ok) setDraft((d) => ({ ...d, logoDataUrl: undefined }));
+  const save = async () => {
+    if (!canEdit || saving) return;
+    setSaving(true);
+    try {
+      // Org NAME is canonical in Better Auth — update it there, only if changed.
+      const nextName = draft.name.trim();
+      if (nextName && nextName !== company.name) {
+        const res = await authClient.organization.update({
+          data: { name: nextName },
+          organizationId: activeOrg.id,
+        });
+        if (res.error) { toast(res.error.message ?? "Emri i kompanisë nuk u ruajt."); return; }
+      }
+      // Everything else lives in organization_profiles (server-authoritative).
+      const payload: OrganizationProfileUpdate = {
+        nui: draft.nui, vatNo: draft.vatNo, address: draft.address, city: draft.city,
+        postalCode: draft.postalCode, phone: draft.phone, businessEmail: draft.email.trim(),
+        bank: draft.bank, swift: draft.swift, iban: draft.iban,
+        marginDefault: draft.marginDefault, vatDefault: draft.vatDefault,
+      };
+      const result = await updateOrganizationProfile(payload);
+      if (!result.ok) {
+        toast(result.error.fieldErrors?.businessEmail?.[0] ?? result.error.message);
+        return;
+      }
+      toast("Ndryshimet u ruajtën.");
+      router.refresh();
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="space-y-5">
+      {!canEdit && (
+        <div className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+          <Lock className="mt-0.5 size-4 shrink-0" />
+          Vetëm pronari ose administratori mund të ndryshojnë profilin e kompanisë. Ju mund ta shihni por jo ta ndryshoni.
+        </div>
+      )}
+
       <Card className="p-5">
         <Label>Logo</Label>
         <div className="mt-3 flex flex-wrap items-center gap-4">
           <div className="grid size-24 place-items-center overflow-hidden rounded-xl bg-slate-200/70 text-slate-400">
-            {draft.logoDataUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={draft.logoDataUrl} alt="Logo" className="size-full object-contain" />
-            ) : (
-              <ImageIcon className="size-8" />
-            )}
+            <ImageIcon className="size-8" />
           </div>
           <div>
-            <div className="text-sm font-semibold text-slate-900">Logo e Kompanisë</div>
-            <p className="max-w-sm text-sm text-slate-400">Kjo logo do të shfaqet në të gjitha ofertat dhe dokumentet zyrtare.</p>
-            <div className="mt-2 flex gap-3">
-              <button onClick={() => fileRef.current?.click()} className="text-xs font-bold text-slate-900 uppercase hover:underline">Ngarko logo</button>
-              {draft.logoDataUrl && <button onClick={removeLogo} className="text-xs font-bold text-rose-400 uppercase hover:underline">Fshij logon</button>}
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-semibold text-slate-900">Logo e Kompanisë</div>
+              <Badge tone="amber">Së shpejti</Badge>
             </div>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onLogo} />
+            <p className="max-w-sm text-sm text-slate-400">
+              Ngarkimi i logos kërkon ruajtje të skedarëve (object storage) dhe do të aktivizohet së bashku me modulin e Dokumenteve.
+            </p>
           </div>
         </div>
       </Card>
 
       <Card className="p-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Emri i kompanisë"><Input value={draft.name} onChange={(e) => set("name", e.target.value)} /></Field>
-          <Field label="Adresa"><Input value={draft.address} onChange={(e) => set("address", e.target.value)} /></Field>
-          <Field label="Telefoni"><Input value={draft.phone} onChange={(e) => set("phone", e.target.value)} /></Field>
-          <Field label="Email zyrtar"><Input value={draft.email} onChange={(e) => set("email", e.target.value)} /></Field>
-          <Field label="Marzha default (%)"><Input value={String(draft.marginDefault)} onChange={(e) => set("marginDefault", clampInt(e.target.value, 0, 1000))} inputMode="numeric" min={0} max={1000} /></Field>
-          <Field label="TVSH default (%)"><Input value={String(draft.vatDefault)} onChange={(e) => set("vatDefault", clampInt(e.target.value, 0, 100))} inputMode="numeric" min={0} max={100} /></Field>
+          <Field label="Emri i kompanisë"><Input value={draft.name} onChange={(e) => set("name", e.target.value)} disabled={!canEdit} /></Field>
+          <Field label="Adresa"><Input value={draft.address} onChange={(e) => set("address", e.target.value)} disabled={!canEdit} /></Field>
+          <Field label="Telefoni"><Input value={draft.phone} onChange={(e) => set("phone", e.target.value)} disabled={!canEdit} /></Field>
+          <Field label="Email zyrtar"><Input value={draft.email} onChange={(e) => set("email", e.target.value)} disabled={!canEdit} /></Field>
+          <Field label="Marzha default (%)"><Input value={String(draft.marginDefault)} onChange={(e) => set("marginDefault", clampInt(e.target.value, 0, 100))} inputMode="numeric" min={0} max={100} disabled={!canEdit} /></Field>
+          <Field label="TVSH default (%)"><Input value={String(draft.vatDefault)} onChange={(e) => set("vatDefault", clampInt(e.target.value, 0, 100))} inputMode="numeric" min={0} max={100} disabled={!canEdit} /></Field>
         </div>
       </Card>
 
       <Card className="p-5">
         <Label>Të dhënat e faturimit</Label>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="NUI / Numri i biznesit"><Input value={draft.nui} onChange={(e) => set("nui", e.target.value)} /></Field>
-          <Field label="Numri i TVSH-së"><Input value={draft.vatNo} onChange={(e) => set("vatNo", e.target.value)} /></Field>
-          <Field label="Kodi postar"><Input value={draft.postalCode} onChange={(e) => set("postalCode", e.target.value)} /></Field>
-          <Field label="Qyteti"><Input value={draft.city} onChange={(e) => set("city", e.target.value)} /></Field>
-          <Field label="Banka"><Input value={draft.bank} onChange={(e) => set("bank", e.target.value)} /></Field>
-          <Field label="SWIFT / BIC"><Input value={draft.swift} onChange={(e) => set("swift", e.target.value)} /></Field>
-          <div className="sm:col-span-2"><Field label="IBAN / Llogaria bankare"><Input value={draft.iban} onChange={(e) => set("iban", e.target.value)} /></Field></div>
+          <Field label="NUI / Numri i biznesit"><Input value={draft.nui} onChange={(e) => set("nui", e.target.value)} disabled={!canEdit} /></Field>
+          <Field label="Numri i TVSH-së"><Input value={draft.vatNo} onChange={(e) => set("vatNo", e.target.value)} disabled={!canEdit} /></Field>
+          <Field label="Kodi postar"><Input value={draft.postalCode} onChange={(e) => set("postalCode", e.target.value)} disabled={!canEdit} /></Field>
+          <Field label="Qyteti"><Input value={draft.city} onChange={(e) => set("city", e.target.value)} disabled={!canEdit} /></Field>
+          <Field label="Banka"><Input value={draft.bank} onChange={(e) => set("bank", e.target.value)} disabled={!canEdit} /></Field>
+          <Field label="SWIFT / BIC"><Input value={draft.swift} onChange={(e) => set("swift", e.target.value)} disabled={!canEdit} /></Field>
+          <div className="sm:col-span-2"><Field label="IBAN / Llogaria bankare"><Input value={draft.iban} onChange={(e) => set("iban", e.target.value)} disabled={!canEdit} /></Field></div>
         </div>
       </Card>
 
-      <div className="flex items-center justify-end gap-2">
-        {dirty && <button onClick={() => setDraft(company)} className="flex items-center gap-1.5 text-sm font-semibold text-slate-400 hover:text-slate-700"><RotateCcw className="size-4" /> Rikthe</button>}
-        <Button disabled={!dirty} onClick={() => { updateCompany(draft); toast("Ndryshimet u ruajtën."); }}>Ruaj Ndryshimet</Button>
-      </div>
+      {canEdit && (
+        <div className="flex items-center justify-end gap-2">
+          {dirty && <button onClick={() => setDraft(company)} className="flex items-center gap-1.5 text-sm font-semibold text-slate-400 hover:text-slate-700"><RotateCcw className="size-4" /> Rikthe</button>}
+          <Button disabled={!dirty || saving} onClick={save}>{saving ? "Duke ruajtur…" : "Ruaj Ndryshimet"}</Button>
+        </div>
+      )}
     </div>
   );
 }

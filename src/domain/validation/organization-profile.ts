@@ -19,7 +19,10 @@ export const organizationProfileUpdateSchema = z.object({
   city: trimmed(80).optional(),
   postalCode: trimmed(16).optional(),
   phone: trimmed(40).optional(),
-  businessEmail: trimmed(120).regex(EMAIL_RE, "Email i pavlefshëm.").optional(),
+  // Allow an empty string so the field can be cleared; otherwise a valid email.
+  businessEmail: trimmed(120)
+    .refine((v) => v === "" || EMAIL_RE.test(v), "Email i pavlefshëm.")
+    .optional(),
   bank: trimmed(80).optional(),
   swift: trimmed(32).optional(),
   iban: trimmed(48).optional(),

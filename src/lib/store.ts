@@ -136,8 +136,15 @@ interface StoreState extends DataSlice {
   addNote: (clientId: string, text: string) => void;
   deleteNote: (id: string) => void;
 
-  // company / users
-  updateCompany: (patch: Partial<CompanyProfile>) => void;
+  // company — DB-backed (Phase 8). The store holds only a NON-persisted,
+  // server-hydrated mirror (via <CompanyHydrator>); the authoritative write goes
+  // through updateOrganizationProfile (organization_profiles) + Better Auth for
+  // the org name. setCompany is hydration/mirror-only (no local authority, no
+  // dual-write), mirroring setClients/setPricing. There is deliberately NO local
+  // company write method.
+  setCompany: (company: CompanyProfile) => void;
+
+  // users
   addUser: (data: Omit<User, "id">) => void;
   removeUser: (id: string) => void;
 
@@ -182,7 +189,8 @@ export const useStore = create<StoreState>()(
         set((s) => ({ notes: [{ id: uid(), clientId, text, at: todayIso() }, ...s.notes] })),
       deleteNote: (id) => set((s) => ({ notes: s.notes.filter((n) => n.id !== id) })),
 
-      updateCompany: (patch) => set((s) => ({ company: { ...s.company, ...patch } })),
+      // Hydration only: replace the read-only mirror with the server's profile.
+      setCompany: (company) => set({ company }),
       addUser: (data) => set((s) => ({ users: [...s.users, { id: uid(), ...data }] })),
       removeUser: (id) => set((s) => ({ users: s.users.filter((u) => u.id !== id) })),
 
@@ -265,21 +273,27 @@ export const useStore = create<StoreState>()(
         // re-hydrated from the server after mount.
         merged.invoices = [];
         merged.payments = [];
+        // Company profile (Phase 8) is DB-backed too (organization_profiles +
+        // Better Auth org name) — reset to the seed default so a stale
+        // localStorage copy can never re-become authoritative; it is re-hydrated
+        // from the server after mount.
+        merged.company = base.company;
         void fromVersion;
         return merged as never;
       },
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
       partialize: (s) => {
-        // NOTE: clients (Phase 4), pricing (Phase 5), projects (Phase 6) and now
-        // invoices + payments (Phase 7) are intentionally EXCLUDED — they live in
-        // Postgres, not localStorage. Persisting them would recreate a stale local
-        // source of truth and let clearing localStorage "delete" server data. All
-        // are server-hydrated at runtime.
+        // NOTE: clients (Phase 4), pricing (Phase 5), projects (Phase 6),
+        // invoices + payments (Phase 7) and now the company profile (Phase 8) are
+        // intentionally EXCLUDED — they live in Postgres, not localStorage.
+        // Persisting them would recreate a stale local source of truth and let
+        // clearing localStorage "delete" server data. All are server-hydrated at
+        // runtime.
         const {
-          notes, users, notifications, company, selectedDesignId, guideDone, uiDismissals,
+          notes, users, notifications, selectedDesignId, guideDone, uiDismissals,
         } = s;
-        return { notes, users, notifications, company, selectedDesignId, guideDone, uiDismissals };
+        return { notes, users, notifications, selectedDesignId, guideDone, uiDismissals };
       },
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
