@@ -5,9 +5,13 @@
 import Link from "next/link";
 import { getPlatformOverview } from "@/server/platform/organizations";
 import { PLAN_TIERS } from "@/lib/plan";
-import { Metric, PanelCard, PlanBadge } from "./ui";
+import { Metric, PanelCard, PlanBadge, StatusBadge } from "./ui";
 
 export const dynamic = "force-dynamic";
+
+function fmtDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
 
 export default async function PlatformDashboardPage() {
   const o = await getPlatformOverview();
@@ -42,6 +46,37 @@ export default async function PlatformDashboardPage() {
             </div>
           ))}
         </div>
+      </PanelCard>
+
+      <PanelCard
+        title="Organizatat e fundit"
+        action={
+          <Link href="/platform/organizations?sort=created_desc" className="text-sm text-violet-500 hover:text-violet-600">
+            Të gjitha →
+          </Link>
+        }
+      >
+        {o.recentOrganizations.length === 0 ? (
+          <p className="py-4 text-sm text-slate-400">Ende asnjë organizatë.</p>
+        ) : (
+          <ul className="divide-y divide-slate-200/70">
+            {o.recentOrganizations.map((org) => (
+              <li key={org.id}>
+                <Link
+                  href={`/platform/organizations/${org.id}`}
+                  className="flex items-center justify-between gap-3 py-2.5 hover:text-violet-600"
+                >
+                  <span className="min-w-0 truncate font-medium text-slate-900">{org.name}</span>
+                  <span className="flex shrink-0 items-center gap-3">
+                    <PlanBadge plan={org.plan} />
+                    <StatusBadge status={org.status} />
+                    <span className="w-20 text-right text-xs text-slate-400">{fmtDate(org.createdAt)}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </PanelCard>
 
       <p className="text-xs text-slate-400">

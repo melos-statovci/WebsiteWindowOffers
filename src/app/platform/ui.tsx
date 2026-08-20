@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/kit";
 import type { PlanTier } from "@/lib/plan";
 import type { AccountStatus } from "@/server/platform/accounts";
+import type { AuditEventRow, PlatformAuditAction } from "@/server/platform/audit";
 
 export function PanelCard({
   title,
@@ -71,4 +72,36 @@ export function BackLink({ href, children }: { href: string; children: React.Rea
       ← {children}
     </Link>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Audit / Activity rendering (shared by the Activity page + org detail)
+// ---------------------------------------------------------------------------
+const ACTION_META: Record<PlatformAuditAction, { label: string; cls: string }> = {
+  PLAN_CHANGED: { label: "Plan i ndryshuar", cls: "bg-slate-200 text-slate-900" },
+  ORGANIZATION_SUSPENDED: { label: "Pezulluar", cls: "bg-amber-50 text-amber-500" },
+  ORGANIZATION_REACTIVATED: { label: "Riaktivizuar", cls: "bg-emerald-50 text-emerald-500" },
+  INTERNAL_NOTE_UPDATED: { label: "Shënim i përditësuar", cls: "bg-violet-500/15 text-violet-500" },
+};
+
+export function ActionBadge({ action }: { action: PlatformAuditAction }) {
+  const meta = ACTION_META[action] ?? { label: action, cls: "bg-slate-200 text-slate-600" };
+  return <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${meta.cls}`}>{meta.label}</span>;
+}
+
+/** A short, safe human summary of an audit event's change. Never exposes note text. */
+export function auditSummary(event: AuditEventRow): string {
+  const m = event.metadata ?? {};
+  switch (event.action) {
+    case "PLAN_CHANGED":
+      return m.oldPlan && m.newPlan ? `${m.oldPlan} → ${m.newPlan}` : "";
+    case "ORGANIZATION_SUSPENDED":
+      return typeof m.reason === "string" && m.reason ? `Arsyeja: ${m.reason}` : "";
+    case "ORGANIZATION_REACTIVATED":
+      return "";
+    case "INTERNAL_NOTE_UPDATED":
+      return m.cleared ? "Shënimi u pastrua" : "Shënimi u përditësua";
+    default:
+      return "";
+  }
 }

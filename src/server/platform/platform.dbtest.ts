@@ -26,7 +26,9 @@ import {
   getPlatformOrganization,
   listPlatformOrganizations,
   getPlatformOverview,
+  listPlatformAdmins,
 } from "@/server/platform/organizations";
+import { listAuditEvents } from "@/server/platform/audit";
 
 const ownerPool = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL });
 const appPool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
@@ -91,6 +93,11 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
+  // Audit events reference the org by BARE id (no FK, so history survives an org
+  // delete), so the org-cascade cleanup does NOT remove them — and the runtime
+  // role has no DELETE on the append-only table. Remove this run's audit rows via
+  // the owner pool so tests leave nothing behind.
+  await ownerPool.query(`delete from platform_audit_events where organization_id = any($1::uuid[])`, [[orgA, orgB]]);
   await cleanup.run();
   await ownerPool.end();
   await appPool.end();
@@ -278,5 +285,80 @@ describe("tenant RLS regression (unchanged by platform admin)", () => {
     );
     expect(aVisible).not.toContain(`bsecret-${suffix}`);
     await ownerPool.query(`delete from clients where id=$1`, [bClient]);
+  });
+});
+
+describe("platform audit trail", () => {
+  it("a successful plan change writes exactly one PLAN_CHANGED event with correct old/new + server-derived actor", async () => {
+    const before = (await listAuditEvents({ organizationId: orgB, action: "PLAN_CHANGED" })).total;
+    const res = await setPlanAction({ organizationId: orgB, plan: "BIZNES" }, H(adminCookie));
+    expect(res.ok).toBe(true);
+
+    const after = await listAuditEvents({ organizationId: orgB, action: "PLAN_CHANGED" });
+    expect(after.total).toBe(before + 1);
+    const ev = after.events[0];
+    expect(ev.action).toBe("PLAN_CHANGED");
+    expect(ev.metadata.newPlan).toBe("BIZNES");
+    expect(ev.metadata.oldPlan).toBe("SOLO");
+    // Actor comes from the authenticated platform context, never from input.
+    expect(ev.actorUserId).toBe(adminUserId);
+    expect(ev.organizationId).toBe(orgB);
+
+    await setPlanAction({ organizationId: orgB, plan: "SOLO" }, H(adminCookie)); // reset
+  });
+
+  it("a FAILED plan change (unknown org) writes NO audit event (transactional)", async () => {
+    const ghost = "00000000-0000-4000-8000-000000000000";
+    const before = (await listAuditEvents({ organizationId: ghost })).total;
+    const res = await setPlanAction({ organizationId: ghost, plan: "FABRIKA" }, H(adminCookie));
+    expect(res.ok).toBe(false);
+    const after = (await listAuditEvents({ organizationId: ghost })).total;
+    expect(after).toBe(before); // rolled back with the mutation
+  });
+
+  it("a non-admin plan-change attempt writes NO audit event", async () => {
+    const before = (await listAuditEvents({ organizationId: orgA, action: "PLAN_CHANGED" })).total;
+    const res = await setPlanAction({ organizationId: orgA, plan: "FABRIKA" }, H(ownerBCookie));
+    expect(res.ok).toBe(false);
+    const after = (await listAuditEvents({ organizationId: orgA, action: "PLAN_CHANGED" })).total;
+    expect(after).toBe(before);
+  });
+
+  it("suspend + reactivate each write their audit event", async () => {
+    const sBefore = (await listAuditEvents({ organizationId: orgB, action: "ORGANIZATION_SUSPENDED" })).total;
+    await setStatusAction({ organizationId: orgB, status: "suspended", reason: "audit-test" }, H(adminCookie));
+    const sAfter = await listAuditEvents({ organizationId: orgB, action: "ORGANIZATION_SUSPENDED" });
+    expect(sAfter.total).toBe(sBefore + 1);
+    expect(sAfter.events[0].metadata.reason).toBe("audit-test");
+
+    const rBefore = (await listAuditEvents({ organizationId: orgB, action: "ORGANIZATION_REACTIVATED" })).total;
+    await setStatusAction({ organizationId: orgB, status: "active" }, H(adminCookie));
+    const rAfter = (await listAuditEvents({ organizationId: orgB, action: "ORGANIZATION_REACTIVATED" })).total;
+    expect(rAfter).toBe(rBefore + 1);
+  });
+
+  it("internal-note change is audited WITHOUT storing the note text", async () => {
+    const res = await setInternalNoteAction({ organizationId: orgB, note: "secret ops note do-not-log" }, H(adminCookie));
+    expect(res.ok).toBe(true);
+    const ev = (await listAuditEvents({ organizationId: orgB, action: "INTERNAL_NOTE_UPDATED" })).events[0];
+    expect(ev).toBeTruthy();
+    // The metadata must never carry the note text.
+    expect(JSON.stringify(ev.metadata)).not.toContain("secret ops note");
+    expect(ev.metadata.cleared).toBe(false);
+  });
+});
+
+describe("platform admins page data", () => {
+  it("lists the seeded platform admin with email + created date", async () => {
+    const admins = await listPlatformAdmins();
+    const mine = admins.find((a) => a.userId === adminUserId);
+    expect(mine).toBeTruthy();
+    expect(mine!.email).toContain("plat-");
+    expect(mine!.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("the ownerB tenant user is NOT among platform admins", async () => {
+    const admins = await listPlatformAdmins();
+    expect(admins.some((a) => a.userId === ownerBUserId)).toBe(false);
   });
 });

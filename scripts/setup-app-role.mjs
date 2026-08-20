@@ -42,6 +42,8 @@ await owner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE organization_pr
 for (const [table, grant] of [
   ["platform_admins", "SELECT"],
   ["organization_accounts", "SELECT, INSERT, UPDATE"],
+  // Append-only audit trail: SELECT + INSERT only (no UPDATE/DELETE).
+  ["platform_audit_events", "SELECT, INSERT"],
 ]) {
   const present = (await owner.query("select 1 from pg_tables where tablename=$1", [table])).rowCount > 0;
   if (present) await owner.query(`GRANT ${grant} ON TABLE ${table} TO ${ROLE}`);

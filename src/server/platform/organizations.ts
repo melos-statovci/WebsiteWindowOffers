@@ -35,11 +35,21 @@ export interface PlatformOrgListItem {
   ownerEmail: string | null;
 }
 
+export type OrgSort = "created_desc" | "created_asc" | "name_asc" | "members_desc";
+
 export interface OrgListFilters {
   q?: string;
   status?: AccountStatus | "all";
   plan?: PlanTier | "all";
+  sort?: OrgSort;
 }
+
+const ORDER_BY: Record<OrgSort, ReturnType<typeof sql>> = {
+  created_desc: sql`o.created_at desc`,
+  created_asc: sql`o.created_at asc`,
+  name_asc: sql`lower(o.name) asc`,
+  members_desc: sql`"memberCount" desc, o.created_at desc`,
+};
 
 /**
  * Searchable tenant-organization list. Single cross-tenant query over non-RLS
@@ -51,6 +61,7 @@ export async function listPlatformOrganizations(filters: OrgListFilters = {}): P
   const q = filters.q?.trim();
   const status = filters.status && filters.status !== "all" ? filters.status : null;
   const plan = filters.plan && filters.plan !== "all" ? filters.plan : null;
+  const orderBy = ORDER_BY[filters.sort ?? "created_desc"];
 
   const res = await db.execute(sql`
     select
@@ -77,7 +88,7 @@ export async function listPlatformOrganizations(filters: OrgListFilters = {}): P
       (${q}::text is null or o.name ilike '%' || ${q} || '%' or o.slug ilike '%' || ${q} || '%')
       and (${status}::text is null or coalesce(a.status, 'active') = ${status})
       and (${plan}::text is null or coalesce(a.plan, 'SOLO') = ${plan})
-    order by o.created_at desc
+    order by ${orderBy}
   `);
 
   return res.rows.map((r) => {
@@ -138,6 +149,10 @@ export interface PlatformOrgDetail {
   members: PlatformMember[];
   profile: PlatformOrgProfile;
   usage: PlatformOrgUsage;
+  // Most recent tenant business write (max updated_at/created_at across the org's
+  // business tables), or null if the org has produced nothing yet. Derived cheaply
+  // inside the same RLS-scoped read — NOT login telemetry.
+  lastBusinessActivity: Date | null;
 }
 
 /** One organization's full operational view, or null if the id is unknown. */
@@ -178,10 +193,11 @@ export async function getPlatformOrganization(orgId: string): Promise<PlatformOr
     return { userId: row.userId, name: row.name, email: row.email, role: row.role, joinedAt: new Date(row.joinedAt) };
   });
 
-  // Company profile + usage COUNTS — the only tenant-RLS data here. One
-  // withOrg(orgId) transaction scopes RLS to exactly this org (platform-gated).
-  // Counts only — never customer business CONTENTS.
-  const { profile, usage } = await withOrg(orgId, async (tx) => {
+  // Company profile + usage COUNTS + last business-activity timestamp — the only
+  // tenant-RLS data here. One withOrg(orgId) transaction scopes RLS to exactly
+  // this org (platform-gated). Counts + a max(updated_at) only — never customer
+  // business CONTENTS.
+  const { profile, usage, lastBusinessActivity } = await withOrg(orgId, async (tx) => {
     const prof = await tx.execute(sql`
       select nui, vat_no as "vatNo", address, city, phone, business_email as "businessEmail"
       from organization_profiles where organization_id = ${orgId} limit 1
@@ -194,8 +210,20 @@ export async function getPlatformOrganization(orgId: string): Promise<PlatformOr
         (select count(*) from invoices)::int       as invoices,
         (select count(*) from payments)::int       as payments
     `);
+    // Cheapest truthful "activity" signal: the latest business write, not a login.
+    const act = await tx.execute(sql`
+      select greatest(
+        coalesce((select max(updated_at) from clients), 'epoch'::timestamp),
+        coalesce((select max(updated_at) from projects), 'epoch'::timestamp),
+        coalesce((select max(updated_at) from invoices), 'epoch'::timestamp),
+        coalesce((select max(created_at) from payments), 'epoch'::timestamp),
+        coalesce((select max(created_at) from notes), 'epoch'::timestamp)
+      ) as "lastAt"
+    `);
     const p = prof.rows[0] as unknown as PlatformOrgProfile | undefined;
     const c = counts.rows[0] as Record<keyof PlatformOrgUsage, number>;
+    const lastAtRaw = (act.rows[0] as { lastAt?: string | Date } | undefined)?.lastAt ?? null;
+    const lastAt = lastAtRaw ? new Date(lastAtRaw) : null;
     return {
       profile: {
         nui: p?.nui ?? null,
@@ -212,6 +240,8 @@ export async function getPlatformOrganization(orgId: string): Promise<PlatformOr
         invoices: Number(c.invoices) || 0,
         payments: Number(c.payments) || 0,
       },
+      // 'epoch' means every source was empty -> no activity yet.
+      lastBusinessActivity: lastAt && lastAt.getFullYear() > 1970 ? lastAt : null,
     };
   });
 
@@ -228,7 +258,16 @@ export async function getPlatformOrganization(orgId: string): Promise<PlatformOr
     members,
     profile,
     usage,
+    lastBusinessActivity,
   };
+}
+
+export interface RecentOrg {
+  id: string;
+  name: string;
+  plan: PlanTier;
+  status: AccountStatus;
+  createdAt: Date;
 }
 
 export interface PlatformOverview {
@@ -238,6 +277,7 @@ export interface PlatformOverview {
   totalUsers: number;
   totalMemberships: number;
   planDistribution: Record<PlatformTier, number>;
+  recentOrganizations: RecentOrg[];
 }
 
 type PlatformTier = PlanTier;
@@ -266,6 +306,24 @@ export async function getPlatformOverview(): Promise<PlatformOverview> {
   const userRes = await db.execute(sql`select count(*)::int as users from "user"`);
   const memberRes = await db.execute(sql`select count(*)::int as memberships from member`);
 
+  const recentRes = await db.execute(sql`
+    select o.id, o.name, coalesce(a.plan,'SOLO') as plan, coalesce(a.status,'active') as status, o.created_at as "createdAt"
+    from organization o
+    left join organization_accounts a on a.organization_id = o.id
+    order by o.created_at desc
+    limit 5
+  `);
+  const recentOrganizations: RecentOrg[] = recentRes.rows.map((r) => {
+    const row = r as { id: string; name: string; plan: string; status: string; createdAt: string | Date };
+    return {
+      id: row.id,
+      name: row.name,
+      plan: asPlanTier(row.plan),
+      status: row.status === "suspended" ? "suspended" : "active",
+      createdAt: new Date(row.createdAt),
+    };
+  });
+
   return {
     totalOrganizations: Number(o.total) || 0,
     activeOrganizations: Number(o.active) || 0,
@@ -277,5 +335,41 @@ export async function getPlatformOverview(): Promise<PlatformOverview> {
       BIZNES: Number(o.biznes) || 0,
       FABRIKA: Number(o.fabrika) || 0,
     },
+    recentOrganizations,
   };
+}
+
+export interface PlatformAdminRow {
+  userId: string;
+  name: string;
+  email: string;
+  note: string | null;
+  createdAt: Date;
+}
+
+/**
+ * Currently authorized platform admins (READ-ONLY view). Joins platform_admins to
+ * the user table for the live name; falls back to the snapshot email if the user
+ * row is gone. In-dashboard grant/revoke is deliberately NOT provided in V1.5 —
+ * provisioning stays out of band (scripts/seed-platform-admin.mjs) so the running
+ * app can never escalate platform authority. See PLATFORM_ADMIN_V15_HANDOFF.md.
+ */
+export async function listPlatformAdmins(): Promise<PlatformAdminRow[]> {
+  const res = await db.execute(sql`
+    select pa.user_id as "userId", coalesce(u.name, '') as name,
+           coalesce(u.email, pa.email) as email, pa.note, pa.created_at as "createdAt"
+    from platform_admins pa
+    left join "user" u on u.id = pa.user_id
+    order by pa.created_at asc
+  `);
+  return res.rows.map((r) => {
+    const row = r as { userId: string; name: string; email: string; note: string | null; createdAt: string | Date };
+    return {
+      userId: row.userId,
+      name: row.name,
+      email: row.email,
+      note: row.note,
+      createdAt: new Date(row.createdAt),
+    };
+  });
 }

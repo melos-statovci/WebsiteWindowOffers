@@ -1,18 +1,25 @@
-// Organization detail (Checkpoint B) — a concise operational view for one tenant.
-// Account administration, NOT customer surveillance: it shows identity, plan,
-// status, company profile, member metadata and USAGE COUNTS — never invoice
-// lines, addresses of the tenant's customers, project configurations or payment
-// details. Authorization: platform layout gate + this page is force-dynamic.
+// Organization detail — an account-management console for one tenant, organized
+// into tabs (Overview / Members / Usage / Account) rather than one dump.
+// Account administration, NOT surveillance: identity, plan, status, company
+// profile, member metadata, usage COUNTS, a derived last-business-activity
+// timestamp, and the platform audit trail for this org — never invoice lines,
+// customer addresses, project configs, or payment contents. Authorization: the
+// platform layout gate + force-dynamic reads.
 
 import { notFound } from "next/navigation";
 import { getPlatformOrganization } from "@/server/platform/organizations";
-import { BackLink, PanelCard, PlanBadge, StatusBadge } from "../../ui";
+import { listAuditEvents } from "@/server/platform/audit";
+import { BackLink, PanelCard, PlanBadge, StatusBadge, ActionBadge, auditSummary } from "../../ui";
 import { PlanControl, StatusControl, InternalNoteControl } from "./controls";
+import { DetailTabs } from "./tabs";
 
 export const dynamic = "force-dynamic";
 
 function fmt(d: Date | null): string {
   return d ? d.toISOString().slice(0, 16).replace("T", " ") : "—";
+}
+function fmtDate(d: Date | null): string {
+  return d ? d.toISOString().slice(0, 10) : "—";
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -38,6 +45,8 @@ export default async function OrganizationDetailPage({ params }: { params: Promi
   const org = await getPlatformOrganization(id);
   if (!org) notFound();
 
+  const { events } = await listAuditEvents({ organizationId: id, limit: 8 });
+
   const usage: [string, number][] = [
     ["Klientë", org.usage.clients],
     ["Oferta", org.usage.projects],
@@ -45,6 +54,106 @@ export default async function OrganizationDetailPage({ params }: { params: Promi
     ["Fatura", org.usage.invoices],
     ["Pagesa", org.usage.payments],
   ];
+
+  const overview = (
+    <div className="grid gap-6 lg:grid-cols-2">
+      <PanelCard title="Përmbledhje">
+        <Row label="ID"><code className="text-xs text-slate-400">{org.id}</code></Row>
+        <Row label="Slug">{org.slug}</Row>
+        <Row label="Krijuar">{fmt(org.createdAt)}</Row>
+        <Row label="Aktiviteti i fundit i biznesit">{org.lastBusinessActivity ? fmt(org.lastBusinessActivity) : "Asnjë ende"}</Row>
+        <Row label="Plani"><PlanBadge plan={org.plan} /></Row>
+        <Row label="Statusi"><StatusBadge status={org.status} /></Row>
+      </PanelCard>
+      <PanelCard title="Profili i kompanisë">
+        <Row label="NUI">{org.profile.nui || "—"}</Row>
+        <Row label="Nr. TVSH">{org.profile.vatNo || "—"}</Row>
+        <Row label="Adresa">{org.profile.address || "—"}</Row>
+        <Row label="Qyteti">{org.profile.city || "—"}</Row>
+        <Row label="Telefoni">{org.profile.phone || "—"}</Row>
+        <Row label="Email biznesi">{org.profile.businessEmail || "—"}</Row>
+      </PanelCard>
+    </div>
+  );
+
+  const members = (
+    <PanelCard title={`Anëtarët (${org.members.length})`}>
+      {org.members.length === 0 ? (
+        <p className="py-4 text-sm text-slate-400">Asnjë anëtar.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
+                <th className="py-2 pr-4 font-medium">Emri</th>
+                <th className="py-2 pr-4 font-medium">Email</th>
+                <th className="py-2 pr-4 font-medium">Roli</th>
+                <th className="py-2 pr-4 font-medium">Anëtarësuar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {org.members.map((m) => (
+                <tr key={m.userId} className="border-b border-slate-200/70 last:border-0">
+                  <td className="py-2 pr-4 text-slate-900">{m.name}</td>
+                  <td className="py-2 pr-4 text-slate-400">{m.email}</td>
+                  <td className="py-2 pr-4 text-slate-600">{ROLE_LABEL[m.role] ?? m.role}</td>
+                  <td className="py-2 pr-4 text-slate-400">{fmtDate(m.joinedAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </PanelCard>
+  );
+
+  const usagePanel = (
+    <PanelCard title="Përdorimi" >
+      <p className="mb-4 text-xs text-slate-400">Vetëm numra — asnjë përmbajtje biznesi e tenantit.</p>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+        {usage.map(([label, n]) => (
+          <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-center">
+            <div className="font-heading text-2xl font-semibold text-slate-900">{n}</div>
+            <div className="mt-1 text-xs text-slate-400">{label}</div>
+          </div>
+        ))}
+      </div>
+    </PanelCard>
+  );
+
+  const account = (
+    <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <PanelCard title="Plani">
+          <p className="mb-3 text-sm text-slate-400">Ndryshimi respektohet menjëherë nga kufizimet e tenantit në ngarkesën e radhës.</p>
+          <PlanControl organizationId={org.id} plan={org.plan} />
+        </PanelCard>
+        <PanelCard title="Statusi i llogarisë">
+          <p className="mb-3 text-sm text-slate-400">Pezullimi bllokon qasjen e tenantit pa fshirë asnjë të dhënë.</p>
+          <StatusControl organizationId={org.id} status={org.status} orgName={org.name} />
+        </PanelCard>
+      </div>
+      <PanelCard title="Shënim i brendshëm (privat)">
+        <InternalNoteControl organizationId={org.id} note={org.internalNote} />
+      </PanelCard>
+      <PanelCard title="Aktiviteti i fundit administrativ">
+        {events.length === 0 ? (
+          <p className="py-2 text-sm text-slate-400">Asnjë veprim i regjistruar për këtë organizatë.</p>
+        ) : (
+          <ul className="space-y-2">
+            {events.map((e) => (
+              <li key={e.id} className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="w-32 shrink-0 text-xs text-slate-400">{fmt(e.createdAt)}</span>
+                <ActionBadge action={e.action} />
+                <span className="text-slate-600">{auditSummary(e)}</span>
+                <span className="ml-auto text-xs text-slate-400">{e.actorEmail}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </PanelCard>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -63,84 +172,14 @@ export default async function OrganizationDetailPage({ params }: { params: Promi
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <PanelCard title="Përmbledhje">
-          <Row label="ID">
-            <code className="text-xs text-slate-400">{org.id}</code>
-          </Row>
-          <Row label="Slug">{org.slug}</Row>
-          <Row label="Krijuar">{fmt(org.createdAt)}</Row>
-          <Row label="Plani"><PlanBadge plan={org.plan} /></Row>
-          <Row label="Statusi"><StatusBadge status={org.status} /></Row>
-        </PanelCard>
-
-        <PanelCard title="Profili i kompanisë">
-          <Row label="NUI">{org.profile.nui || "—"}</Row>
-          <Row label="Nr. TVSH">{org.profile.vatNo || "—"}</Row>
-          <Row label="Adresa">{org.profile.address || "—"}</Row>
-          <Row label="Qyteti">{org.profile.city || "—"}</Row>
-          <Row label="Telefoni">{org.profile.phone || "—"}</Row>
-          <Row label="Email biznesi">{org.profile.businessEmail || "—"}</Row>
-        </PanelCard>
-
-        <PanelCard title="Plani">
-          <p className="mb-3 text-sm text-slate-400">
-            Ndryshimi i planit respektohet menjëherë nga kufizimet e tenantit në ngarkesën e radhës.
-          </p>
-          <PlanControl organizationId={org.id} plan={org.plan} />
-        </PanelCard>
-
-        <PanelCard title="Statusi i llogarisë">
-          <p className="mb-3 text-sm text-slate-400">
-            Pezullimi bllokon qasjen e tenantit pa fshirë asnjë të dhënë.
-          </p>
-          <StatusControl organizationId={org.id} status={org.status} orgName={org.name} />
-        </PanelCard>
-      </div>
-
-      <PanelCard title={`Anëtarët (${org.members.length})`}>
-        {org.members.length === 0 ? (
-          <p className="py-4 text-sm text-slate-400">Asnjë anëtar.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
-                  <th className="py-2 pr-4 font-medium">Emri</th>
-                  <th className="py-2 pr-4 font-medium">Email</th>
-                  <th className="py-2 pr-4 font-medium">Roli</th>
-                  <th className="py-2 pr-4 font-medium">Anëtarësuar</th>
-                </tr>
-              </thead>
-              <tbody>
-                {org.members.map((m) => (
-                  <tr key={m.userId} className="border-b border-slate-200/70 last:border-0">
-                    <td className="py-2 pr-4 text-slate-900">{m.name}</td>
-                    <td className="py-2 pr-4 text-slate-400">{m.email}</td>
-                    <td className="py-2 pr-4 text-slate-600">{ROLE_LABEL[m.role] ?? m.role}</td>
-                    <td className="py-2 pr-4 text-slate-400">{m.joinedAt.toISOString().slice(0, 10)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </PanelCard>
-
-      <PanelCard title="Përdorimi">
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
-          {usage.map(([label, n]) => (
-            <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-center">
-              <div className="font-heading text-2xl font-semibold text-slate-900">{n}</div>
-              <div className="mt-1 text-xs text-slate-400">{label}</div>
-            </div>
-          ))}
-        </div>
-      </PanelCard>
-
-      <PanelCard title="Shënim i brendshëm (privat)">
-        <InternalNoteControl organizationId={org.id} note={org.internalNote} />
-      </PanelCard>
+      <DetailTabs
+        tabs={[
+          { id: "overview", label: "Përmbledhje", content: overview },
+          { id: "members", label: `Anëtarët (${org.members.length})`, content: members },
+          { id: "usage", label: "Përdorimi", content: usagePanel },
+          { id: "account", label: "Llogaria", content: account },
+        ]}
+      />
     </div>
   );
 }

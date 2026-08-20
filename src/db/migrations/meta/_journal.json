@@ -99,6 +99,13 @@
       "when": 1787252800847,
       "tag": "0013_platform_control_plane",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1787257078676,
+      "tag": "0014_platform_audit_events",
+      "breakpoints": true
     }
   ]
 }

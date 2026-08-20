@@ -16,7 +16,7 @@
 // makes the platform reads simple and keeps the plan a one-way (platform-only)
 // write. See PLATFORM_ADMIN_HANDOFF.md / memory platform-admin-architecture.
 
-import { pgTable, uuid, text, timestamp, index, check } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, jsonb, index, check } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { user, organization } from "../auth-schema";
 
@@ -73,5 +73,46 @@ export const organizationAccounts = pgTable(
     check("organization_accounts_status_chk", sql`${table.status} in ('active','suspended')`),
     index("organization_accounts_status_idx").on(table.status),
     index("organization_accounts_plan_idx").on(table.plan),
+  ],
+);
+
+// platform_audit_events — an APPEND-ONLY control-plane audit trail of platform
+// mutations. NOT tenant data; only platform admins may read it; only the trusted
+// platform mutation path writes it (in the SAME transaction as the mutation, so
+// an event is never recorded for a change that did not persist, and vice versa).
+//
+// The actor + target are SNAPSHOTS (bare ids + name/email captured at write
+// time), deliberately NOT FKs, so audit history survives a later user/org
+// deletion. The runtime role gets SELECT + INSERT only (no UPDATE/DELETE), so the
+// trail is immutable even to the app itself. Never log secrets/tokens/passwords/
+// customer business records — metadata carries only the structured change.
+export const platformAuditEvents = pgTable(
+  "platform_audit_events",
+  {
+    id: uuid("id")
+      .default(sql`gen_random_uuid()`)
+      .primaryKey(),
+    // Snapshot of the acting platform admin (from the authenticated platform
+    // context — NEVER from the browser). Bare id: no FK, so deleting the user
+    // never erases the audit record.
+    actorUserId: uuid("actor_user_id").notNull(),
+    actorEmail: text("actor_email").notNull().default(""),
+    // Action type (CHECK-constrained to the known set).
+    action: text("action").notNull(),
+    // Target organization snapshot (nullable for non-org-scoped future events).
+    organizationId: uuid("organization_id"),
+    organizationName: text("organization_name"),
+    // Structured, non-sensitive change description (e.g. {oldPlan,newPlan}).
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    check(
+      "platform_audit_events_action_chk",
+      sql`${table.action} in ('PLAN_CHANGED','ORGANIZATION_SUSPENDED','ORGANIZATION_REACTIVATED','INTERNAL_NOTE_UPDATED')`,
+    ),
+    index("platform_audit_events_created_idx").on(table.createdAt),
+    index("platform_audit_events_org_idx").on(table.organizationId),
+    index("platform_audit_events_action_idx").on(table.action),
   ],
 );

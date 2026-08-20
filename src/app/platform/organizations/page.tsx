@@ -3,12 +3,20 @@
 // no client JS. Authorization: the platform layout gate + force-dynamic reads.
 
 import Link from "next/link";
-import { listPlatformOrganizations } from "@/server/platform/organizations";
+import { listPlatformOrganizations, type OrgSort } from "@/server/platform/organizations";
 import { PLAN_TIERS, asPlanTier, type PlanTier } from "@/lib/plan";
 import type { AccountStatus } from "@/server/platform/accounts";
 import { PanelCard, PlanBadge, StatusBadge } from "../ui";
 
 export const dynamic = "force-dynamic";
+
+const SORTS: { value: OrgSort; label: string }[] = [
+  { value: "created_desc", label: "Më të reja" },
+  { value: "created_asc", label: "Më të vjetra" },
+  { value: "name_asc", label: "Emri A–Z" },
+  { value: "members_desc", label: "Më shumë anëtarë" },
+];
+const SORT_VALUES = SORTS.map((s) => s.value);
 
 function fmtDate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -20,15 +28,16 @@ const inputCls =
 export default async function OrganizationsListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; plan?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; plan?: string; sort?: string }>;
 }) {
   const sp = await searchParams;
   const q = sp.q?.trim() ?? "";
   const status: AccountStatus | "all" =
     sp.status === "active" || sp.status === "suspended" ? sp.status : "all";
   const plan: PlanTier | "all" = sp.plan && (PLAN_TIERS as string[]).includes(sp.plan) ? asPlanTier(sp.plan) : "all";
+  const sort: OrgSort = sp.sort && (SORT_VALUES as string[]).includes(sp.sort) ? (sp.sort as OrgSort) : "created_desc";
 
-  const orgs = await listPlatformOrganizations({ q, status, plan });
+  const orgs = await listPlatformOrganizations({ q, status, plan, sort });
 
   return (
     <div className="space-y-6">
@@ -59,10 +68,18 @@ export default async function OrganizationsListPage({
             ))}
           </select>
         </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-400">Rendit</label>
+          <select name="sort" defaultValue={sort} className={inputCls}>
+            {SORTS.map((s) => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
+        </div>
         <button type="submit" className="h-9 rounded-md bg-violet-500 px-4 text-sm font-medium text-white hover:bg-violet-600">
           Filtro
         </button>
-        {(q || status !== "all" || plan !== "all") && (
+        {(q || status !== "all" || plan !== "all" || sort !== "created_desc") && (
           <Link href="/platform/organizations" className="h-9 rounded-md border border-slate-200 px-4 text-sm leading-9 text-slate-500 hover:bg-slate-200">
             Pastro
           </Link>
