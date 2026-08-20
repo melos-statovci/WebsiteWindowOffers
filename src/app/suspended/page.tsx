@@ -27,12 +27,12 @@ export default async function SuspendedPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-        <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-2xl">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-slate-100 p-8 text-center shadow-sm">
+        <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-2xl">
           ⏸️
         </div>
         <h1 className="font-heading text-xl font-semibold text-slate-900">Llogaria është pezulluar</h1>
-        <p className="mt-3 text-sm leading-relaxed text-slate-600">
+        <p className="mt-3 text-sm leading-relaxed text-slate-500">
           Qasja në aplikacion për këtë organizatë është pezulluar përkohësisht. Të
           dhënat tuaja janë të ruajtura dhe të paprekura.
         </p>
@@ -41,7 +41,7 @@ export default async function SuspendedPage() {
             {account.suspendedReason}
           </p>
         ) : null}
-        <p className="mt-3 text-sm text-slate-600">
+        <p className="mt-3 text-sm text-slate-500">
           Për ta riaktivizuar llogarinë, na kontaktoni te{" "}
           <a className="font-medium text-slate-900 underline" href="mailto:info@arios.systems">
             info@arios.systems

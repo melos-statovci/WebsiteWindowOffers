@@ -1,7 +1,11 @@
-// Presentational primitives for the dark platform chrome. Kept local to the
-// /platform area so they never mix with the tenant kit (which is light-themed).
+// Presentational primitives for the platform area. They reuse the tenant design
+// tokens (the semantic, theme-aware `slate` scale) so the control plane is
+// legible in BOTH light and dark themes. Visual DISTINCTION from the tenant app
+// comes from the violet accent + "PLATFORM" chrome in layout.tsx — never from an
+// inverted, theme-fragile background.
 
 import Link from "next/link";
+import { Card } from "@/components/ui/kit";
 import type { PlanTier } from "@/lib/plan";
 import type { AccountStatus } from "@/server/platform/accounts";
 
@@ -17,32 +21,32 @@ export function PanelCard({
   className?: string;
 }) {
   return (
-    <div className={`rounded-xl border border-slate-800 bg-slate-900 p-5 ${className}`}>
+    <Card className={`p-5 ${className}`}>
       {(title || action) && (
         <div className="mb-4 flex items-center justify-between gap-3">
-          {title ? <h2 className="font-heading text-sm font-semibold text-slate-200">{title}</h2> : <span />}
+          {title ? <h2 className="font-heading text-base font-semibold text-slate-900">{title}</h2> : <span />}
           {action}
         </div>
       )}
       {children}
-    </div>
+    </Card>
   );
 }
 
 export function Metric({ label, value, tone = "default" }: { label: string; value: number | string; tone?: "default" | "emerald" | "amber" }) {
-  const valueColor = tone === "emerald" ? "text-emerald-400" : tone === "amber" ? "text-amber-400" : "text-white";
+  const valueColor = tone === "emerald" ? "text-emerald-500" : tone === "amber" ? "text-amber-500" : "text-slate-900";
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+    <Card className="p-5">
       <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</div>
       <div className={`mt-2 font-heading text-3xl font-semibold ${valueColor}`}>{value}</div>
-    </div>
+    </Card>
   );
 }
 
 const PLAN_STYLES: Record<PlanTier, string> = {
-  SOLO: "bg-slate-700 text-slate-100",
-  BIZNES: "bg-indigo-500/20 text-indigo-300",
-  FABRIKA: "bg-violet-500/20 text-violet-300",
+  SOLO: "bg-slate-200 text-slate-600",
+  BIZNES: "bg-slate-200 text-slate-900",
+  FABRIKA: "bg-violet-500/15 text-violet-500",
 };
 
 export function PlanBadge({ plan }: { plan: PlanTier }) {
@@ -51,11 +55,11 @@ export function PlanBadge({ plan }: { plan: PlanTier }) {
 
 export function StatusBadge({ status }: { status: AccountStatus }) {
   return status === "suspended" ? (
-    <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-400">
+    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-500">
       ● Pezulluar
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-400">
+    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-500">
       ● Aktive
     </span>
   );
@@ -63,7 +67,7 @@ export function StatusBadge({ status }: { status: AccountStatus }) {
 
 export function BackLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <Link href={href} className="text-sm text-slate-400 hover:text-slate-200">
+    <Link href={href} className="text-sm text-slate-400 hover:text-slate-900">
       ← {children}
     </Link>
   );

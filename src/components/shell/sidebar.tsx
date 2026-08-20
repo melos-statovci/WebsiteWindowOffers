@@ -11,6 +11,9 @@ import { useAuth, useAuthActions } from "@/components/providers/session-provider
 import type { OrgSummary } from "@/auth/types";
 
 function Logo({ collapsed }: { collapsed?: boolean }) {
+  // Real plan tier from the platform control plane (via the server-resolved auth
+  // context) — reflects a platform-admin plan change on the next load.
+  const { plan } = useAuth();
   return (
     <div className="flex items-center gap-3">
       <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-neutral-500 to-neutral-800 font-heading text-lg font-bold text-white">
@@ -22,7 +25,7 @@ function Logo({ collapsed }: { collapsed?: boolean }) {
             Kornizo
           </div>
           <div className="text-[11px] font-medium tracking-wide text-slate-400">
-            Plani SOLO
+            Plani {plan}
           </div>
         </div>
       )}

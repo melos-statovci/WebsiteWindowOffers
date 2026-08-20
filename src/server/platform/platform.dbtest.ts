@@ -9,7 +9,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import * as schema from "@/db/schema";
 import { clients } from "@/db/schema/business";

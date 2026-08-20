@@ -2,20 +2,22 @@
 
 import { useRouter } from "next/navigation";
 import { authClient } from "@/auth/client";
+import { Button } from "@/components/ui/kit";
 
-/** Sign-out control styled for the dark platform chrome. */
+/** Sign-out control for the platform chrome. */
 export function PlatformSignOut() {
   const router = useRouter();
   return (
-    <button
+    <Button
+      variant="outline"
+      size="sm"
       onClick={async () => {
         await authClient.signOut();
         router.replace("/sign-in");
         router.refresh();
       }}
-      className="rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
     >
       Dilni
-    </button>
+    </Button>
   );
 }

@@ -26,9 +26,9 @@ const ROLE_LABEL: Record<string, string> = {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex justify-between gap-4 border-b border-slate-800/60 py-2 last:border-0">
+    <div className="flex justify-between gap-4 border-b border-slate-200/70 py-2 last:border-0">
       <span className="text-sm text-slate-400">{label}</span>
-      <span className="text-right text-sm text-slate-200">{children}</span>
+      <span className="text-right text-sm text-slate-900">{children}</span>
     </div>
   );
 }
@@ -51,15 +51,15 @@ export default async function OrganizationDetailPage({ params }: { params: Promi
       <BackLink href="/platform/organizations">Të gjitha organizatat</BackLink>
 
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="font-heading text-2xl font-semibold text-white">{org.name}</h1>
+        <h1 className="font-heading text-2xl font-semibold text-slate-900">{org.name}</h1>
         <PlanBadge plan={org.plan} />
         <StatusBadge status={org.status} />
       </div>
 
       {org.status === "suspended" && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+        <div className="rounded-xl border border-amber-500/30 bg-amber-50 p-4 text-sm text-amber-600">
           Kjo organizatë është e pezulluar që nga {fmt(org.suspendedAt)}. Anëtarët nuk kanë qasje në aplikacion.
-          {org.suspendedReason ? <div className="mt-1 text-amber-300/90">Arsyeja: {org.suspendedReason}</div> : null}
+          {org.suspendedReason ? <div className="mt-1 text-amber-500">Arsyeja: {org.suspendedReason}</div> : null}
         </div>
       )}
 
@@ -105,7 +105,7 @@ export default async function OrganizationDetailPage({ params }: { params: Promi
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-800 text-xs uppercase tracking-wide text-slate-500">
+                <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
                   <th className="py-2 pr-4 font-medium">Emri</th>
                   <th className="py-2 pr-4 font-medium">Email</th>
                   <th className="py-2 pr-4 font-medium">Roli</th>
@@ -114,10 +114,10 @@ export default async function OrganizationDetailPage({ params }: { params: Promi
               </thead>
               <tbody>
                 {org.members.map((m) => (
-                  <tr key={m.userId} className="border-b border-slate-800/60 last:border-0">
-                    <td className="py-2 pr-4 text-slate-200">{m.name}</td>
+                  <tr key={m.userId} className="border-b border-slate-200/70 last:border-0">
+                    <td className="py-2 pr-4 text-slate-900">{m.name}</td>
                     <td className="py-2 pr-4 text-slate-400">{m.email}</td>
-                    <td className="py-2 pr-4 text-slate-300">{ROLE_LABEL[m.role] ?? m.role}</td>
+                    <td className="py-2 pr-4 text-slate-600">{ROLE_LABEL[m.role] ?? m.role}</td>
                     <td className="py-2 pr-4 text-slate-400">{m.joinedAt.toISOString().slice(0, 10)}</td>
                   </tr>
                 ))}
@@ -130,8 +130,8 @@ export default async function OrganizationDetailPage({ params }: { params: Promi
       <PanelCard title="Përdorimi">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
           {usage.map(([label, n]) => (
-            <div key={label} className="rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-center">
-              <div className="font-heading text-2xl font-semibold text-white">{n}</div>
+            <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-center">
+              <div className="font-heading text-2xl font-semibold text-slate-900">{n}</div>
               <div className="mt-1 text-xs text-slate-400">{label}</div>
             </div>
           ))}

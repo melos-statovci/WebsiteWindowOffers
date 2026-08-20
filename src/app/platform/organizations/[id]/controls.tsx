@@ -7,6 +7,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/kit";
 import { PLAN_TIERS, type PlanTier } from "@/lib/plan";
 import {
   setOrganizationPlan,
@@ -14,6 +15,9 @@ import {
   setOrganizationInternalNote,
 } from "@/server/platform/actions/organization.action";
 import type { AccountStatus } from "@/server/platform/accounts";
+
+const fieldCls =
+  "h-9 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 focus:border-violet-500 focus:outline-none";
 
 function Err({ msg }: { msg: string | null }) {
   return msg ? <p className="mt-2 text-xs text-rose-400">{msg}</p> : null;
@@ -29,16 +33,13 @@ export function PlanControl({ organizationId, plan }: { organizationId: string; 
   return (
     <div>
       <div className="flex items-center gap-3">
-        <select
-          value={value}
-          onChange={(e) => setValue(e.target.value as PlanTier)}
-          className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
-        >
+        <select value={value} onChange={(e) => setValue(e.target.value as PlanTier)} className={fieldCls}>
           {PLAN_TIERS.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
-        <button
+        <Button
+          size="sm"
           disabled={!dirty || pending}
           onClick={() =>
             start(async () => {
@@ -48,10 +49,9 @@ export function PlanControl({ organizationId, plan }: { organizationId: string; 
               else setErr(res.error.message);
             })
           }
-          className="h-9 rounded-md bg-indigo-500 px-4 text-sm font-medium text-white enabled:hover:bg-indigo-400 disabled:opacity-40"
         >
           {pending ? "Duke ruajtur…" : "Ndrysho planin"}
-        </button>
+        </Button>
       </div>
       <Err msg={err} />
     </div>
@@ -92,22 +92,15 @@ export function StatusControl({
 
   if (!confirming) {
     return (
-      <button
-        onClick={() => setConfirming(true)}
-        className={
-          suspend
-            ? "h-9 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 text-sm font-medium text-amber-300 hover:bg-amber-500/20"
-            : "h-9 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 text-sm font-medium text-emerald-300 hover:bg-emerald-500/20"
-        }
-      >
+      <Button variant={suspend ? "danger" : "primary"} size="sm" onClick={() => setConfirming(true)}>
         {suspend ? "Pezullo organizatën" : "Riaktivizo organizatën"}
-      </button>
+      </Button>
     );
   }
 
   return (
-    <div className="rounded-lg border border-slate-700 bg-slate-950 p-4">
-      <p className="text-sm text-slate-200">
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <p className="text-sm text-slate-900">
         {suspend ? (
           <>
             Pezullimi bllokon qasjen e anëtarëve të <span className="font-semibold">{orgName}</span> në
@@ -123,28 +116,16 @@ export function StatusControl({
           onChange={(e) => setReason(e.target.value)}
           placeholder="Arsyeja (opsionale, shfaqet te tenanti)"
           maxLength={300}
-          className="mt-3 h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+          className={`mt-3 w-full ${fieldCls}`}
         />
       )}
       <div className="mt-3 flex items-center gap-2">
-        <button
-          disabled={pending}
-          onClick={submit}
-          className={
-            suspend
-              ? "h-9 rounded-md bg-amber-500 px-4 text-sm font-medium text-slate-950 hover:bg-amber-400 disabled:opacity-40"
-              : "h-9 rounded-md bg-emerald-500 px-4 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-40"
-          }
-        >
+        <Button variant={suspend ? "danger" : "primary"} size="sm" disabled={pending} onClick={submit}>
           {pending ? "Duke aplikuar…" : suspend ? "Konfirmo pezullimin" : "Konfirmo riaktivizimin"}
-        </button>
-        <button
-          disabled={pending}
-          onClick={() => { setConfirming(false); setErr(null); }}
-          className="h-9 rounded-md border border-slate-700 px-4 text-sm text-slate-300 hover:bg-slate-800"
-        >
+        </Button>
+        <Button variant="ghost" size="sm" disabled={pending} onClick={() => { setConfirming(false); setErr(null); }}>
           Anulo
-        </button>
+        </Button>
       </div>
       <Err msg={err} />
     </div>
@@ -167,10 +148,12 @@ export function InternalNoteControl({ organizationId, note }: { organizationId: 
         rows={3}
         maxLength={2000}
         placeholder="Shënim i brendshëm (i padukshëm për tenantin)…"
-        className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+        className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-violet-500 focus:outline-none"
       />
       <div className="mt-2 flex items-center gap-3">
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           disabled={!dirty || pending}
           onClick={() =>
             start(async () => {
@@ -180,11 +163,10 @@ export function InternalNoteControl({ organizationId, note }: { organizationId: 
               else setErr(res.error.message);
             })
           }
-          className="h-9 rounded-md bg-slate-700 px-4 text-sm font-medium text-white enabled:hover:bg-slate-600 disabled:opacity-40"
         >
           {pending ? "Duke ruajtur…" : "Ruaj shënimin"}
-        </button>
-        {saved && !dirty && <span className="text-xs text-emerald-400">U ruajt.</span>}
+        </Button>
+        {saved && !dirty && <span className="text-xs text-emerald-500">U ruajt.</span>}
       </div>
       <Err msg={err} />
     </div>
