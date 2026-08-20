@@ -77,13 +77,15 @@ atomic "success". A single-transaction merge is impossible without bypassing Bet
 Auth's `organization` table (rejected) or wrapping `auth.api.updateOrganization` in a
 server action (larger change, deferred — current behavior is safe and truthful).
 
-## §3 Security E2E — **NOT PERFORMED (human required).**
-Password change + session revoke need a real signed-in session, and **entering a
-password is prohibited for the agent**. A live authenticated session (org
-`hasanigmbh`, owner) *did* render `/settings` with real server data before the dev
-server restarted (company name "hasanigmbh" from Better Auth, profile from DB) —
-proving the auth shell + hydration work live — but the password/session round-trips
-were not exercised. **Exact steps for the human are in §"E2E TODO" below.**
+## §3 Security E2E — **PARTIALLY DONE (in a human-provided session).**
+The human logged the agent in; against DEV the `/security` page was verified live:
+the **real active session list loads** (Better Auth — "Sesionet aktive (1)",
+Chrome·Mac, "Kjo pajisje", real login/expiry timestamps), the change-password control
++ its "changing the password closes all other sessions" note render, 2FA is honest
+"Së shpejti", and the "passwords are hashed, never shown/logged" note is present.
+**Not exercised:** the actual password *change* (entering a password is prohibited for
+the agent) and *revoke* (only one session existed, so revoke-others had nothing to
+act on). Those two remain human-only — see §E2E TODO A.
 
 ## §4 Backup/export — already truthful (Phase 8), **no change needed.** Export is a
 read-only JSON snapshot; the second card explicitly says real durability is
@@ -147,30 +149,42 @@ grants, scoped by Better Auth at the app layer (standard). Server mutations stil
 through the Phase-3 spine (validation → auth → fresh role → withOrg/RLS) — no bypass
 found.
 
-## §10 Integrated E2E — **NOT fully performed (human required).** Same password
-boundary. The DB suite already proves the vertical slices (accepted-offer freeze,
-finance debt/credit, RLS isolation, notes cross-client/cross-org). What still needs a
-human click-through is the *integrated* UI round-trip + persistence-across-reload +
-clear-localStorage + org-switch leak check. Steps in §E2E TODO.
+## §10 Integrated E2E — **PERFORMED live (human-provided session), PASSED.**
+Full UI round-trip against DEV (org shown as "test"): created client "Phase9 Test
+Client" → created project "Phase9 E2E Project" (PRJ-2026-001) with a server-hydrated
+profile system → added a window in the configurator (1000×1200mm, live calc materials
++ **€100.15**) → **accepted** the offer (status Draft→Pranuar, option toggles froze) →
+created invoice **FAT-2026-001** from the accepted offer (UI states the lines/prices
+are *"të garantuara nga serveri dhe nuk mund të ndryshohen"* — frozen) → recorded a
+**partial €50 payment** → finance recomputed server-side: PAGUAR €50, balance label
+flipped BORXHI→**KREDI €50** (paid > billed, since the invoice was still Draft) →
+Dashboard aggregated **KREDI KLIENTËSH €50.00**.
+**Server-authority proof:** after the client was created, clearing localStorage
+entirely (`kornizo-demo-store` was the only key) + hard reload → the client (and all
+data) survived, confirming PostgreSQL authority, not browser state.
+**Not done (human-only):** logout→login (needs a password), and org-switch cross-leak
+(no second test org). Test data (1 client/project/offer/invoice/payment) was left in
+DEV — delete if unwanted. The DB suite still covers the freeze + debt/credit math with
+an *issued* (non-draft) invoice.
 
 ---
 
-## E2E TODO (human — the agent cannot type passwords)
-Run `npm run dev`, sign in at http://localhost:3000 with a DEV account.
-**A. Security** (`/security`): change password via the form → expect success + other
-sessions revoked; confirm you stay authenticated; open the sessions list → revoke one
-/ revoke-others and confirm it disappears. Do NOT paste real passwords into logs.
-**B. Visual** (`/settings` → Dizajni i Ofertës): confirm exactly **3** design cards
-and the amber "Klasik" honest note. (Abonimi: no fake trial date; top banner has no
-"11 ditë".)
-**C. Integrated**: Client → Pricing → Project → Configurator item → Accept (verify
-freeze) → Invoice → partial Payment → settle → Dashboard/Client finance. Then hard
-refresh + logout/login (records persist) + clear localStorage (server data remains) +
-org-switch if a 2nd test org exists (no cross-org leak). Watch console/server logs.
+## E2E TODO (human — only the password-gated bits remain)
+**B. Visual — DONE by the agent** (live): exactly **3** design cards
+(Klasik/SOLO·AKTIV, Minimal/BIZNES, Rrjeti Teknik/FABRIKA) + the amber "Klasik" honest
+note; Abonimi shows no fake trial date; the top banner has no "11 ditë".
+**C. Integrated — DONE by the agent** (see §10) — PASSED.
+**A. Security change/revoke — STILL HUMAN-ONLY.** Sign in at http://localhost:3000,
+then on `/security`: change the password via the form → expect success + other
+sessions revoked; confirm you stay authenticated. To test revoke, first open a 2nd
+session (another browser/incognito), then revoke it / revoke-others and confirm it
+disappears. Do NOT paste real passwords into logs.
+**Optional:** logout→login (records persist) and org-switch cross-leak check (needs a
+2nd test org).
 
 ## Next exact step
-1. Human runs the E2E TODO (A/B/C) against DEV and reports pass/fail.
-2. If all green → this is deployment-ready for private/staging (see below).
+1. Agent already ran the visual (B) + integrated (C) E2E live — PASSED.
+2. Human runs the password-gated Security bits (§E2E TODO A) and reports pass/fail.
 3. Optional: fresh-DB migration rehearsal (§8) before real customers.
 
 ## Do NOT redo / repeat
@@ -182,7 +196,9 @@ org-switch if a 2nd test org exists (no cross-org leak). Watch console/server lo
 - Do NOT invent a Phase 10 for deferred *product features* — architecture is complete.
 
 ## Release verdict
-- **READY FOR PRIVATE/STAGING DEPLOYMENT** pending the human E2E TODO (A/B/C).
+- **READY FOR PRIVATE/STAGING DEPLOYMENT.** Visual + integrated E2E passed live; only
+  the password-gated Security change/revoke round-trip (§E2E TODO A) is left, and it is
+  a standard Better Auth flow whose UI + session list already verified.
 - **Blockers before real paying users** (product, not architecture): real billing
   (Stripe), object storage (logo + Documents), email (invitations/notifications),
   full 2FA — all intentionally deferred and honestly labeled in the UI.
