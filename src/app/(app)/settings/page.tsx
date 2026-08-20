@@ -10,7 +10,7 @@ import type { LucideIcon } from "lucide-react";
 import { Button, Card, Badge, Field, Input, Label } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/overlay";
 import { useStore } from "@/lib/store";
-import { account, sampleOffer } from "@/lib/mock/data";
+import { sampleOffer } from "@/lib/mock/data";
 import { plans, offerDesigns } from "@/lib/plan";
 import { eurAfter } from "@/lib/format";
 import { useApp } from "@/components/providers/providers";
@@ -102,16 +102,11 @@ function ProfiliPanel() {
     if (!canEdit || saving) return;
     setSaving(true);
     try {
-      // Org NAME is canonical in Better Auth — update it there, only if changed.
-      const nextName = draft.name.trim();
-      if (nextName && nextName !== company.name) {
-        const res = await authClient.organization.update({
-          data: { name: nextName },
-          organizationId: activeOrg.id,
-        });
-        if (res.error) { toast(res.error.message ?? "Emri i kompanisë nuk u ruajt."); return; }
-      }
-      // Everything else lives in organization_profiles (server-authoritative).
+      // The company name (Better Auth) and the business/profile fields
+      // (organization_profiles) live in two different stores and cannot be
+      // written in a single transaction. To avoid a half-saved state that still
+      // reports success, do the VALIDATION-PRONE profile write FIRST: if it is
+      // rejected, nothing has been persisted yet and we can abort cleanly.
       const payload: OrganizationProfileUpdate = {
         nui: draft.nui, vatNo: draft.vatNo, address: draft.address, city: draft.city,
         postalCode: draft.postalCode, phone: draft.phone, businessEmail: draft.email.trim(),
@@ -121,7 +116,24 @@ function ProfiliPanel() {
       const result = await updateOrganizationProfile(payload);
       if (!result.ok) {
         toast(result.error.fieldErrors?.businessEmail?.[0] ?? result.error.message);
-        return;
+        return; // nothing persisted — safe to abort
+      }
+
+      // Org NAME is canonical in Better Auth — update it there, only if changed.
+      // The profile is already saved at this point, so a failure here is a real
+      // PARTIAL save: report it honestly (never claim full success) and refresh
+      // so the mirror reflects what actually persisted.
+      const nextName = draft.name.trim();
+      if (nextName && nextName !== company.name) {
+        const res = await authClient.organization.update({
+          data: { name: nextName },
+          organizationId: activeOrg.id,
+        });
+        if (res.error) {
+          toast(res.error.message ?? "Të dhënat u ruajtën, por emri i kompanisë nuk u ruajt — provoni sërish.");
+          router.refresh();
+          return;
+        }
       }
       toast("Ndryshimet u ruajtën.");
       router.refresh();
@@ -199,7 +211,11 @@ function DizajniPanel() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-slate-400">Plani juaj (SOLO) ju lejon të zgjidhni nga 1 dizajn nga gjithsej 6. Klikoni një dizajn për ta zgjedhur.</p>
+      <p className="text-sm text-slate-400">Plani juaj (SOLO) ju lejon të zgjidhni nga 1 dizajn nga gjithsej 3. Klikoni një dizajn për ta zgjedhur.</p>
+      <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <Palette className="mt-0.5 size-4 shrink-0" />
+        <span>Ofertat e gjeneruara aktualisht përdorin dizajnin standard <strong>“Klasik”</strong>. Dizajnet shtesë dhe zbatimi i zgjedhjes suaj në PDF do të aktivizohen së shpejti — kjo zgjedhje ruhet si preferencë.</span>
+      </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {offerDesigns.map((d) => {
           const isActive = selectedId === d.id;
@@ -317,7 +333,7 @@ function AbonimiPanel() {
             <div className="mt-2 font-heading text-2xl font-bold text-slate-900">SOLO</div>
             <div className="text-sm text-slate-400">Për zejtarë dhe instalues të pavarur</div>
           </div>
-          <div className="text-sm text-slate-400">Prova mbaron më {account.trialEndsAt} — edhe {account.trialDaysLeft} ditë</div>
+          <div className="text-sm text-slate-400">Menaxhimi i abonimit dhe faturimi nuk janë aktivizuar ende (demo lokale).</div>
         </div>
       </Card>
 

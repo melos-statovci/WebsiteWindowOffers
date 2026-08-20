@@ -74,14 +74,13 @@ export const plans = [
   },
 ];
 
-// Offer PDF design templates
+// Offer PDF design templates. Only "Klasik" is applied to generated offers
+// today; the others are planned. Kept intentionally small (one per plan tier) —
+// more designs can be added here later when the templates actually ship.
 export const offerDesigns = [
   { id: "klasik", name: "Klasik", plan: "SOLO", active: true },
   { id: "minimal", name: "Minimal", plan: "BIZNES", active: false },
-  { id: "marke", name: "Markë", plan: "BIZNES", active: false },
   { id: "rrjeti", name: "Rrjeti Teknik", plan: "FABRIKA", active: false },
-  { id: "llogaria", name: "Llogaria", plan: "FABRIKA", active: false },
-  { id: "skede", name: "Skedë Teknike", plan: "FABRIKA", active: false },
 ];
 
 // Config guide steps. Each step links to a local route so "open the relevant

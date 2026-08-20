@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, Rocket, X } from "lucide-react";
+import { Rocket, X } from "lucide-react";
 import { useApp } from "@/components/providers/providers";
 import { guideStepKeys } from "@/lib/plan";
 import { isUiDismissed, useStore } from "@/lib/store";
@@ -38,11 +38,10 @@ export function TrialBanner() {
 
   return (
     <div className="flex flex-wrap items-start gap-3 bg-slate-300 px-4 py-3 text-sm text-white sm:items-center">
-      <Clock className="mt-0.5 size-4 shrink-0 sm:mt-0" />
+      <Rocket className="mt-0.5 size-4 shrink-0 sm:mt-0" />
       <p className="flex-1 leading-snug">
-        Prova falas: edhe 11 ditë. Kornizo është në fazë lansimi dhe
-        përmirësohet vazhdimisht — mund të ndodhin ndërprerje të shkurtra. Për
-        problem ose sugjerim, hapni{" "}
+        Kornizo është në fazë lansimi dhe përmirësohet vazhdimisht — mund të
+        ndodhin ndërprerje të shkurtra. Për problem ose sugjerim, hapni{" "}
         <button
           onClick={() => setOverlay("help")}
           className="font-semibold underline underline-offset-2"
