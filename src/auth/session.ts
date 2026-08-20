@@ -14,16 +14,18 @@ import { sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db/client";
 import { ensureOrganizationProfile, isUuid } from "@/auth/organization";
+import { getAccountState, type AccountState } from "@/server/platform/accounts";
+import type { PlanTier } from "@/lib/plan";
 import type { AuthContext, OrgSummary } from "@/auth/types";
 
 export type { AuthContext, OrgSummary };
 
 type Session = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
 
-export type ContextReason = "UNAUTHENTICATED" | "NO_ORGANIZATION";
+export type ContextReason = "UNAUTHENTICATED" | "NO_ORGANIZATION" | "SUSPENDED";
 
 type Resolved =
-  | { ok: true; session: Session; orgs: OrgSummary[]; activeId: string; role: string }
+  | { ok: true; session: Session; orgs: OrgSummary[]; activeId: string; role: string; account: AccountState }
   | { ok: false; reason: ContextReason };
 
 /** Raw session (or null) — for optimistic checks / already-signed-in redirects. */
@@ -57,7 +59,11 @@ async function resolveContext(reqHeaders: Headers): Promise<Resolved> {
   }
 
   const role = await memberRole(activeId, session.user.id);
-  return { ok: true, session, orgs, activeId, role };
+  // Platform account state (plan + suspension) for the active org. Read from the
+  // control plane; a missing row degrades to active/SOLO. Suspension is enforced
+  // by the two entry points below (layout redirect + action FORBIDDEN).
+  const account = await getAccountState(activeId);
+  return { ok: true, session, orgs, activeId, role, account };
 }
 
 /** Minimal, authoritative context for server actions. */
@@ -65,6 +71,7 @@ export interface ActionAuthContext {
   userId: string;
   organizationId: string;
   role: string;
+  plan: PlanTier;
   user: { id: string; name: string; email: string };
 }
 
@@ -76,12 +83,16 @@ export type AuthContextResult =
 export async function getAuthContext(reqHeaders: Headers): Promise<AuthContextResult> {
   const r = await resolveContext(reqHeaders);
   if (!r.ok) return { ok: false, reason: r.reason };
+  // Fail closed for a suspended tenant: no business mutation may proceed. The
+  // action spine maps this (non-UNAUTHENTICATED) reason to a safe FORBIDDEN.
+  if (r.account.status === "suspended") return { ok: false, reason: "SUSPENDED" };
   return {
     ok: true,
     ctx: {
       userId: r.session.user.id,
       organizationId: r.activeId,
       role: r.role,
+      plan: r.account.plan,
       user: { id: r.session.user.id, name: r.session.user.name, email: r.session.user.email },
     },
   };
@@ -97,12 +108,17 @@ export async function requireAuthContext(): Promise<AuthContext> {
   if (!r.ok) {
     redirect(r.reason === "UNAUTHENTICATED" ? "/sign-in" : "/onboarding");
   }
+  // Suspension gate for the whole tenant app shell. A suspended org's members
+  // are sent to /suspended instead of the app; no business data is touched, and
+  // platform admins (who never pass through here) can still manage the org.
+  if (r.account.status === "suspended") redirect("/suspended");
   await ensureOrganizationProfile(r.activeId).catch(() => {});
   const active = r.orgs.find((o) => o.id === r.activeId)!;
   return {
     user: { id: r.session.user.id, name: r.session.user.name, email: r.session.user.email },
     activeOrg: { id: active.id, name: active.name, slug: active.slug },
     role: r.role,
+    plan: r.account.plan,
     memberships: r.orgs.map((o) => ({ id: o.id, name: o.name, slug: o.slug })),
   };
 }

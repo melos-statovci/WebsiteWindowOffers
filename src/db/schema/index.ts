@@ -10,3 +10,4 @@
 
 export * from "../auth-schema";
 export * from "./business";
+export * from "./platform";

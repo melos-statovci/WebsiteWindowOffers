@@ -14,6 +14,7 @@ import * as schema from "@/db/schema";
 import { ac, roles } from "@/auth/permissions";
 import { ensureOrganizationProfile } from "@/auth/organization";
 import { ensureDefaultPricing } from "@/server/pricing-init";
+import { ensureOrganizationAccount } from "@/server/platform/accounts";
 
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
@@ -38,6 +39,9 @@ export const auth = betterAuth({
         afterCreate: async ({ organization: org }: { organization: { id: string } }) => {
           try {
             await ensureOrganizationProfile(org.id);
+            // Control-plane account row (default active SOLO). Best-effort: reads
+            // degrade to the same default if it is missing, so this never blocks.
+            await ensureOrganizationAccount(org.id);
             // Seed default pricing (version 1) so the new org can configure/price
             // immediately. Best-effort: the pricing read boundary re-ensures it
             // authoritatively on first read, so this never blocks org creation.

@@ -1,0 +1,77 @@
+// PLATFORM CONTROL-PLANE schema — SaaS operational state, owned by Kornizo the
+// PLATFORM, not by any tenant. This is deliberately SEPARATE from business.ts
+// (tenant-owned, RLS+FORCE) because the security model is different:
+//
+//   - These tables carry NO tenant RLS. They are modelled exactly like the
+//     Better Auth identity/tenancy tables (user/organization/member): not
+//     tenant-scoped data, reachable cross-tenant by the restricted runtime role
+//     with plain grants, and scoped in application code by the caller's id.
+//   - Writes are gated by PLATFORM-ADMIN authorization (server-side), never by
+//     tenant membership or a tenant RLS policy.
+//
+// Why not put plan/suspension on organization_profiles (a tenant RLS table)?
+// Because then the platform list/dashboard would need one withOrg() transaction
+// per org just to read a plan, and it would blur ownership — a tenant could, in
+// principle, be granted a policy to write its own plan. Keeping SaaS state here
+// makes the platform reads simple and keeps the plan a one-way (platform-only)
+// write. See PLATFORM_ADMIN_HANDOFF.md / memory platform-admin-architecture.
+
+import { pgTable, uuid, text, timestamp, index, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { user, organization } from "../auth-schema";
+
+// platform_admins — the ONLY source of platform-operator authority. Keyed to a
+// Better Auth user. Presence of a row === this user may operate the Kornizo
+// platform. Completely separate from the org-level roles (owner/admin/...).
+//
+// SECURITY: the restricted runtime role gets SELECT-ONLY on this table, so a
+// compromised app runtime can read (to authorize) but can NEVER insert/escalate
+// a platform admin. Grants are done out-of-band by an operator with owner creds
+// (scripts/seed-platform-admin.mjs).
+export const platformAdmins = pgTable("platform_admins", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  // Snapshot of the email at grant time, for display/audit in the dashboard.
+  email: text("email").notNull().default(""),
+  // Free-text provenance ("bootstrap", "granted by X on ...").
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// organization_accounts — per-tenant SaaS account state (1:1 with a Better Auth
+// organization). plan is the CANONICAL plan source (the old, unused
+// organization_profiles.plan column is retired). status drives suspension.
+//
+// A missing row degrades to { plan: 'SOLO', status: 'active' } everywhere it is
+// read (LEFT JOIN / COALESCE), so an org can never be locked out merely because
+// its account row was not created yet; suspension is always an EXPLICIT state.
+export const organizationAccounts = pgTable(
+  "organization_accounts",
+  {
+    organizationId: uuid("organization_id")
+      .primaryKey()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    // PlanTier: 'SOLO' | 'BIZNES' | 'FABRIKA' (the real feature-gating tiers).
+    plan: text("plan").notNull().default("SOLO"),
+    // 'active' | 'suspended'. Suspension blocks tenant app access; it never
+    // deletes or alters business data.
+    status: text("status").notNull().default("active"),
+    suspendedAt: timestamp("suspended_at"),
+    suspendedReason: text("suspended_reason"),
+    // Private control-plane note (invisible to tenant members). NOT the tenant's
+    // client notes table.
+    internalNote: text("internal_note"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    check("organization_accounts_plan_chk", sql`${table.plan} in ('SOLO','BIZNES','FABRIKA')`),
+    check("organization_accounts_status_chk", sql`${table.status} in ('active','suspended')`),
+    index("organization_accounts_status_idx").on(table.status),
+    index("organization_accounts_plan_idx").on(table.plan),
+  ],
+);

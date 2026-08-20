@@ -44,7 +44,9 @@ export const organizationProfiles = pgTable("organization_profiles", {
   iban: text("iban"),
   marginDefault: numeric("margin_default", { precision: 5, scale: 2 }).notNull().default("0"),
   vatDefault: numeric("vat_default", { precision: 5, scale: 2 }).notNull().default("0"),
-  plan: text("plan").notNull().default("SOLO"),
+  // NOTE: the former `plan` column was RETIRED — the canonical plan now lives in
+  // the platform control-plane table organization_accounts.plan (see
+  // src/db/schema/platform.ts). It was previously unread dead state.
   logoStorageKey: text("logo_storage_key"),
   settings: jsonb("settings").notNull().default({}),
   createdAt: timestamp("created_at").defaultNow().notNull(),

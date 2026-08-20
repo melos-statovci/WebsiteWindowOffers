@@ -1,5 +1,21 @@
 export type PlanTier = "SOLO" | "BIZNES" | "FABRIKA";
 
+// The real, ordered feature-gating tiers (ENTERPRISE in `plans` below is a
+// marketing/pricing row, not a gating tier). A higher rank includes everything
+// a lower one does. This ordering is the single source of truth for gating.
+export const PLAN_TIERS: PlanTier[] = ["SOLO", "BIZNES", "FABRIKA"];
+const PLAN_RANK: Record<PlanTier, number> = { SOLO: 0, BIZNES: 1, FABRIKA: 2 };
+
+/** True if `current` includes everything gated at `required` (rank >=). */
+export function planIncludes(current: PlanTier, required: PlanTier): boolean {
+  return PLAN_RANK[current] >= PLAN_RANK[required];
+}
+
+/** Narrow an arbitrary string to a PlanTier, defaulting to SOLO. */
+export function asPlanTier(value: string | null | undefined): PlanTier {
+  return value && (PLAN_TIERS as string[]).includes(value) ? (value as PlanTier) : "SOLO";
+}
+
 export interface GatedInfo {
   title: string;
   plan: PlanTier;
@@ -46,7 +62,6 @@ export const plans = [
     monthly: 12.5,
     monthlyStandard: 20.83,
     yearly: 150,
-    current: true,
   },
   {
     tier: "BIZNES" as const,

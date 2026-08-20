@@ -320,18 +320,22 @@ function PerdoruesitPanel() {
 
 function AbonimiPanel() {
   const { toast } = useApp();
+  const { plan: currentPlan } = useAuth();
   const [yearly, setYearly] = useState(false);
   const [confirmPlan, setConfirmPlan] = useState<string | null>(null);
   const steps = ["Plani", "Faturimi", "Pagesa", "Konfirmimi"];
+  // The current plan is the REAL tier from the platform control plane (managed by
+  // Kornizo operators). It is not self-service here — hence the info note below.
+  const activePlan = plans.find((p) => p.tier === currentPlan) ?? plans[0];
 
   return (
     <div className="space-y-5">
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <Badge tone="violet">PROVË</Badge>
-            <div className="mt-2 font-heading text-2xl font-bold text-slate-900">SOLO</div>
-            <div className="text-sm text-slate-400">Për zejtarë dhe instalues të pavarur</div>
+            <Badge tone="violet">PLANI AKTUAL</Badge>
+            <div className="mt-2 font-heading text-2xl font-bold text-slate-900">{activePlan.name}</div>
+            <div className="text-sm text-slate-400">{activePlan.tagline}</div>
           </div>
           <div className="text-sm text-slate-400">Menaxhimi i abonimit dhe faturimi nuk janë aktivizuar ende (demo lokale).</div>
         </div>
@@ -359,22 +363,25 @@ function AbonimiPanel() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {plans.map((p) => (
-          <Card key={p.tier} className={cn("flex flex-col p-5", p.current && "ring-2 ring-neutral-500")}>
+        {plans.map((p) => {
+          const isCurrent = p.tier === currentPlan;
+          return (
+          <Card key={p.tier} className={cn("flex flex-col p-5", isCurrent && "ring-2 ring-neutral-500")}>
             <div className="flex items-center justify-between">
               <div className="font-heading font-bold text-slate-900">{p.name}</div>
-              {p.current && <Badge tone="indigo">AKTUAL</Badge>}
+              {isCurrent && <Badge tone="indigo">AKTUAL</Badge>}
             </div>
             <p className="mt-1 text-xs text-slate-400">{p.tagline}</p>
             <div className="mt-4 font-heading text-2xl font-bold text-slate-900">
               {yearly ? `€${(p.yearly / 12).toFixed(2)}` : `€${p.monthly.toFixed(2)}`}<span className="text-sm font-normal text-slate-400">/muaj</span>
             </div>
             <div className="text-xs text-slate-400">€{p.yearly} në vit</div>
-            {!p.current && (
+            {!isCurrent && (
               <Button size="sm" className="mt-4" variant="outline" onClick={() => setConfirmPlan(p.name)}>Zgjidh {p.name}</Button>
             )}
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       <p className="text-xs text-slate-400">Për ndryshim plani, anulim ose çdo pyetje për faturimin, na shkruani te info@arios.systems.</p>

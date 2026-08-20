@@ -34,6 +34,18 @@ if (exists) {
 }
 await owner.query(`GRANT USAGE ON SCHEMA public TO ${ROLE}`);
 await owner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE organization_profiles TO ${ROLE}`);
+// Platform control-plane tables (see migration 0013). platform_admins is
+// SELECT-only so the runtime can authorize but never escalate a platform admin;
+// organization_accounts gets SELECT/INSERT/UPDATE (no DELETE — suspension never
+// deletes). Both are non-RLS operational-state tables (like Better Auth's own).
+// Guarded so this script still works against a DB migrated before 0013.
+for (const [table, grant] of [
+  ["platform_admins", "SELECT"],
+  ["organization_accounts", "SELECT, INSERT, UPDATE"],
+]) {
+  const present = (await owner.query("select 1 from pg_tables where tablename=$1", [table])).rowCount > 0;
+  if (present) await owner.query(`GRANT ${grant} ON TABLE ${table} TO ${ROLE}`);
+}
 
 const a = (await owner.query(
   "select rolsuper, rolbypassrls, rolcanlogin, rolcreatedb, rolcreaterole from pg_roles where rolname=$1",
