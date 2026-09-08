@@ -8,6 +8,7 @@ import { getSessionCookie } from "better-auth/cookies";
 // typing the URL directly.
 
 const AUTH_PAGES = ["/sign-in", "/sign-up"];
+const PUBLIC_PAGES = ["/", "/request-trial", "/request-demo"];
 
 export default function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -19,12 +20,13 @@ export default function proxy(req: NextRequest) {
 
   const hasSession = Boolean(getSessionCookie(req));
   const isAuthPage = AUTH_PAGES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const isPublicPage = PUBLIC_PAGES.some((p) => pathname === p || (p !== "/" && pathname.startsWith(`${p}/`)));
 
   // Security-critical redirect only: no session cookie -> can't load a protected
   // page. The inverse ("already signed in, skip the auth page") is handled in the
   // auth pages with a REAL server session check — doing it here on cookie
   // presence alone would loop against a stale/invalid cookie.
-  if (!hasSession && !isAuthPage) {
+  if (!hasSession && !isAuthPage && !isPublicPage) {
     const url = req.nextUrl.clone();
     url.pathname = "/sign-in";
     return NextResponse.redirect(url);

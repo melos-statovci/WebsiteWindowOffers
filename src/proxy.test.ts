@@ -1,0 +1,23 @@
+import { describe, expect, it } from "vitest";
+import { NextRequest } from "next/server";
+import proxy from "./proxy";
+
+function request(pathname: string) {
+  return new NextRequest(`https://kornizo.test${pathname}`, { method: "GET" });
+}
+
+describe("public/protected route proxy", () => {
+  it("allows public marketing routes without a session cookie", () => {
+    for (const pathname of ["/", "/request-trial", "/request-demo", "/sign-in"]) {
+      const response = proxy(request(pathname));
+      expect(response.headers.get("location")).toBeNull();
+    }
+  });
+
+  it("redirects protected tenant and platform routes without a session cookie", () => {
+    for (const pathname of ["/dashboard", "/projects", "/platform"]) {
+      const response = proxy(request(pathname));
+      expect(response.headers.get("location")).toBe(`https://kornizo.test/sign-in`);
+    }
+  });
+});

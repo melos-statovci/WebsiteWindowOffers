@@ -13,11 +13,11 @@ migrations, tests, and source code remain authoritative.
    - Tenant access is server-authoritative; expired trials keep data but lose
      normal app access.
 
-2. **Public homepage** — NEXT
+2. **Public homepage** — COMPLETE
    - Public product positioning and launch copy.
    - No fake pricing tiers.
 
-3. **Trial/demo applications**
+3. **Trial/demo applications** — NEXT
    - Public trial request/application flow.
    - No onboarding-token workflow unless a later technical review proves it is
      necessary.
