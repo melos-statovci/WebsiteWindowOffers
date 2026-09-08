@@ -40,20 +40,26 @@ export const platformAdmins = pgTable("platform_admins", {
 });
 
 // organization_accounts — per-tenant SaaS account state (1:1 with a Better Auth
-// organization). plan is the CANONICAL plan source (the old, unused
-// organization_profiles.plan column is retired). status drives suspension.
+// organization). plan is the CANONICAL product plan source. commercial_access
+// is the commercial lifecycle (trial/active). status is operational suspension.
 //
-// A missing row degrades to { plan: 'SOLO', status: 'active' } everywhere it is
-// read (LEFT JOIN / COALESCE), so an org can never be locked out merely because
-// its account row was not created yet; suspension is always an EXPLICIT state.
+// A missing row degrades to Standard + active access everywhere it is read, so
+// an org can never be locked out merely because its account row was not created
+// yet; suspension and trial expiry are explicit/derived states.
 export const organizationAccounts = pgTable(
   "organization_accounts",
   {
     organizationId: uuid("organization_id")
       .primaryKey()
       .references(() => organization.id, { onDelete: "cascade" }),
-    // PlanTier: 'SOLO' | 'BIZNES' | 'FABRIKA' (the real feature-gating tiers).
-    plan: text("plan").notNull().default("SOLO"),
+    // PlanTier: 'STANDARD' for launch. Future plans need an explicit migration.
+    plan: text("plan").notNull().default("STANDARD"),
+    // CommercialAccess: 'trial' | 'active'. Trial expiration is derived from
+    // trial_ends_at and server time; 'trial_expired' is NOT stored.
+    commercialAccess: text("commercial_access").notNull().default("trial"),
+    trialStartedAt: timestamp("trial_started_at").defaultNow(),
+    trialEndsAt: timestamp("trial_ends_at").default(sql`now() + interval '14 days'`),
+    activatedAt: timestamp("activated_at"),
     // 'active' | 'suspended'. Suspension blocks tenant app access; it never
     // deletes or alters business data.
     status: text("status").notNull().default("active"),
@@ -69,10 +75,17 @@ export const organizationAccounts = pgTable(
       .notNull(),
   },
   (table) => [
-    check("organization_accounts_plan_chk", sql`${table.plan} in ('SOLO','BIZNES','FABRIKA')`),
+    check("organization_accounts_plan_chk", sql`${table.plan} in ('STANDARD')`),
+    check("organization_accounts_commercial_access_chk", sql`${table.commercialAccess} in ('trial','active')`),
+    check(
+      "organization_accounts_trial_window_chk",
+      sql`${table.commercialAccess} = 'active' or (${table.trialStartedAt} is not null and ${table.trialEndsAt} is not null and ${table.trialEndsAt} > ${table.trialStartedAt})`,
+    ),
     check("organization_accounts_status_chk", sql`${table.status} in ('active','suspended')`),
     index("organization_accounts_status_idx").on(table.status),
     index("organization_accounts_plan_idx").on(table.plan),
+    index("organization_accounts_commercial_access_idx").on(table.commercialAccess),
+    index("organization_accounts_trial_ends_idx").on(table.trialEndsAt),
   ],
 );
 
@@ -102,14 +115,14 @@ export const platformAuditEvents = pgTable(
     // Target organization snapshot (nullable for non-org-scoped future events).
     organizationId: uuid("organization_id"),
     organizationName: text("organization_name"),
-    // Structured, non-sensitive change description (e.g. {oldPlan,newPlan}).
+    // Structured, non-sensitive change description.
     metadata: jsonb("metadata").notNull().default({}),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
     check(
       "platform_audit_events_action_chk",
-      sql`${table.action} in ('PLAN_CHANGED','ORGANIZATION_SUSPENDED','ORGANIZATION_REACTIVATED','INTERNAL_NOTE_UPDATED')`,
+      sql`${table.action} in ('PLAN_CHANGED','ORGANIZATION_SUSPENDED','ORGANIZATION_REACTIVATED','INTERNAL_NOTE_UPDATED','CUSTOMER_ACTIVATED','TRIAL_EXTENDED')`,
     ),
     index("platform_audit_events_created_idx").on(table.createdAt),
     index("platform_audit_events_org_idx").on(table.organizationId),

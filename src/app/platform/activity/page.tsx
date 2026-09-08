@@ -14,6 +14,8 @@ const PAGE_SIZE = 50;
 
 const ACTIONS: { value: PlatformAuditAction; label: string }[] = [
   { value: "PLAN_CHANGED", label: "Plan i ndryshuar" },
+  { value: "CUSTOMER_ACTIVATED", label: "Klient aktiv" },
+  { value: "TRIAL_EXTENDED", label: "Trial i zgjatur" },
   { value: "ORGANIZATION_SUSPENDED", label: "Pezulluar" },
   { value: "ORGANIZATION_REACTIVATED", label: "Riaktivizuar" },
   { value: "INTERNAL_NOTE_UPDATED", label: "Shënim i përditësuar" },

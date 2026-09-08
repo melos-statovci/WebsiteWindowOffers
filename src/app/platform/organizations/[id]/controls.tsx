@@ -8,13 +8,14 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/kit";
-import { PLAN_TIERS, type PlanTier } from "@/lib/plan";
 import {
-  setOrganizationPlan,
+  activateOrganizationCustomer,
+  extendOrganizationTrial,
   setOrganizationStatus,
   setOrganizationInternalNote,
 } from "@/server/platform/actions/organization.action";
 import type { AccountStatus } from "@/server/platform/accounts";
+import type { EffectiveCommercialAccess } from "@/lib/account-lifecycle";
 
 const fieldCls =
   "h-9 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 focus:border-violet-500 focus:outline-none";
@@ -23,34 +24,59 @@ function Err({ msg }: { msg: string | null }) {
   return msg ? <p className="mt-2 text-xs text-rose-400">{msg}</p> : null;
 }
 
-export function PlanControl({ organizationId, plan }: { organizationId: string; plan: PlanTier }) {
+export function LifecycleControl({
+  organizationId,
+  access,
+  trialDaysRemaining,
+}: {
+  organizationId: string;
+  access: EffectiveCommercialAccess;
+  trialDaysRemaining: number;
+}) {
   const router = useRouter();
-  const [value, setValue] = useState<PlanTier>(plan);
   const [err, setErr] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const dirty = value !== plan;
+
+  const activate = () =>
+    start(async () => {
+      setErr(null);
+      const res = await activateOrganizationCustomer({ organizationId });
+      if (res.ok) router.refresh();
+      else setErr(res.error.message);
+    });
+
+  const extend = (days: 7 | 14) =>
+    start(async () => {
+      setErr(null);
+      const res = await extendOrganizationTrial({ organizationId, days });
+      if (res.ok) router.refresh();
+      else setErr(res.error.message);
+    });
+
+  if (access === "active") {
+    return (
+      <div>
+        <p className="text-sm text-slate-500">Klienti është aktiv. Skadimi i trial nuk kufizon qasjen.</p>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <div className="flex items-center gap-3">
-        <select value={value} onChange={(e) => setValue(e.target.value as PlanTier)} className={fieldCls}>
-          {PLAN_TIERS.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
-        <Button
-          size="sm"
-          disabled={!dirty || pending}
-          onClick={() =>
-            start(async () => {
-              setErr(null);
-              const res = await setOrganizationPlan({ organizationId, plan: value });
-              if (res.ok) router.refresh();
-              else setErr(res.error.message);
-            })
-          }
-        >
-          {pending ? "Duke ruajtur…" : "Ndrysho planin"}
+      <p className="mb-3 text-sm text-slate-500">
+        {access === "trial"
+          ? `Trial aktiv: ${trialDaysRemaining} ditë të mbetura.`
+          : "Trial ka skaduar. Të dhënat ruhen; qasja e tenantit është e bllokuar derisa të aktivizohet ose zgjatet."}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" disabled={pending} onClick={activate}>
+          {pending ? "Duke aplikuar…" : "Aktivizo klientin"}
+        </Button>
+        <Button size="sm" variant="outline" disabled={pending} onClick={() => extend(7)}>
+          +7 ditë
+        </Button>
+        <Button size="sm" variant="outline" disabled={pending} onClick={() => extend(14)}>
+          +14 ditë
         </Button>
       </div>
       <Err msg={err} />

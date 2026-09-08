@@ -29,9 +29,7 @@ export const company: CompanyProfile = {
 };
 
 export const account = {
-  plan: "SOLO" as const,
-  trialEndsAt: "2026-08-16",
-  trialDaysLeft: 11,
+  plan: "STANDARD" as const,
 };
 
 // ---------------------------------------------------------------------------

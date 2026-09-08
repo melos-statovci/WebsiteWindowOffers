@@ -39,7 +39,7 @@ export const auth = betterAuth({
         afterCreate: async ({ organization: org }: { organization: { id: string } }) => {
           try {
             await ensureOrganizationProfile(org.id);
-            // Control-plane account row (default active SOLO). Best-effort: reads
+            // Control-plane account row (default 14-day Standard trial). Best-effort: reads
             // degrade to the same default if it is missing, so this never blocks.
             await ensureOrganizationAccount(org.id);
             // Seed default pricing (version 1) so the new org can configure/price

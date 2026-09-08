@@ -2,6 +2,7 @@
 // dependencies). The concrete resolution lives in session.ts (server-only).
 
 import type { PlanTier } from "@/lib/plan";
+import type { CommercialAccess, EffectiveCommercialAccess } from "@/lib/account-lifecycle";
 
 export interface OrgSummary {
   id: string;
@@ -15,5 +16,9 @@ export interface AuthContext {
   role: string;
   /** The active org's real plan tier (from the platform control plane). */
   plan: PlanTier;
+  commercialAccess: CommercialAccess;
+  effectiveCommercialAccess: EffectiveCommercialAccess;
+  trialEndsAt: Date | null;
+  trialDaysRemaining: number;
   memberships: OrgSummary[];
 }

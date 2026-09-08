@@ -15,7 +15,9 @@ export type PlatformAuditAction =
   | "PLAN_CHANGED"
   | "ORGANIZATION_SUSPENDED"
   | "ORGANIZATION_REACTIVATED"
-  | "INTERNAL_NOTE_UPDATED";
+  | "INTERNAL_NOTE_UPDATED"
+  | "CUSTOMER_ACTIVATED"
+  | "TRIAL_EXTENDED";
 
 // Minimal executor shape shared by the pool db and a transaction handle — so the
 // helper can be called inside db.transaction(tx => ...) for atomicity.

@@ -6,8 +6,9 @@
 
 import Link from "next/link";
 import { Card } from "@/components/ui/kit";
-import type { PlanTier } from "@/lib/plan";
+import { STANDARD_PLAN_NAME, type PlanTier } from "@/lib/plan";
 import type { AccountStatus } from "@/server/platform/accounts";
+import type { EffectiveCommercialAccess } from "@/lib/account-lifecycle";
 import type { AuditEventRow, PlatformAuditAction } from "@/server/platform/audit";
 
 export function PanelCard({
@@ -45,13 +46,11 @@ export function Metric({ label, value, tone = "default" }: { label: string; valu
 }
 
 const PLAN_STYLES: Record<PlanTier, string> = {
-  SOLO: "bg-slate-200 text-slate-600",
-  BIZNES: "bg-slate-200 text-slate-900",
-  FABRIKA: "bg-violet-500/15 text-violet-500",
+  STANDARD: "bg-violet-500/15 text-violet-500",
 };
 
 export function PlanBadge({ plan }: { plan: PlanTier }) {
-  return <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${PLAN_STYLES[plan]}`}>{plan}</span>;
+  return <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${PLAN_STYLES[plan]}`}>{STANDARD_PLAN_NAME}</span>;
 }
 
 export function StatusBadge({ status }: { status: AccountStatus }) {
@@ -64,6 +63,16 @@ export function StatusBadge({ status }: { status: AccountStatus }) {
       ● Aktive
     </span>
   );
+}
+
+export function CommercialAccessBadge({ access }: { access: EffectiveCommercialAccess }) {
+  if (access === "active") {
+    return <span className="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-500">Active</span>;
+  }
+  if (access === "trial") {
+    return <span className="inline-flex rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600">Trial</span>;
+  }
+  return <span className="inline-flex rounded-md bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-600">Trial Expired</span>;
 }
 
 export function BackLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -82,6 +91,8 @@ const ACTION_META: Record<PlatformAuditAction, { label: string; cls: string }> =
   ORGANIZATION_SUSPENDED: { label: "Pezulluar", cls: "bg-amber-50 text-amber-500" },
   ORGANIZATION_REACTIVATED: { label: "Riaktivizuar", cls: "bg-emerald-50 text-emerald-500" },
   INTERNAL_NOTE_UPDATED: { label: "Shënim i përditësuar", cls: "bg-violet-500/15 text-violet-500" },
+  CUSTOMER_ACTIVATED: { label: "Klient aktiv", cls: "bg-emerald-50 text-emerald-500" },
+  TRIAL_EXTENDED: { label: "Trial i zgjatur", cls: "bg-blue-50 text-blue-600" },
 };
 
 export function ActionBadge({ action }: { action: PlatformAuditAction }) {
@@ -101,6 +112,10 @@ export function auditSummary(event: AuditEventRow): string {
       return "";
     case "INTERNAL_NOTE_UPDATED":
       return m.cleared ? "Shënimi u pastrua" : "Shënimi u përditësua";
+    case "CUSTOMER_ACTIVATED":
+      return `${String(m.oldAccess ?? "")} → ${String(m.newAccess ?? "active")}`;
+    case "TRIAL_EXTENDED":
+      return `${String(m.oldTrialEndsAt ?? "—")} → ${String(m.newTrialEndsAt ?? "—")}`;
     default:
       return "";
   }

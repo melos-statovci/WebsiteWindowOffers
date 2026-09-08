@@ -15,6 +15,8 @@
 import { sql } from "drizzle-orm";
 import type { TenantTx } from "@/db/tenant";
 import {
+  activateCustomerSchema,
+  extendTrialSchema,
   setPlanSchema,
   setStatusSchema,
   setInternalNoteSchema,
@@ -22,6 +24,22 @@ import {
 import { createPlatformAction, fail } from "@/server/platform/action";
 import { recordAuditEvent } from "@/server/platform/audit";
 import { asPlanTier } from "@/lib/plan";
+import {
+  effectiveCommercialAccess,
+  trialDaysRemaining,
+  type AccountStatus,
+  type CommercialAccess,
+} from "@/lib/account-lifecycle";
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function asDate(value: string | Date | null | undefined): Date | null {
+  return value ? new Date(value) : null;
+}
+
+function iso(d: Date | null): string | null {
+  return d ? d.toISOString() : null;
+}
 
 /** Load the org name + current account state inside a tx; throws NOT_FOUND if the org is unknown. */
 async function loadTarget(tx: TenantTx, orgId: string) {
@@ -29,23 +47,65 @@ async function loadTarget(tx: TenantTx, orgId: string) {
   const orgRow = org.rows[0] as { name?: string } | undefined;
   if (!orgRow) throw fail("NOT_FOUND", "Organizata nuk u gjet.");
   const acc = await tx.execute(
-    sql`select plan, status, internal_note from organization_accounts where organization_id = ${orgId} limit 1`,
+    sql`
+      select
+        plan,
+        status,
+        commercial_access,
+        trial_started_at,
+        trial_ends_at,
+        activated_at,
+        suspended_at,
+        suspended_reason,
+        internal_note,
+        now() as server_now
+      from organization_accounts
+      where organization_id = ${orgId}
+      limit 1
+    `,
   );
-  const accRow = acc.rows[0] as { plan?: string; status?: string; internal_note?: string | null } | undefined;
+  const accRow = acc.rows[0] as
+    | {
+        plan?: string;
+        status?: string;
+        commercial_access?: string;
+        trial_started_at?: string | Date | null;
+        trial_ends_at?: string | Date | null;
+        activated_at?: string | Date | null;
+        suspended_at?: string | Date | null;
+        suspended_reason?: string | null;
+        internal_note?: string | null;
+        server_now?: string | Date;
+      }
+    | undefined;
+  const now = asDate(accRow?.server_now) ?? new Date();
+  const commercialAccess: CommercialAccess = accRow?.commercial_access === "trial" ? "trial" : "active";
+  const trialStartedAt = asDate(accRow?.trial_started_at);
+  const trialEndsAt = asDate(accRow?.trial_ends_at);
   return {
     name: orgRow.name ?? null,
     plan: asPlanTier(accRow?.plan),
-    status: accRow?.status === "suspended" ? "suspended" : "active",
+    status: (accRow?.status === "suspended" ? "suspended" : "active") as AccountStatus,
+    commercialAccess,
+    effectiveCommercialAccess: effectiveCommercialAccess({ commercialAccess, trialEndsAt, now }),
+    trialStartedAt,
+    trialEndsAt,
+    activatedAt: asDate(accRow?.activated_at),
+    trialDaysRemaining: trialDaysRemaining({ trialEndsAt, now }),
+    serverNow: now,
+    suspendedAt: asDate(accRow?.suspended_at),
+    suspendedReason: accRow?.suspended_reason ?? null,
     internalNote: accRow?.internal_note ?? null,
   };
 }
 
-/** Manually set an organization's plan tier. Immediately respected by tenant gates. Audited. */
+/** Keep plan extensibility server-side, but launch accepts only Standard. */
 export const setPlanAction = createPlatformAction({
   input: setPlanSchema,
   handler: async ({ input, ctx, db }) => {
     return db.transaction(async (tx) => {
       const before = await loadTarget(tx, input.organizationId);
+      if (before.plan === input.plan) return { organizationId: input.organizationId, plan: input.plan };
       await tx.execute(sql`
         insert into organization_accounts (organization_id, plan)
         values (${input.organizationId}, ${input.plan})
@@ -60,6 +120,87 @@ export const setPlanAction = createPlatformAction({
         metadata: { oldPlan: before.plan, newPlan: input.plan },
       });
       return { organizationId: input.organizationId, plan: input.plan };
+    });
+  },
+});
+
+/** Convert a trial/expired-trial organization to an active manual customer. */
+export const activateCustomerAction = createPlatformAction({
+  input: activateCustomerSchema,
+  handler: async ({ input, ctx, db }) => {
+    return db.transaction(async (tx) => {
+      const before = await loadTarget(tx, input.organizationId);
+      if (before.effectiveCommercialAccess === "active") {
+        return { organizationId: input.organizationId, commercialAccess: "active" as const };
+      }
+      await tx.execute(sql`
+        insert into organization_accounts (organization_id, plan, commercial_access, activated_at)
+        values (${input.organizationId}, 'STANDARD', 'active', now())
+        on conflict (organization_id) do update
+          set plan = 'STANDARD',
+              commercial_access = 'active',
+              activated_at = now(),
+              updated_at = now()
+      `);
+      await recordAuditEvent(tx, {
+        actorUserId: ctx.userId,
+        actorEmail: ctx.user.email,
+        action: "CUSTOMER_ACTIVATED",
+        organizationId: input.organizationId,
+        organizationName: before.name,
+        metadata: {
+          oldAccess: before.effectiveCommercialAccess,
+          newAccess: "active",
+          oldTrialEndsAt: iso(before.trialEndsAt),
+        },
+      });
+      return { organizationId: input.organizationId, commercialAccess: "active" as const };
+    });
+  },
+});
+
+/** Extend a trial from its current end date, or from server-now when expired. */
+export const extendTrialAction = createPlatformAction({
+  input: extendTrialSchema,
+  handler: async ({ input, ctx, db }) => {
+    return db.transaction(async (tx) => {
+      const before = await loadTarget(tx, input.organizationId);
+      if (before.commercialAccess === "active") {
+        throw fail("RULE_VIOLATION", "Klienti aktiv nuk ka nevojë për zgjatje trial.");
+      }
+      const base =
+        before.trialEndsAt && before.trialEndsAt.getTime() > before.serverNow.getTime()
+          ? before.trialEndsAt
+          : before.serverNow;
+      const newTrialEndsAt = new Date(base.getTime() + input.days * MS_PER_DAY);
+      const trialStartedAt = before.trialStartedAt ?? before.serverNow;
+
+      await tx.execute(sql`
+        insert into organization_accounts (organization_id, plan, commercial_access, trial_started_at, trial_ends_at)
+        values (${input.organizationId}, 'STANDARD', 'trial', ${trialStartedAt}, ${newTrialEndsAt})
+        on conflict (organization_id) do update
+          set plan = 'STANDARD',
+              commercial_access = 'trial',
+              trial_started_at = coalesce(organization_accounts.trial_started_at, ${trialStartedAt}),
+              trial_ends_at = ${newTrialEndsAt},
+              activated_at = null,
+              updated_at = now()
+      `);
+      await recordAuditEvent(tx, {
+        actorUserId: ctx.userId,
+        actorEmail: ctx.user.email,
+        action: "TRIAL_EXTENDED",
+        organizationId: input.organizationId,
+        organizationName: before.name,
+        metadata: {
+          days: input.days,
+          oldAccess: before.effectiveCommercialAccess,
+          newAccess: "trial",
+          oldTrialEndsAt: iso(before.trialEndsAt),
+          newTrialEndsAt: iso(newTrialEndsAt),
+        },
+      });
+      return { organizationId: input.organizationId, commercialAccess: "trial" as const, trialEndsAt: newTrialEndsAt };
     });
   },
 });

@@ -9,8 +9,9 @@
 import { notFound } from "next/navigation";
 import { getPlatformOrganization } from "@/server/platform/organizations";
 import { listAuditEvents } from "@/server/platform/audit";
-import { BackLink, PanelCard, PlanBadge, StatusBadge, ActionBadge, auditSummary } from "../../ui";
-import { PlanControl, StatusControl, InternalNoteControl } from "./controls";
+import { STANDARD_PLAN_NAME } from "@/lib/plan";
+import { BackLink, PanelCard, PlanBadge, StatusBadge, ActionBadge, auditSummary, CommercialAccessBadge } from "../../ui";
+import { LifecycleControl, StatusControl, InternalNoteControl } from "./controls";
 import { DetailTabs } from "./tabs";
 
 export const dynamic = "force-dynamic";
@@ -63,7 +64,8 @@ export default async function OrganizationDetailPage({ params }: { params: Promi
         <Row label="Krijuar">{fmt(org.createdAt)}</Row>
         <Row label="Aktiviteti i fundit i biznesit">{org.lastBusinessActivity ? fmt(org.lastBusinessActivity) : "Asnjë ende"}</Row>
         <Row label="Plani"><PlanBadge plan={org.plan} /></Row>
-        <Row label="Statusi"><StatusBadge status={org.status} /></Row>
+        <Row label="Qasja komerciale"><CommercialAccessBadge access={org.effectiveCommercialAccess} /></Row>
+        <Row label="Statusi operacional"><StatusBadge status={org.status} /></Row>
       </PanelCard>
       <PanelCard title="Profili i kompanisë">
         <Row label="NUI">{org.profile.nui || "—"}</Row>
@@ -125,10 +127,42 @@ export default async function OrganizationDetailPage({ params }: { params: Promi
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-2">
         <PanelCard title="Plani">
-          <p className="mb-3 text-sm text-slate-400">Ndryshimi respektohet menjëherë nga kufizimet e tenantit në ngarkesën e radhës.</p>
-          <PlanControl organizationId={org.id} plan={org.plan} />
+          <p className="text-sm text-slate-500">
+            {STANDARD_PLAN_NAME} është plani i vetëm real në lansim. Të gjitha funksionet aktuale të tenantit përfshihen.
+          </p>
         </PanelCard>
-        <PanelCard title="Statusi i llogarisë">
+        <PanelCard title="Qasja komerciale">
+          <div className="mb-3 space-y-2 text-sm text-slate-500">
+            <div className="flex justify-between gap-4">
+              <span>Gjendja</span>
+              <CommercialAccessBadge access={org.effectiveCommercialAccess} />
+            </div>
+            <div className="flex justify-between gap-4">
+              <span>Fillimi i trial</span>
+              <span className="text-slate-900">{fmt(org.trialStartedAt)}</span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span>Fundi i trial</span>
+              <span className="text-slate-900">{fmt(org.trialEndsAt)}</span>
+            </div>
+            {org.effectiveCommercialAccess === "trial" && (
+              <div className="flex justify-between gap-4">
+                <span>Ditë të mbetura</span>
+                <span className="text-slate-900">{org.trialDaysRemaining}</span>
+              </div>
+            )}
+            <div className="flex justify-between gap-4">
+              <span>Aktivizuar</span>
+              <span className="text-slate-900">{fmt(org.activatedAt)}</span>
+            </div>
+          </div>
+          <LifecycleControl
+            organizationId={org.id}
+            access={org.effectiveCommercialAccess}
+            trialDaysRemaining={org.trialDaysRemaining}
+          />
+        </PanelCard>
+        <PanelCard title="Statusi operacional">
           <p className="mb-3 text-sm text-slate-400">Pezullimi bllokon qasjen e tenantit pa fshirë asnjë të dhënë.</p>
           <StatusControl organizationId={org.id} status={org.status} orgName={org.name} />
         </PanelCard>
@@ -162,8 +196,15 @@ export default async function OrganizationDetailPage({ params }: { params: Promi
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="font-heading text-2xl font-semibold text-slate-900">{org.name}</h1>
         <PlanBadge plan={org.plan} />
+        <CommercialAccessBadge access={org.effectiveCommercialAccess} />
         <StatusBadge status={org.status} />
       </div>
+
+      {org.effectiveCommercialAccess === "trial_expired" && org.status !== "suspended" && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-50 p-4 text-sm text-amber-700">
+          Trial i kësaj organizate ka skaduar. Të dhënat janë të paprekura dhe Platform Admin mund ta aktivizojë klientin ose ta zgjasë trial.
+        </div>
+      )}
 
       {org.status === "suspended" && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-50 p-4 text-sm text-amber-600">

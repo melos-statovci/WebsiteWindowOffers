@@ -254,7 +254,7 @@ export function ClientDetail({ client, clientId }: { client: Client | null; clie
       )}
 
       {tab === "Prodhimi" && (
-        <Card><EmptyState icon={Package} title="Asnjë punë në prodhim" description="Prodhimi menaxhohet në planin BIZNES." /></Card>
+        <Card><EmptyState icon={Package} title="Prodhimi nuk është ende i disponueshëm" description="Ky modul do të aktivizohet kur funksionaliteti i prodhimit të jetë real." /></Card>
       )}
       {tab === "Dokumentet" && (
         <Card><EmptyState icon={FolderOpen} title="Asnjë dokument" /></Card>

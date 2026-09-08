@@ -8,10 +8,9 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button, Card, Badge, Field, Input, Label } from "@/components/ui/kit";
-import { Modal } from "@/components/ui/overlay";
 import { useStore } from "@/lib/store";
 import { sampleOffer } from "@/lib/mock/data";
-import { plans, offerDesigns } from "@/lib/plan";
+import { STANDARD_FEATURES, STANDARD_PLAN_NAME, offerDesigns } from "@/lib/plan";
 import { eurAfter } from "@/lib/format";
 import { useApp } from "@/components/providers/providers";
 import { useAuth } from "@/components/providers/session-provider";
@@ -211,15 +210,14 @@ function DizajniPanel() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-slate-400">Plani juaj (SOLO) ju lejon të zgjidhni nga 1 dizajn nga gjithsej 3. Klikoni një dizajn për ta zgjedhur.</p>
+      <p className="text-sm text-slate-400">Kornizo Standard përdor dizajnin aktual të ofertës. Klikoni dizajnin për ta zgjedhur si preferencë lokale.</p>
       <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
         <Palette className="mt-0.5 size-4 shrink-0" />
-        <span>Ofertat e gjeneruara aktualisht përdorin dizajnin standard <strong>“Klasik”</strong>. Dizajnet shtesë dhe zbatimi i zgjedhjes suaj në PDF do të aktivizohen së shpejti — kjo zgjedhje ruhet si preferencë.</span>
+        <span>Ofertat e gjeneruara aktualisht përdorin dizajnin standard <strong>“Klasik”</strong>. Dizajne shtesë mund të shtohen më vonë vetëm kur ato të zbatohen realisht në PDF.</span>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {offerDesigns.map((d) => {
           const isActive = selectedId === d.id;
-          const locked = d.plan !== "SOLO";
           return (
             <Card key={d.id} className={cn("overflow-hidden p-3", isActive && "ring-2 ring-neutral-500")}>
               <div className="relative mb-3 aspect-[1/1.414] overflow-hidden rounded-lg border border-slate-200 bg-white p-3 text-[6px] leading-tight text-slate-700">
@@ -235,14 +233,14 @@ function DizajniPanel() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-semibold text-slate-900">{d.name}</div>
-                  <Badge tone={d.plan === "SOLO" ? "emerald" : d.plan === "BIZNES" ? "blue" : "violet"}>{d.plan}</Badge>
+                  <Badge tone="emerald">{STANDARD_PLAN_NAME}</Badge>
                 </div>
                 {isActive ? (
                   <Badge tone="emerald"><Check className="size-3" /> AKTIV</Badge>
                 ) : (
                   <Button size="sm" variant="outline"
-                    onClick={() => { if (locked) { toast(`“${d.name}” kërkon planin ${d.plan}.`); } else { setDesign(d.id); toast(`“${d.name}” u zgjodh.`); } }}>
-                    {locked ? "Shiko" : "Zgjidh"}
+                    onClick={() => { setDesign(d.id); toast(`“${d.name}” u zgjodh.`); }}>
+                    Zgjidh
                   </Button>
                 )}
               </div>
@@ -319,14 +317,11 @@ function PerdoruesitPanel() {
 }
 
 function AbonimiPanel() {
-  const { toast } = useApp();
-  const { plan: currentPlan } = useAuth();
-  const [yearly, setYearly] = useState(false);
-  const [confirmPlan, setConfirmPlan] = useState<string | null>(null);
-  const steps = ["Plani", "Faturimi", "Pagesa", "Konfirmimi"];
-  // The current plan is the REAL tier from the platform control plane (managed by
-  // Kornizo operators). It is not self-service here — hence the info note below.
-  const activePlan = plans.find((p) => p.tier === currentPlan) ?? plans[0];
+  const { effectiveCommercialAccess, trialDaysRemaining, trialEndsAt } = useAuth();
+  const accessText =
+    effectiveCommercialAccess === "trial"
+      ? `Trial · ${trialDaysRemaining} ditë të mbetura`
+      : "Klient aktiv";
 
   return (
     <div className="space-y-5">
@@ -334,63 +329,36 @@ function AbonimiPanel() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <Badge tone="violet">PLANI AKTUAL</Badge>
-            <div className="mt-2 font-heading text-2xl font-bold text-slate-900">{activePlan.name}</div>
-            <div className="text-sm text-slate-400">{activePlan.tagline}</div>
+            <div className="mt-2 font-heading text-2xl font-bold text-slate-900">{STANDARD_PLAN_NAME}</div>
+            <div className="text-sm text-slate-400">Rrjedha e plotë aktuale për kompanitë e dritareve dhe dyerve.</div>
           </div>
-          <div className="text-sm text-slate-400">Menaxhimi i abonimit dhe faturimi nuk janë aktivizuar ende (demo lokale).</div>
+          <div className="text-right text-sm text-slate-500">
+            <div className="font-semibold text-slate-900">{accessText}</div>
+            {effectiveCommercialAccess === "trial" && (
+              <div>Skadon më {trialEndsAt ? trialEndsAt.toISOString().slice(0, 10) : "—"}</div>
+            )}
+          </div>
         </div>
       </Card>
 
-      <div className="flex items-center gap-2">
-        {steps.map((s, i) => (
-          <div key={s} className="flex items-center gap-2">
-            <span className={cn("grid size-6 place-items-center rounded-full text-xs font-bold", i === 0 ? "bg-slate-300 text-white" : "bg-slate-200 text-slate-500")}>{i + 1}</span>
-            <span className={cn("text-sm", i === 0 ? "font-semibold text-slate-900" : "text-slate-400")}>{s}</span>
-            {i < steps.length - 1 && <span className="mx-1 h-px w-6 bg-slate-200" />}
-          </div>
-        ))}
-      </div>
-
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="font-heading font-semibold text-slate-900">Zgjidhni planin</div>
-          <Badge tone="amber">Demo lokale</Badge>
-        </div>
-        <div className="flex items-center gap-1 rounded-xl bg-slate-200/60 p-1 text-sm font-semibold">
-          <button onClick={() => setYearly(false)} className={cn("rounded-lg px-3 py-1.5", !yearly ? "bg-slate-50 text-slate-900" : "text-slate-400")}>Mujor</button>
-          <button onClick={() => setYearly(true)} className={cn("rounded-lg px-3 py-1.5", yearly ? "bg-slate-50 text-slate-900" : "text-slate-400")}>Vjetor −17%</button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {plans.map((p) => {
-          const isCurrent = p.tier === currentPlan;
-          return (
-          <Card key={p.tier} className={cn("flex flex-col p-5", isCurrent && "ring-2 ring-neutral-500")}>
-            <div className="flex items-center justify-between">
-              <div className="font-heading font-bold text-slate-900">{p.name}</div>
-              {isCurrent && <Badge tone="indigo">AKTUAL</Badge>}
+      <Card className="p-5">
+        <div className="font-heading font-semibold text-slate-900">Përfshirë në Standard</div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {STANDARD_FEATURES.map((feature) => (
+            <div key={feature} className="flex items-start gap-2 text-sm text-slate-500">
+              <Check className="mt-0.5 size-4 shrink-0 text-emerald-500" />
+              <span>{feature}</span>
             </div>
-            <p className="mt-1 text-xs text-slate-400">{p.tagline}</p>
-            <div className="mt-4 font-heading text-2xl font-bold text-slate-900">
-              {yearly ? `€${(p.yearly / 12).toFixed(2)}` : `€${p.monthly.toFixed(2)}`}<span className="text-sm font-normal text-slate-400">/muaj</span>
-            </div>
-            <div className="text-xs text-slate-400">€{p.yearly} në vit</div>
-            {!isCurrent && (
-              <Button size="sm" className="mt-4" variant="outline" onClick={() => setConfirmPlan(p.name)}>Zgjidh {p.name}</Button>
-            )}
-          </Card>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      </Card>
 
-      <p className="text-xs text-slate-400">Për ndryshim plani, anulim ose çdo pyetje për faturimin, na shkruani te info@arios.systems.</p>
-
-      <Modal open={!!confirmPlan} onClose={() => setConfirmPlan(null)} title={`Kalo në planin ${confirmPlan ?? ""}`}
-        description="Ky është një simulim lokal — nuk kryhet asnjë pagesë reale."
-        footer={<><Button variant="ghost" onClick={() => setConfirmPlan(null)}>Anulo</Button><Button onClick={() => { toast(`Simulim: plani do të kalonte në ${confirmPlan}.`); setConfirmPlan(null); }}>Konfirmo (demo)</Button></>}>
-        <p className="text-sm text-slate-500">Në një mjedis real, këtu do të vazhdohej me faturimin dhe pagesën. Në këtë demo asgjë nuk ndryshohet te llogaria.</p>
-      </Modal>
+      <p className="text-xs text-slate-400">
+        Menaxhimi i pagesave dhe faturimi automatik nuk janë aktivizuar ende. Për vazhdim të trial, aktivizim klienti ose çdo pyetje për llogarinë, na shkruani te info@arios.systems.
+      </p>
+      <p className="text-xs text-slate-400">
+        Kornizo po rritet. Plane shtesë dhe mjete të avancuara për madhësi e rrjedha të ndryshme kompanish do të prezantohen me kohë.
+      </p>
     </div>
   );
 }

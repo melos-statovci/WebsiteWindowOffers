@@ -1,6 +1,6 @@
-// Low-level control-plane account state (plan + suspension status), used BOTH by
-// the tenant runtime (to read its OWN account) and by the platform admin area
-// (to read/write ANY org's account).
+// Low-level control-plane account state (plan + commercial access + suspension
+// status), used BOTH by the tenant runtime (to read its OWN account) and by the
+// platform admin area (to read/write ANY org's account).
 //
 // organization_accounts carries NO tenant RLS (see schema/platform.ts), so these
 // helpers query the shared pool directly and scope by organization_id in code —
@@ -12,45 +12,112 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { asPlanTier, type PlanTier } from "@/lib/plan";
+import {
+  effectiveCommercialAccess,
+  trialDaysRemaining,
+  type AccountStatus,
+  type CommercialAccess,
+  type EffectiveCommercialAccess,
+} from "@/lib/account-lifecycle";
 
-export type AccountStatus = "active" | "suspended";
+export type { AccountStatus, CommercialAccess, EffectiveCommercialAccess };
 
 export interface AccountState {
   plan: PlanTier;
   status: AccountStatus;
+  commercialAccess: CommercialAccess;
+  effectiveCommercialAccess: EffectiveCommercialAccess;
+  trialStartedAt: Date | null;
+  trialEndsAt: Date | null;
+  activatedAt: Date | null;
+  trialDaysRemaining: number;
+  serverNow: Date;
   suspendedReason: string | null;
 }
 
-/** A missing account row degrades to an active SOLO account (never a lockout). */
-const DEFAULT_STATE: AccountState = { plan: "SOLO", status: "active", suspendedReason: null };
+function toDate(value: string | Date | null | undefined): Date | null {
+  return value ? new Date(value) : null;
+}
 
 /**
- * The plan + suspension status for ONE organization. Direct pooled read (no RLS
- * on this table); the caller is responsible for passing a legitimate org id
- * (tenant: its session's active org; platform: a validated target org).
+ * The product/commercial/suspension state for ONE organization. Direct pooled
+ * read (no RLS on this table); the caller is responsible for passing a
+ * legitimate org id (tenant: its session's active org; platform: a validated
+ * target org).
  */
 export async function getAccountState(orgId: string): Promise<AccountState> {
   const res = await db.execute(
-    sql`select plan, status, suspended_reason from organization_accounts where organization_id = ${orgId} limit 1`,
+    sql`
+      select
+        plan,
+        status,
+        commercial_access,
+        trial_started_at,
+        trial_ends_at,
+        activated_at,
+        suspended_reason,
+        now() as server_now
+      from organization_accounts
+      where organization_id = ${orgId}
+      limit 1
+    `,
   );
   const row = res.rows[0] as
-    | { plan?: string; status?: string; suspended_reason?: string | null }
+    | {
+        plan?: string;
+        status?: string;
+        commercial_access?: string;
+        trial_started_at?: string | Date | null;
+        trial_ends_at?: string | Date | null;
+        activated_at?: string | Date | null;
+        suspended_reason?: string | null;
+        server_now?: string | Date;
+      }
     | undefined;
-  if (!row) return DEFAULT_STATE;
+  const now = toDate(row?.server_now) ?? new Date();
+  if (!row) {
+    return {
+      plan: "STANDARD",
+      status: "active",
+      commercialAccess: "active",
+      effectiveCommercialAccess: "active",
+      trialStartedAt: null,
+      trialEndsAt: null,
+      activatedAt: null,
+      trialDaysRemaining: 0,
+      serverNow: now,
+      suspendedReason: null,
+    };
+  }
+  const commercialAccess: CommercialAccess = row.commercial_access === "active" ? "active" : "trial";
+  const trialStartedAt = toDate(row.trial_started_at);
+  const trialEndsAt = toDate(row.trial_ends_at);
   return {
     plan: asPlanTier(row.plan),
     status: row.status === "suspended" ? "suspended" : "active",
+    commercialAccess,
+    effectiveCommercialAccess: effectiveCommercialAccess({ commercialAccess, trialEndsAt, now }),
+    trialStartedAt,
+    trialEndsAt,
+    activatedAt: toDate(row.activated_at),
+    trialDaysRemaining: trialDaysRemaining({ trialEndsAt, now }),
+    serverNow: now,
     suspendedReason: row.suspended_reason ?? null,
   };
 }
 
 /**
- * Guarantee an organization_accounts row exists (default active SOLO). Idempotent
- * and best-effort — a missing row is already handled by getAccountState's
- * default, so callers never need to await success. Used by the org-creation hook.
+ * Guarantee an organization_accounts row exists (default 14-day full Standard
+ * trial). Idempotent and best-effort — a missing row is already handled by
+ * getAccountState's active Standard default, so callers never need to await
+ * success. Used by the org-creation hook.
  */
 export async function ensureOrganizationAccount(orgId: string): Promise<void> {
   await db.execute(
-    sql`insert into organization_accounts (organization_id) values (${orgId}) on conflict (organization_id) do nothing`,
+    sql`
+      insert into organization_accounts (organization_id, plan, commercial_access, trial_started_at, trial_ends_at)
+      values (${orgId}, 'STANDARD', 'trial', now(), now() + interval '14 days')
+      on conflict (organization_id) do nothing
+    `,
   );
 }

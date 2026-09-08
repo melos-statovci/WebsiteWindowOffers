@@ -8,11 +8,15 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import {
+  activateCustomerAction,
+  extendTrialAction,
   setPlanAction,
   setStatusAction,
   setInternalNoteAction,
 } from "@/server/platform/actions/organization";
 import type {
+  ActivateCustomerInput,
+  ExtendTrialInput,
   SetPlanInput,
   SetStatusInput,
   SetInternalNoteInput,
@@ -42,6 +46,18 @@ export async function setOrganizationStatus(input: SetStatusInput) {
 
 export async function setOrganizationInternalNote(input: SetInternalNoteInput) {
   const res = await setInternalNoteAction(input, await headers());
+  if (res.ok) revalidateOrg(input.organizationId);
+  return res;
+}
+
+export async function activateOrganizationCustomer(input: ActivateCustomerInput) {
+  const res = await activateCustomerAction(input, await headers());
+  if (res.ok) revalidateOrg(input.organizationId);
+  return res;
+}
+
+export async function extendOrganizationTrial(input: ExtendTrialInput) {
+  const res = await extendTrialAction(input, await headers());
   if (res.ok) revalidateOrg(input.organizationId);
   return res;
 }

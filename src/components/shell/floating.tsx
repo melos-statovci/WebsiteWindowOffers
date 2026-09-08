@@ -4,6 +4,7 @@ import { Rocket, X } from "lucide-react";
 import { useApp } from "@/components/providers/providers";
 import { guideStepKeys } from "@/lib/plan";
 import { isUiDismissed, useStore } from "@/lib/store";
+import { useAuth } from "@/components/providers/session-provider";
 
 export function FloatingConfig() {
   const { setOverlay } = useApp();
@@ -31,17 +32,23 @@ export function FloatingConfig() {
 
 export function TrialBanner() {
   const { setOverlay } = useApp();
+  const { effectiveCommercialAccess, trialDaysRemaining } = useAuth();
   const uiDismissals = useStore((s) => s.uiDismissals);
   const dismissUi = useStore((s) => s.dismissUi);
   const hydrated = useStore((s) => s._hasHydrated);
-  if (!hydrated || isUiDismissed(uiDismissals.trialBanner)) return null;
+  if (
+    !hydrated ||
+    effectiveCommercialAccess !== "trial" ||
+    trialDaysRemaining > 3 ||
+    isUiDismissed(uiDismissals.trialBanner)
+  ) return null;
 
   return (
-    <div className="flex flex-wrap items-start gap-3 bg-slate-300 px-4 py-3 text-sm text-white sm:items-center">
+    <div className="flex flex-wrap items-start gap-3 bg-amber-500 px-4 py-3 text-sm text-white sm:items-center">
       <Rocket className="mt-0.5 size-4 shrink-0 sm:mt-0" />
       <p className="flex-1 leading-snug">
-        Kornizo është në fazë lansimi dhe përmirësohet vazhdimisht — mund të
-        ndodhin ndërprerje të shkurtra. Për problem ose sugjerim, hapni{" "}
+        Trial i Kornizo Standard përfundon pas {trialDaysRemaining} ditësh. Për
+        të vazhduar pas skadimit, hapni{" "}
         <button
           onClick={() => setOverlay("help")}
           className="font-semibold underline underline-offset-2"

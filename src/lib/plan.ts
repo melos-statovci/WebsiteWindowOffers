@@ -1,101 +1,65 @@
-export type PlanTier = "SOLO" | "BIZNES" | "FABRIKA";
+export type PlanTier = "STANDARD";
 
-// The real, ordered feature-gating tiers (ENTERPRISE in `plans` below is a
-// marketing/pricing row, not a gating tier). A higher rank includes everything
-// a lower one does. This ordering is the single source of truth for gating.
-export const PLAN_TIERS: PlanTier[] = ["SOLO", "BIZNES", "FABRIKA"];
-const PLAN_RANK: Record<PlanTier, number> = { SOLO: 0, BIZNES: 1, FABRIKA: 2 };
+export const STANDARD_PLAN: PlanTier = "STANDARD";
+export const STANDARD_PLAN_NAME = "Kornizo Standard";
+
+// Launch has one real product plan. Keep a typed list so future plans can be
+// introduced deliberately by expanding this source and a matching migration.
+export const PLAN_TIERS: PlanTier[] = [STANDARD_PLAN];
 
 /** True if `current` includes everything gated at `required` (rank >=). */
 export function planIncludes(current: PlanTier, required: PlanTier): boolean {
-  return PLAN_RANK[current] >= PLAN_RANK[required];
+  return current === required;
 }
 
-/** Narrow an arbitrary string to a PlanTier, defaulting to SOLO. */
+/** Narrow an arbitrary string to the launch plan, defaulting to Standard. */
 export function asPlanTier(value: string | null | undefined): PlanTier {
-  return value && (PLAN_TIERS as string[]).includes(value) ? (value as PlanTier) : "SOLO";
+  return value === STANDARD_PLAN ? STANDARD_PLAN : STANDARD_PLAN;
 }
 
 export interface GatedInfo {
   title: string;
-  plan: PlanTier;
+  description: string;
   features: string[];
 }
 
-export const BIZNES_FEATURES = [
-  "Gjithçka nga plani SOLO",
-  "Stoku me optimizim automatik",
-  "Prodhimi",
-  "Moduli i Financave (fitimi real dhe shpenzimet)",
-  "Regjistri i plotë i pagesave",
-  "3 dizajne ofertash",
-  "Deri në 3 përdorues",
+export const STANDARD_FEATURES = [
+  "Menaxhimi i klientëve",
+  "Çmime të kompanisë",
+  "Konfiguratori i dritareve dhe dyerve",
+  "Projekte dhe oferta profesionale",
+  "Ndjekja e statusit të ofertave",
+  "Fatura, pagesa, borxh dhe kredi klienti",
+  "Profili i kompanisë, anëtarët dhe shënimet",
 ];
 
-export const FABRIKA_FEATURES = [
-  "Gjithçka nga plani BIZNES",
-  "Menaxhimi i punëtorëve",
-  "Menaxhimi i aseteve",
-  "Menaxhimi i dokumenteve",
-  "GPS — gjurmimi i flotës (shtesë për automjet)",
-  "6 dizajne ofertash",
-  "Deri në 8 përdorues",
-  "Mbështetje prioritare",
-];
+const COMING_LATER =
+  "Ky modul nuk është ende i disponueshëm në Kornizo. Kornizo Standard përfshin rrjedhën aktuale të plotë; mjete shtesë do të prezantohen me kujdes më vonë.";
 
-// Maps a gated route to its upgrade-wall content.
+// Routes for modules that are not implemented yet. These are not paid upgrade
+// gates in launch; they are truthful coming-later placeholders.
 export const gatedRoutes: Record<string, GatedInfo> = {
-  "/finance": { title: "Financat", plan: "BIZNES", features: BIZNES_FEATURES },
-  "/jobs": { title: "Prodhimi", plan: "BIZNES", features: BIZNES_FEATURES },
-  "/stock": { title: "Stoku", plan: "BIZNES", features: BIZNES_FEATURES },
-  "/monitoring": { title: "Monitorimi", plan: "BIZNES", features: BIZNES_FEATURES },
-  "/workers": { title: "Punëtorët", plan: "FABRIKA", features: FABRIKA_FEATURES },
-  "/assets": { title: "Asetet", plan: "FABRIKA", features: FABRIKA_FEATURES },
-  "/documents": { title: "Dokumentet", plan: "FABRIKA", features: FABRIKA_FEATURES },
+  "/finance": { title: "Financat", description: COMING_LATER, features: STANDARD_FEATURES },
+  "/jobs": { title: "Prodhimi", description: COMING_LATER, features: STANDARD_FEATURES },
+  "/stock": { title: "Stoku", description: COMING_LATER, features: STANDARD_FEATURES },
+  "/monitoring": { title: "Monitorimi", description: COMING_LATER, features: STANDARD_FEATURES },
+  "/workers": { title: "Punëtorët", description: COMING_LATER, features: STANDARD_FEATURES },
+  "/assets": { title: "Asetet", description: COMING_LATER, features: STANDARD_FEATURES },
+  "/documents": { title: "Dokumentet", description: COMING_LATER, features: STANDARD_FEATURES },
 };
 
 export const plans = [
   {
-    tier: "SOLO" as const,
-    name: "SOLO",
-    tagline: "Për zejtarë dhe instalues të pavarur",
-    monthly: 12.5,
-    monthlyStandard: 20.83,
-    yearly: 150,
-  },
-  {
-    tier: "BIZNES" as const,
-    name: "BIZNES",
-    tagline: "Për kompani në rritje",
-    monthly: 29.17,
-    monthlyStandard: 40.83,
-    yearly: 350,
-  },
-  {
-    tier: "FABRIKA" as const,
-    name: "FABRIKA",
-    tagline: "Për fabrika dhe prodhim serioz",
-    monthly: 45.83,
-    monthlyStandard: 65.83,
-    yearly: 550,
-  },
-  {
-    tier: "ENTERPRISE" as const,
-    name: "ENTERPRISE",
-    tagline: "Për kompani të mëdha me ekipe në terren",
-    monthly: 62.5,
-    monthlyStandard: 91.67,
-    yearly: 750,
+    tier: STANDARD_PLAN,
+    name: STANDARD_PLAN_NAME,
+    tagline: "Rrjedha e plotë aktuale për kompanitë e dritareve dhe dyerve",
+    features: STANDARD_FEATURES,
   },
 ];
 
-// Offer PDF design templates. Only "Klasik" is applied to generated offers
-// today; the others are planned. Kept intentionally small (one per plan tier) —
-// more designs can be added here later when the templates actually ship.
+// Offer PDF design templates. Only "Klasik" is applied to generated offers today.
 export const offerDesigns = [
-  { id: "klasik", name: "Klasik", plan: "SOLO", active: true },
-  { id: "minimal", name: "Minimal", plan: "BIZNES", active: false },
-  { id: "rrjeti", name: "Rrjeti Teknik", plan: "FABRIKA", active: false },
+  { id: "klasik", name: "Klasik", plan: STANDARD_PLAN, active: true },
 ];
 
 // Config guide steps. Each step links to a local route so "open the relevant

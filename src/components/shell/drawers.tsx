@@ -117,7 +117,7 @@ export function HelpDrawer() {
                   </button>
                   {open === i && (
                     <p className="px-4 py-3 text-sm text-slate-400">
-                      Ndiqni udhëzuesin hap-pas-hapi brenda aplikacionit. Ky është një demonstrim lokal — përgjigjet e plota shfaqen te versioni i plotë.
+                      Ndiqni udhëzuesin hap-pas-hapi brenda aplikacionit. Përgjigjet e zgjeruara do të shtohen gradualisht.
                     </p>
                   )}
                 </li>
@@ -141,7 +141,7 @@ export function HelpDrawer() {
               onClick={() => { setContact({ subject: "", message: "" }); toast("Mesazhi u dërgua (simulim lokal — asgjë nuk u dërgua vërtet)."); }}>
               Dërgo mesazh
             </Button>
-            <Button variant="outline" className="w-full" onClick={() => toast("Kërko përmirësim — simulim lokal.")}>Kërko përmirësim</Button>
+            <Button variant="outline" className="w-full" onClick={() => toast("Kërkesa u regjistrua si demonstrim lokal.")}>Kontakto Kornizo</Button>
           </div>
         )}
       </div>

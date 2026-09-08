@@ -21,7 +21,21 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { withOrg } from "@/db/tenant";
 import { asPlanTier, type PlanTier } from "@/lib/plan";
+import {
+  effectiveCommercialAccess,
+  trialDaysRemaining,
+  type CommercialAccess,
+  type EffectiveCommercialAccess,
+} from "@/lib/account-lifecycle";
 import type { AccountStatus } from "@/server/platform/accounts";
+
+function toDate(value: string | Date | null | undefined): Date | null {
+  return value ? new Date(value) : null;
+}
+
+function accessFrom(value: string | null | undefined): CommercialAccess {
+  return value === "active" ? "active" : "trial";
+}
 
 export interface PlatformOrgListItem {
   id: string;
@@ -30,25 +44,31 @@ export interface PlatformOrgListItem {
   createdAt: Date;
   plan: PlanTier;
   status: AccountStatus;
+  commercialAccess: CommercialAccess;
+  effectiveCommercialAccess: EffectiveCommercialAccess;
+  trialEndsAt: Date | null;
+  trialDaysRemaining: number;
   memberCount: number;
   ownerName: string | null;
   ownerEmail: string | null;
 }
 
 export type OrgSort = "created_desc" | "created_asc" | "name_asc" | "members_desc";
+export type OrgCommercialAccessFilter = EffectiveCommercialAccess | "all";
 
 export interface OrgListFilters {
   q?: string;
   status?: AccountStatus | "all";
   plan?: PlanTier | "all";
+  commercialAccess?: OrgCommercialAccessFilter;
   sort?: OrgSort;
 }
 
 const ORDER_BY: Record<OrgSort, ReturnType<typeof sql>> = {
-  created_desc: sql`o.created_at desc`,
-  created_asc: sql`o.created_at asc`,
-  name_asc: sql`lower(o.name) asc`,
-  members_desc: sql`"memberCount" desc, o.created_at desc`,
+  created_desc: sql`"createdAt" desc`,
+  created_asc: sql`"createdAt" asc`,
+  name_asc: sql`lower(name) asc`,
+  members_desc: sql`"memberCount" desc, "createdAt" desc`,
 };
 
 /**
@@ -61,42 +81,58 @@ export async function listPlatformOrganizations(filters: OrgListFilters = {}): P
   const q = filters.q?.trim();
   const status = filters.status && filters.status !== "all" ? filters.status : null;
   const plan = filters.plan && filters.plan !== "all" ? filters.plan : null;
+  const commercialAccess = filters.commercialAccess && filters.commercialAccess !== "all" ? filters.commercialAccess : null;
   const orderBy = ORDER_BY[filters.sort ?? "created_desc"];
 
   const res = await db.execute(sql`
-    select
-      o.id,
-      o.name,
-      o.slug,
-      o.created_at as "createdAt",
-      coalesce(a.plan, 'SOLO') as plan,
-      coalesce(a.status, 'active') as status,
-      (select count(*) from member m where m.organization_id = o.id)::int as "memberCount",
-      owner_u.name as "ownerName",
-      owner_u.email as "ownerEmail"
-    from organization o
-    left join organization_accounts a on a.organization_id = o.id
-    left join lateral (
-      select u.name, u.email
-      from member m
-      join "user" u on u.id = m.user_id
-      where m.organization_id = o.id and m.role = 'owner'
-      order by m.created_at asc
-      limit 1
-    ) owner_u on true
-    where
-      (${q}::text is null or o.name ilike '%' || ${q} || '%' or o.slug ilike '%' || ${q} || '%')
-      and (${status}::text is null or coalesce(a.status, 'active') = ${status})
-      and (${plan}::text is null or coalesce(a.plan, 'SOLO') = ${plan})
+    with org_rows as (
+      select
+        o.id,
+        o.name,
+        o.slug,
+        o.created_at as "createdAt",
+        coalesce(a.plan, 'STANDARD') as plan,
+        coalesce(a.status, 'active') as status,
+        coalesce(a.commercial_access, 'active') as "commercialAccess",
+        a.trial_ends_at as "trialEndsAt",
+        now() as "serverNow",
+        case
+          when coalesce(a.commercial_access, 'active') = 'active' then 'active'
+          when a.trial_ends_at is not null and now() < a.trial_ends_at then 'trial'
+          else 'trial_expired'
+        end as "effectiveCommercialAccess",
+        (select count(*) from member m where m.organization_id = o.id)::int as "memberCount",
+        owner_u.name as "ownerName",
+        owner_u.email as "ownerEmail"
+      from organization o
+      left join organization_accounts a on a.organization_id = o.id
+      left join lateral (
+        select u.name, u.email
+        from member m
+        join "user" u on u.id = m.user_id
+        where m.organization_id = o.id and m.role = 'owner'
+        order by m.created_at asc
+        limit 1
+      ) owner_u on true
+      where
+        (${q}::text is null or o.name ilike '%' || ${q} || '%' or o.slug ilike '%' || ${q} || '%')
+        and (${status}::text is null or coalesce(a.status, 'active') = ${status})
+        and (${plan}::text is null or coalesce(a.plan, 'STANDARD') = ${plan})
+    )
+    select * from org_rows
+    where (${commercialAccess}::text is null or "effectiveCommercialAccess" = ${commercialAccess})
     order by ${orderBy}
   `);
 
   return res.rows.map((r) => {
     const row = r as {
       id: string; name: string; slug: string; createdAt: string | Date;
-      plan: string; status: string; memberCount: number;
+      plan: string; status: string; commercialAccess: string; effectiveCommercialAccess: EffectiveCommercialAccess;
+      trialEndsAt: string | Date | null; serverNow: string | Date; memberCount: number;
       ownerName: string | null; ownerEmail: string | null;
     };
+    const now = toDate(row.serverNow) ?? new Date();
+    const trialEndsAt = toDate(row.trialEndsAt);
     return {
       id: row.id,
       name: row.name,
@@ -104,6 +140,10 @@ export async function listPlatformOrganizations(filters: OrgListFilters = {}): P
       createdAt: new Date(row.createdAt),
       plan: asPlanTier(row.plan),
       status: row.status === "suspended" ? "suspended" : "active",
+      commercialAccess: accessFrom(row.commercialAccess),
+      effectiveCommercialAccess: row.effectiveCommercialAccess,
+      trialEndsAt,
+      trialDaysRemaining: trialDaysRemaining({ trialEndsAt, now }),
       memberCount: Number(row.memberCount) || 0,
       ownerName: row.ownerName,
       ownerEmail: row.ownerEmail,
@@ -143,6 +183,12 @@ export interface PlatformOrgDetail {
   createdAt: Date;
   plan: PlanTier;
   status: AccountStatus;
+  commercialAccess: CommercialAccess;
+  effectiveCommercialAccess: EffectiveCommercialAccess;
+  trialStartedAt: Date | null;
+  trialEndsAt: Date | null;
+  activatedAt: Date | null;
+  trialDaysRemaining: number;
   suspendedAt: Date | null;
   suspendedReason: string | null;
   internalNote: string | null;
@@ -161,11 +207,16 @@ export async function getPlatformOrganization(orgId: string): Promise<PlatformOr
   const base = await db.execute(sql`
     select
       o.id, o.name, o.slug, o.created_at as "createdAt",
-      coalesce(a.plan, 'SOLO') as plan,
+      coalesce(a.plan, 'STANDARD') as plan,
       coalesce(a.status, 'active') as status,
+      coalesce(a.commercial_access, 'active') as "commercialAccess",
+      a.trial_started_at as "trialStartedAt",
+      a.trial_ends_at as "trialEndsAt",
+      a.activated_at as "activatedAt",
       a.suspended_at as "suspendedAt",
       a.suspended_reason as "suspendedReason",
-      a.internal_note as "internalNote"
+      a.internal_note as "internalNote",
+      now() as "serverNow"
     from organization o
     left join organization_accounts a on a.organization_id = o.id
     where o.id = ${orgId}
@@ -174,11 +225,18 @@ export async function getPlatformOrganization(orgId: string): Promise<PlatformOr
   const b = base.rows[0] as
     | {
         id: string; name: string; slug: string; createdAt: string | Date;
-        plan: string; status: string;
+        plan: string; status: string; commercialAccess: string;
+        trialStartedAt: string | Date | null; trialEndsAt: string | Date | null; activatedAt: string | Date | null;
         suspendedAt: string | Date | null; suspendedReason: string | null; internalNote: string | null;
+        serverNow: string | Date;
       }
     | undefined;
   if (!b) return null;
+
+  const serverNow = toDate(b.serverNow) ?? new Date();
+  const commercialAccess = accessFrom(b.commercialAccess);
+  const trialStartedAt = toDate(b.trialStartedAt);
+  const trialEndsAt = toDate(b.trialEndsAt);
 
   // Members — non-RLS join.
   const memberRes = await db.execute(sql`
@@ -252,6 +310,12 @@ export async function getPlatformOrganization(orgId: string): Promise<PlatformOr
     createdAt: new Date(b.createdAt),
     plan: asPlanTier(b.plan),
     status: b.status === "suspended" ? "suspended" : "active",
+    commercialAccess,
+    effectiveCommercialAccess: effectiveCommercialAccess({ commercialAccess, trialEndsAt, now: serverNow }),
+    trialStartedAt,
+    trialEndsAt,
+    activatedAt: toDate(b.activatedAt),
+    trialDaysRemaining: trialDaysRemaining({ trialEndsAt, now: serverNow }),
     suspendedAt: b.suspendedAt ? new Date(b.suspendedAt) : null,
     suspendedReason: b.suspendedReason,
     internalNote: b.internalNote,
@@ -267,16 +331,22 @@ export interface RecentOrg {
   name: string;
   plan: PlanTier;
   status: AccountStatus;
+  effectiveCommercialAccess: EffectiveCommercialAccess;
+  trialDaysRemaining: number;
   createdAt: Date;
 }
 
 export interface PlatformOverview {
   totalOrganizations: number;
-  activeOrganizations: number;
+  activeAccounts: number;
   suspendedOrganizations: number;
   totalUsers: number;
   totalMemberships: number;
   planDistribution: Record<PlatformTier, number>;
+  activeTrials: number;
+  trialsExpiringSoon: number;
+  trialExpired: number;
+  activeCustomers: number;
   recentOrganizations: RecentOrg[];
 }
 
@@ -295,9 +365,23 @@ export async function getPlatformOverview(): Promise<PlatformOverview> {
       count(*)::int as total,
       count(*) filter (where coalesce(a.status,'active') = 'active')::int as active,
       count(*) filter (where coalesce(a.status,'active') = 'suspended')::int as suspended,
-      count(*) filter (where coalesce(a.plan,'SOLO') = 'SOLO')::int as solo,
-      count(*) filter (where coalesce(a.plan,'SOLO') = 'BIZNES')::int as biznes,
-      count(*) filter (where coalesce(a.plan,'SOLO') = 'FABRIKA')::int as fabrika
+      count(*) filter (where coalesce(a.plan,'STANDARD') = 'STANDARD')::int as standard,
+      count(*) filter (
+        where coalesce(a.commercial_access,'active') = 'trial'
+          and a.trial_ends_at is not null
+          and now() < a.trial_ends_at
+      )::int as "activeTrials",
+      count(*) filter (
+        where coalesce(a.commercial_access,'active') = 'trial'
+          and a.trial_ends_at is not null
+          and now() < a.trial_ends_at
+          and a.trial_ends_at <= now() + interval '3 days'
+      )::int as "trialsExpiringSoon",
+      count(*) filter (
+        where coalesce(a.commercial_access,'active') = 'trial'
+          and (a.trial_ends_at is null or now() >= a.trial_ends_at)
+      )::int as "trialExpired",
+      count(*) filter (where coalesce(a.commercial_access,'active') = 'active')::int as "activeCustomers"
     from organization o
     left join organization_accounts a on a.organization_id = o.id
   `);
@@ -307,34 +391,55 @@ export async function getPlatformOverview(): Promise<PlatformOverview> {
   const memberRes = await db.execute(sql`select count(*)::int as memberships from member`);
 
   const recentRes = await db.execute(sql`
-    select o.id, o.name, coalesce(a.plan,'SOLO') as plan, coalesce(a.status,'active') as status, o.created_at as "createdAt"
+    select
+      o.id,
+      o.name,
+      coalesce(a.plan,'STANDARD') as plan,
+      coalesce(a.status,'active') as status,
+      a.trial_ends_at as "trialEndsAt",
+      case
+        when coalesce(a.commercial_access, 'active') = 'active' then 'active'
+        when a.trial_ends_at is not null and now() < a.trial_ends_at then 'trial'
+        else 'trial_expired'
+      end as "effectiveCommercialAccess",
+      now() as "serverNow",
+      o.created_at as "createdAt"
     from organization o
     left join organization_accounts a on a.organization_id = o.id
     order by o.created_at desc
     limit 5
   `);
   const recentOrganizations: RecentOrg[] = recentRes.rows.map((r) => {
-    const row = r as { id: string; name: string; plan: string; status: string; createdAt: string | Date };
+    const row = r as {
+      id: string; name: string; plan: string; status: string; effectiveCommercialAccess: EffectiveCommercialAccess;
+      trialEndsAt: string | Date | null; serverNow: string | Date; createdAt: string | Date;
+    };
+    const now = toDate(row.serverNow) ?? new Date();
+    const trialEndsAt = toDate(row.trialEndsAt);
     return {
       id: row.id,
       name: row.name,
       plan: asPlanTier(row.plan),
       status: row.status === "suspended" ? "suspended" : "active",
+      effectiveCommercialAccess: row.effectiveCommercialAccess,
+      trialDaysRemaining: trialDaysRemaining({ trialEndsAt, now }),
       createdAt: new Date(row.createdAt),
     };
   });
 
   return {
     totalOrganizations: Number(o.total) || 0,
-    activeOrganizations: Number(o.active) || 0,
+    activeAccounts: Number(o.active) || 0,
     suspendedOrganizations: Number(o.suspended) || 0,
     totalUsers: Number((userRes.rows[0] as { users: number }).users) || 0,
     totalMemberships: Number((memberRes.rows[0] as { memberships: number }).memberships) || 0,
     planDistribution: {
-      SOLO: Number(o.solo) || 0,
-      BIZNES: Number(o.biznes) || 0,
-      FABRIKA: Number(o.fabrika) || 0,
+      STANDARD: Number(o.standard) || 0,
     },
+    activeTrials: Number(o.activeTrials) || 0,
+    trialsExpiringSoon: Number(o.trialsExpiringSoon) || 0,
+    trialExpired: Number(o.trialExpired) || 0,
+    activeCustomers: Number(o.activeCustomers) || 0,
     recentOrganizations,
   };
 }

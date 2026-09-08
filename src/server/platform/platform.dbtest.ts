@@ -16,8 +16,11 @@ import { runWithOrg, type AppDatabase } from "@/db/tenant";
 import { TestCleanup, testRunId } from "@/db/testing/fixtures";
 import { getAuthContext } from "@/auth/session";
 import { getAccountState } from "@/server/platform/accounts";
+import { createClientAction } from "@/server/actions/client";
 import { getPlatformAdminContext, isPlatformAdmin } from "@/server/platform/auth";
 import {
+  activateCustomerAction,
+  extendTrialAction,
   setPlanAction,
   setStatusAction,
   setInternalNoteAction,
@@ -64,6 +67,45 @@ async function seedClientAsOwner(orgId: string, name: string): Promise<string> {
 async function planOf(orgId: string) {
   return (await getAccountState(orgId)).plan;
 }
+async function accountOf(orgId: string) {
+  return getAccountState(orgId);
+}
+async function setTrial(orgId: string, endsAtSql: string) {
+  await ownerPool.query(
+    `
+      insert into organization_accounts(organization_id, plan, status, commercial_access, trial_started_at, trial_ends_at)
+      values($1, 'STANDARD', 'active', 'trial', (${endsAtSql}) - interval '14 days', ${endsAtSql})
+      on conflict (organization_id) do update
+        set plan = 'STANDARD',
+            status = 'active',
+            suspended_at = null,
+            suspended_reason = null,
+            commercial_access = 'trial',
+            trial_started_at = least(coalesce(organization_accounts.trial_started_at, (${endsAtSql}) - interval '14 days'), (${endsAtSql}) - interval '14 days'),
+            trial_ends_at = ${endsAtSql},
+            activated_at = null,
+            updated_at = now()
+    `,
+    [orgId],
+  );
+}
+async function setActiveCustomer(orgId: string) {
+  await ownerPool.query(
+    `
+      insert into organization_accounts(organization_id, plan, status, commercial_access, activated_at)
+      values($1, 'STANDARD', 'active', 'active', now())
+      on conflict (organization_id) do update
+        set plan = 'STANDARD',
+            status = 'active',
+            suspended_at = null,
+            suspended_reason = null,
+            commercial_access = 'active',
+            activated_at = now(),
+            updated_at = now()
+    `,
+    [orgId],
+  );
+}
 
 // Shared fixtures: an admin user (platform admin, member of Org A), a plain owner
 // of Org B (NOT a platform admin), and a plain member of Org A.
@@ -90,6 +132,8 @@ beforeAll(async () => {
 
   // Grant platform admin to the admin user ONLY.
   await grantPlatformAdmin(adminUserId, "admin");
+  await setTrial(orgA, `now() + interval '14 days'`);
+  await setTrial(orgB, `now() + interval '14 days'`);
 }, 60000);
 
 afterAll(async () => {
@@ -132,11 +176,23 @@ describe("platform authorization boundary", () => {
 });
 
 describe("platform mutations require platform authorization", () => {
-  it("a non-admin (tenant owner) cannot change a plan (FORBIDDEN)", async () => {
-    const res = await setPlanAction({ organizationId: orgA, plan: "FABRIKA" }, H(ownerBCookie));
+  it("a non-admin (tenant owner) cannot change the canonical plan (FORBIDDEN)", async () => {
+    const res = await setPlanAction({ organizationId: orgA, plan: "STANDARD" }, H(ownerBCookie));
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe("FORBIDDEN");
-    expect(await planOf(orgA)).toBe("SOLO"); // unchanged
+    expect(await planOf(orgA)).toBe("STANDARD"); // unchanged
+  });
+
+  it("a non-admin cannot activate or extend commercial access", async () => {
+    const activate = await activateCustomerAction({ organizationId: orgA }, H(ownerBCookie));
+    expect(activate.ok).toBe(false);
+    if (!activate.ok) expect(activate.error.code).toBe("FORBIDDEN");
+
+    const extend = await extendTrialAction({ organizationId: orgA, days: 7 }, H(ownerBCookie));
+    expect(extend.ok).toBe(false);
+    if (!extend.ok) expect(extend.error.code).toBe("FORBIDDEN");
+
+    expect((await accountOf(orgA)).effectiveCommercialAccess).toBe("trial");
   });
 
   it("a non-admin cannot suspend an org (FORBIDDEN), even with valid input", async () => {
@@ -153,26 +209,105 @@ describe("platform mutations require platform authorization", () => {
   });
 });
 
-describe("plan management (platform admin)", () => {
-  it("platform admin changes the plan; the tenant gating source reflects it immediately", async () => {
-    const res = await setPlanAction({ organizationId: orgA, plan: "FABRIKA" }, H(adminCookie));
+describe("Standard launch plan", () => {
+  it("Standard is canonical and tenant auth observes Standard", async () => {
+    const res = await setPlanAction({ organizationId: orgA, plan: "STANDARD" }, H(adminCookie));
     expect(res.ok).toBe(true);
-    expect(await planOf(orgA)).toBe("FABRIKA");
+    expect(await planOf(orgA)).toBe("STANDARD");
 
-    // A member of Org A now resolves plan=FABRIKA in their auth context (the exact
-    // value the tenant app + feature gates read).
     const ctx = await getAuthContext(H(memberACookie));
     expect(ctx.ok).toBe(true);
-    if (ctx.ok) expect(ctx.ctx.plan).toBe("FABRIKA");
+    if (ctx.ok) {
+      expect(ctx.ctx.plan).toBe("STANDARD");
+      expect(ctx.ctx.effectiveCommercialAccess).toBe("trial");
+    }
+  });
+});
 
-    // reset for later tests
-    await setPlanAction({ organizationId: orgA, plan: "SOLO" }, H(adminCookie));
-    expect(await planOf(orgA)).toBe("SOLO");
+describe("trial lifecycle", () => {
+  it("valid Trial can use normal tenant functionality", async () => {
+    await setTrial(orgA, `now() + interval '14 days'`);
+    const account = await accountOf(orgA);
+    expect(account.plan).toBe("STANDARD");
+    expect(account.effectiveCommercialAccess).toBe("trial");
+    expect(account.trialDaysRemaining).toBeGreaterThan(0);
+
+    const created = await createClientAction({ name: `trial-client-${suffix}`, type: "Privat" }, H(adminCookie));
+    expect(created.ok).toBe(true);
+    if (created.ok) await ownerPool.query(`delete from clients where id=$1`, [created.data.id]);
+  });
+
+  it("expired Trial blocks tenant actions without deleting data, and Platform Admin can still inspect it", async () => {
+    const clientId = await seedClientAsOwner(orgA, `expired-keep-${suffix}`);
+    await setTrial(orgA, `now() - interval '1 hour'`);
+
+    const ctx = await getAuthContext(H(memberACookie));
+    expect(ctx.ok).toBe(false);
+    if (!ctx.ok) expect(ctx.reason).toBe("TRIAL_EXPIRED");
+
+    const blockedCreate = await createClientAction({ name: `blocked-${suffix}`, type: "Privat" }, H(adminCookie));
+    expect(blockedCreate.ok).toBe(false);
+    if (!blockedCreate.ok) expect(blockedCreate.error.code).toBe("FORBIDDEN");
+
+    const detail = await getPlatformOrganization(orgA);
+    expect(detail?.effectiveCommercialAccess).toBe("trial_expired");
+
+    const namesDuring = await runWithOrg(appDb, orgA, async (tx) =>
+      (await tx.select({ name: clients.name }).from(clients)).map((r) => r.name),
+    );
+    expect(namesDuring).toContain(`expired-keep-${suffix}`);
+
+    await ownerPool.query(`delete from clients where id=$1`, [clientId]);
+  });
+
+  it("Platform Admin extends Trial and access returns immediately with an audit event", async () => {
+    await setTrial(orgA, `now() - interval '1 hour'`);
+    const beforeAudit = (await listAuditEvents({ organizationId: orgA, action: "TRIAL_EXTENDED" })).total;
+
+    const res = await extendTrialAction({ organizationId: orgA, days: 7 }, H(adminCookie));
+    expect(res.ok).toBe(true);
+
+    const account = await accountOf(orgA);
+    expect(account.effectiveCommercialAccess).toBe("trial");
+    expect(account.trialDaysRemaining).toBeGreaterThan(0);
+
+    const ctx = await getAuthContext(H(memberACookie));
+    expect(ctx.ok).toBe(true);
+
+    const afterAudit = await listAuditEvents({ organizationId: orgA, action: "TRIAL_EXTENDED" });
+    expect(afterAudit.total).toBe(beforeAudit + 1);
+    expect(afterAudit.events[0].metadata.days).toBe(7);
+    expect(afterAudit.events[0].metadata.oldAccess).toBe("trial_expired");
+    expect(afterAudit.events[0].metadata.newAccess).toBe("trial");
+  });
+
+  it("Platform Admin activates a customer; old trial end no longer restricts access and action is audited", async () => {
+    await setTrial(orgA, `now() - interval '1 hour'`);
+    const beforeAudit = (await listAuditEvents({ organizationId: orgA, action: "CUSTOMER_ACTIVATED" })).total;
+
+    const res = await activateCustomerAction({ organizationId: orgA }, H(adminCookie));
+    expect(res.ok).toBe(true);
+
+    const account = await accountOf(orgA);
+    expect(account.commercialAccess).toBe("active");
+    expect(account.effectiveCommercialAccess).toBe("active");
+    expect(account.activatedAt).toBeInstanceOf(Date);
+
+    const ctx = await getAuthContext(H(memberACookie));
+    expect(ctx.ok).toBe(true);
+    if (ctx.ok) expect(ctx.ctx.effectiveCommercialAccess).toBe("active");
+
+    const afterAudit = await listAuditEvents({ organizationId: orgA, action: "CUSTOMER_ACTIVATED" });
+    expect(afterAudit.total).toBe(beforeAudit + 1);
+    expect(afterAudit.events[0].metadata.oldAccess).toBe("trial_expired");
+    expect(afterAudit.events[0].metadata.newAccess).toBe("active");
   });
 });
 
 describe("suspension is actually enforced", () => {
   it("active org works; suspended org blocks its members; other org unaffected; reactivation restores; no data deleted", async () => {
+    await setActiveCustomer(orgA);
+    await setTrial(orgB, `now() + interval '14 days'`);
     // Seed real business data in Org A to prove suspension never deletes it.
     const clientId = await seedClientAsOwner(orgA, `keep-${suffix}`);
 
@@ -209,6 +344,7 @@ describe("suspension is actually enforced", () => {
     expect(re.ok).toBe(true);
     ctx = await getAuthContext(H(memberACookie));
     expect(ctx.ok).toBe(true);
+    if (ctx.ok) expect(ctx.ctx.effectiveCommercialAccess).toBe("active");
 
     // Data still present after the whole cycle.
     const namesAfter = await runWithOrg(appDb, orgA, async (tx) =>
@@ -217,6 +353,22 @@ describe("suspension is actually enforced", () => {
     expect(namesAfter).toContain(`keep-${suffix}`);
 
     await ownerPool.query(`delete from clients where id=$1`, [clientId]);
+  });
+
+  it("suspended Trial is blocked and reactivation restores the underlying Trial state", async () => {
+    await setTrial(orgA, `now() + interval '14 days'`);
+    const sus = await setStatusAction({ organizationId: orgA, status: "suspended", reason: "trial suspend" }, H(adminCookie));
+    expect(sus.ok).toBe(true);
+
+    let ctx = await getAuthContext(H(memberACookie));
+    expect(ctx.ok).toBe(false);
+    if (!ctx.ok) expect(ctx.reason).toBe("SUSPENDED");
+
+    const re = await setStatusAction({ organizationId: orgA, status: "active" }, H(adminCookie));
+    expect(re.ok).toBe(true);
+    ctx = await getAuthContext(H(memberACookie));
+    expect(ctx.ok).toBe(true);
+    if (ctx.ok) expect(ctx.ctx.effectiveCommercialAccess).toBe("trial");
   });
 });
 
@@ -242,24 +394,43 @@ describe("cross-tenant platform reads (via platform auth, not membership)", () =
 
     const overview = await getPlatformOverview();
     expect(overview.totalOrganizations).toBeGreaterThanOrEqual(2);
-    expect(overview.activeOrganizations + overview.suspendedOrganizations).toBe(overview.totalOrganizations);
+    expect(overview.activeAccounts + overview.suspendedOrganizations).toBe(overview.totalOrganizations);
+    expect(overview.planDistribution.STANDARD).toBe(overview.totalOrganizations);
   });
 });
 
 describe("hostile / malformed input fails safely", () => {
   it("malformed org id is rejected as VALIDATION (before any DB write)", async () => {
-    const res = await setPlanAction({ organizationId: "not-a-uuid", plan: "BIZNES" }, H(adminCookie));
+    const res = await setPlanAction({ organizationId: "not-a-uuid", plan: "STANDARD" }, H(adminCookie));
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe("VALIDATION");
   });
 
   it("a well-formed but unknown org id is NOT_FOUND (after auth passes)", async () => {
     const res = await setPlanAction(
-      { organizationId: "00000000-0000-4000-8000-000000000000", plan: "BIZNES" },
+      { organizationId: "00000000-0000-4000-8000-000000000000", plan: "STANDARD" },
       H(adminCookie),
     );
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe("NOT_FOUND");
+  });
+
+  it("old fake launch plan values are rejected as VALIDATION", async () => {
+    const res = await setPlanAction(
+      { organizationId: orgA, plan: "BIZNES" } as unknown as { organizationId: string; plan: "STANDARD" },
+      H(adminCookie),
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("VALIDATION");
+  });
+
+  it("invalid trial extension values are rejected as VALIDATION", async () => {
+    const res = await extendTrialAction(
+      { organizationId: orgA, days: 30 } as unknown as { organizationId: string; days: 7 },
+      H(adminCookie),
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("VALIDATION");
   });
 
   it("an invalid status value is rejected as VALIDATION", async () => {
@@ -289,38 +460,20 @@ describe("tenant RLS regression (unchanged by platform admin)", () => {
 });
 
 describe("platform audit trail", () => {
-  it("a successful plan change writes exactly one PLAN_CHANGED event with correct old/new + server-derived actor", async () => {
-    const before = (await listAuditEvents({ organizationId: orgB, action: "PLAN_CHANGED" })).total;
-    const res = await setPlanAction({ organizationId: orgB, plan: "BIZNES" }, H(adminCookie));
-    expect(res.ok).toBe(true);
-
-    const after = await listAuditEvents({ organizationId: orgB, action: "PLAN_CHANGED" });
-    expect(after.total).toBe(before + 1);
-    const ev = after.events[0];
-    expect(ev.action).toBe("PLAN_CHANGED");
-    expect(ev.metadata.newPlan).toBe("BIZNES");
-    expect(ev.metadata.oldPlan).toBe("SOLO");
-    // Actor comes from the authenticated platform context, never from input.
-    expect(ev.actorUserId).toBe(adminUserId);
-    expect(ev.organizationId).toBe(orgB);
-
-    await setPlanAction({ organizationId: orgB, plan: "SOLO" }, H(adminCookie)); // reset
-  });
-
-  it("a FAILED plan change (unknown org) writes NO audit event (transactional)", async () => {
+  it("a FAILED lifecycle mutation (unknown org) writes NO audit event (transactional)", async () => {
     const ghost = "00000000-0000-4000-8000-000000000000";
     const before = (await listAuditEvents({ organizationId: ghost })).total;
-    const res = await setPlanAction({ organizationId: ghost, plan: "FABRIKA" }, H(adminCookie));
+    const res = await activateCustomerAction({ organizationId: ghost }, H(adminCookie));
     expect(res.ok).toBe(false);
     const after = (await listAuditEvents({ organizationId: ghost })).total;
     expect(after).toBe(before); // rolled back with the mutation
   });
 
-  it("a non-admin plan-change attempt writes NO audit event", async () => {
-    const before = (await listAuditEvents({ organizationId: orgA, action: "PLAN_CHANGED" })).total;
-    const res = await setPlanAction({ organizationId: orgA, plan: "FABRIKA" }, H(ownerBCookie));
+  it("a non-admin lifecycle attempt writes NO audit event", async () => {
+    const before = (await listAuditEvents({ organizationId: orgA, action: "CUSTOMER_ACTIVATED" })).total;
+    const res = await activateCustomerAction({ organizationId: orgA }, H(ownerBCookie));
     expect(res.ok).toBe(false);
-    const after = (await listAuditEvents({ organizationId: orgA, action: "PLAN_CHANGED" })).total;
+    const after = (await listAuditEvents({ organizationId: orgA, action: "CUSTOMER_ACTIVATED" })).total;
     expect(after).toBe(before);
   });
 

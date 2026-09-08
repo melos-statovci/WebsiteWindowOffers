@@ -20,7 +20,12 @@ try {
     const org = (await pool.query(`insert into organization(name,slug,created_at) values($1,$2,now()) returning id`, [`Dev Org ${i === 0 ? "A" : "B"}`, SLUGS[i]])).rows[0].id;
     await pool.query(`insert into member(organization_id,user_id,role,created_at) values($1,$2,'owner',now())`, [org, u]);
     // Owner bypasses RLS, so no tenant context needed here.
-    await pool.query(`insert into organization_profiles(organization_id,nui,city,plan) values($1,$2,$3,'SOLO')`, [org, `NUI-${i === 0 ? "A" : "B"}`, i === 0 ? "Prishtinë" : "Ferizaj"]);
+    await pool.query(`insert into organization_profiles(organization_id,nui,city) values($1,$2,$3)`, [org, `NUI-${i === 0 ? "A" : "B"}`, i === 0 ? "Prishtinë" : "Ferizaj"]);
+    await pool.query(
+      `insert into organization_accounts(organization_id,plan,commercial_access,trial_started_at,trial_ends_at)
+       values($1,'STANDARD','trial',now(),now() + interval '14 days')`,
+      [org],
+    );
     orgs.push(org);
   }
   console.log("seeded organizations:", orgs.join(", "));

@@ -5,7 +5,7 @@
 import Link from "next/link";
 import { getPlatformOverview } from "@/server/platform/organizations";
 import { PLAN_TIERS } from "@/lib/plan";
-import { Metric, PanelCard, PlanBadge, StatusBadge } from "./ui";
+import { CommercialAccessBadge, Metric, PanelCard, PlanBadge, StatusBadge } from "./ui";
 
 export const dynamic = "force-dynamic";
 
@@ -22,23 +22,26 @@ export default async function PlatformDashboardPage() {
         <p className="mt-1 text-sm text-slate-400">Gjendja operacionale e platformës Kornizo.</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Metric label="Organizata" value={o.totalOrganizations} />
-        <Metric label="Aktive" value={o.activeOrganizations} tone="emerald" />
+        <Metric label="Trial aktiv" value={o.activeTrials} tone="emerald" />
+        <Metric label="Skadon së shpejti" value={o.trialsExpiringSoon} tone={o.trialsExpiringSoon ? "amber" : "default"} />
+        <Metric label="Trial skaduar" value={o.trialExpired} tone={o.trialExpired ? "amber" : "default"} />
+        <Metric label="Klientë aktivë" value={o.activeCustomers} tone="emerald" />
+        <Metric label="Llogari aktive" value={o.activeAccounts} />
         <Metric label="Pezulluar" value={o.suspendedOrganizations} tone={o.suspendedOrganizations ? "amber" : "default"} />
         <Metric label="Përdorues" value={o.totalUsers} />
-        <Metric label="Anëtarësime" value={o.totalMemberships} />
       </div>
 
       <PanelCard
-        title="Shpërndarja sipas planit"
+        title="Plani i produktit"
         action={
           <Link href="/platform/organizations" className="text-sm text-violet-500 hover:text-violet-600">
             Shiko organizatat →
           </Link>
         }
       >
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           {PLAN_TIERS.map((tier) => (
             <div key={tier} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
               <PlanBadge plan={tier} />
@@ -67,8 +70,9 @@ export default async function PlatformDashboardPage() {
                   className="flex items-center justify-between gap-3 py-2.5 hover:text-violet-600"
                 >
                   <span className="min-w-0 truncate font-medium text-slate-900">{org.name}</span>
-                  <span className="flex shrink-0 items-center gap-3">
+                  <span className="flex shrink-0 flex-wrap items-center justify-end gap-3">
                     <PlanBadge plan={org.plan} />
+                    <CommercialAccessBadge access={org.effectiveCommercialAccess} />
                     <StatusBadge status={org.status} />
                     <span className="w-20 text-right text-xs text-slate-400">{fmtDate(org.createdAt)}</span>
                   </span>
