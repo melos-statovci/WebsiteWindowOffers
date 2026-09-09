@@ -19,16 +19,17 @@ import {
   Wrench,
 } from "lucide-react";
 import { STANDARD_PLAN_NAME } from "@/lib/plan";
+import type { PublicLocale } from "@/lib/public-routing";
 
-export const publicNavItems = [
-  { label: "Product", href: "#product" },
-  { label: "How it works", href: "#workflow" },
-  { label: "Features", href: "#features" },
-  { label: "Standard", href: "#standard" },
-  { label: "FAQ", href: "#faq" },
-];
+const navHrefs = {
+  product: "#product",
+  workflow: "#workflow",
+  features: "#features",
+  standard: "#standard",
+  faq: "#faq",
+};
 
-export const workflowSteps = [
+const englishWorkflowSteps = [
   {
     title: "Add the customer",
     description: "Keep client details, project context and account notes together before the offer starts.",
@@ -61,7 +62,7 @@ export const workflowSteps = [
   },
 ];
 
-export const featureGroups = [
+const englishFeatureGroups = [
   {
     title: "Configure and calculate",
     description: "Turn real window and door specifications into priced offer lines.",
@@ -88,7 +89,7 @@ export const featureGroups = [
   },
 ];
 
-export const standardPlan = {
+const englishStandardPlan = {
   name: STANDARD_PLAN_NAME,
   summary: "Everything your window business needs to manage an offer from first contact to payment.",
   trial: "14-day full trial",
@@ -102,7 +103,7 @@ export const standardPlan = {
   ],
 };
 
-export const productProofItems = [
+const englishProductProofItems = [
   { label: "Customer", value: "Site enquiry", icon: Users },
   { label: "Configuration", value: "2 windows, entrance door", icon: Settings2 },
   { label: "Price", value: "Calculated from company pricing", icon: Tags },
@@ -111,7 +112,7 @@ export const productProofItems = [
   { label: "Payment", value: "Balance visible", icon: BadgeEuro },
 ];
 
-export const faqItems = [
+const englishFaqItems = [
   {
     question: "What is Kornizo?",
     answer:
@@ -159,8 +160,12 @@ export const faqItems = [
   },
 ];
 
-export const temporaryCtaPages = {
+const englishTemporaryCtaPages = {
   trial: {
+    locale: "en" as const,
+    logoHref: "/en",
+    signInLabel: "Sign in",
+    noFormNotice: "No form is active here yet, and this page does not collect or store lead data.",
     title: "Trial requests are opening soon",
     eyebrow: "14-day Kornizo Standard trial",
     description:
@@ -171,6 +176,10 @@ export const temporaryCtaPages = {
     secondaryHref: "/sign-in",
   },
   demo: {
+    locale: "en" as const,
+    logoHref: "/en",
+    signInLabel: "Sign in",
+    noFormNotice: "No form is active here yet, and this page does not collect or store lead data.",
     title: "Demo requests are opening soon",
     eyebrow: "Kornizo product demo",
     description:
@@ -184,7 +193,7 @@ export const temporaryCtaPages = {
 
 export type MarketingIcon = LucideIcon;
 
-export const trustItems = [
+const englishTrustItems = [
   { title: "One connected workflow", icon: ListChecks },
   { title: "Company pricing in the quote", icon: Tags },
   { title: "Full functionality during trial", icon: CheckCircle2 },
@@ -192,3 +201,372 @@ export const trustItems = [
   { title: "Customer balances stay visible", icon: CreditCard },
   { title: "Notes and team context included", icon: MessageSquareText },
 ];
+
+const albanianWorkflowSteps = [
+  {
+    title: "Shto klientin",
+    description: "Mbaj të dhënat e klientit, kontekstin e projektit dhe shënimet në një vend para se të nisë oferta.",
+    icon: Users,
+  },
+  {
+    title: "Konfiguro dritaret dhe dyert",
+    description: "Zgjidh llojin e produktit, përmasat, sistemet e profileve, xhamin, mekanizmat, ngjyrat dhe shtesat.",
+    icon: Wrench,
+  },
+  {
+    title: "Llogarit çmimin",
+    description: "Kornizo përdor çmimet e kompanisë suaj dhe nxjerr totalin e ofertës nga llogaritja e serverit.",
+    icon: Calculator,
+  },
+  {
+    title: "Krijo dhe ndiq ofertën",
+    description: "Kalo ofertat nga draft në të dërguara, të pranuara ose të refuzuara dhe mbaji projektet të organizuara.",
+    icon: FileCheck2,
+  },
+  {
+    title: "Faturoni klientin",
+    description: "Krijo fatura nga puna e pranuar ose manualisht, me të dhënat e faturimit të kompanisë në vend.",
+    icon: FileText,
+  },
+  {
+    title: "Ndiq pagesën",
+    description: "Shih pagesat, detyrimet e hapura, vonesat dhe kredinë e klientit.",
+    icon: CreditCard,
+  },
+];
+
+const albanianFeatureGroups = [
+  {
+    title: "Konfiguro dhe llogarit",
+    description: "Kthe specifikimet reale të dritareve dhe dyerve në rreshta oferte me çmim.",
+    icon: Calculator,
+    features: ["Konfigurator për dritare dhe dyer", "Çmime të profileve sipas kompanisë", "Xhama, panele, mekanizma dhe shtesa"],
+  },
+  {
+    title: "Shit dhe organizo",
+    description: "Mbaje të qartë rrjedhën e shitjes nga kontakti i parë deri te oferta e pranuar.",
+    icon: FolderKanban,
+    features: ["Menaxhim klientësh", "Projekte dhe oferta profesionale", "Ndjekje e statusit të ofertave"],
+  },
+  {
+    title: "Faturoni dhe ndiqni pagesat",
+    description: "Vazhdo punën financiare pasi oferta të pranohet.",
+    icon: Landmark,
+    features: ["Fatura", "Pagesa", "Detyrime të hapura dhe kredi klienti"],
+  },
+  {
+    title: "Punoni si kompani",
+    description: "Jepi ekipit një sistem të përbashkët për punën e përditshme.",
+    icon: Building2,
+    features: ["Qasje për ekipin", "Cilësime të kompanisë", "Shënime dhe siguri e llogarisë"],
+  },
+];
+
+const albanianStandardPlan = {
+  name: STANDARD_PLAN_NAME,
+  summary: "Gjithçka që i duhet biznesit tuaj të dritareve për ta menaxhuar ofertën nga kontakti i parë deri te pagesa.",
+  trial: "Provë e plotë 14 ditë",
+  included: [
+    "Menaxhim klientësh",
+    "Konfigurator për dritare dhe dyer",
+    "Çmime sipas kompanisë",
+    "Oferta profesionale dhe ndjekje statusi",
+    "Projekte, fatura dhe pagesa",
+    "Detyrime, kredi klienti, qasje ekipi dhe cilësime kompanie",
+  ],
+};
+
+const albanianProductProofItems = [
+  { label: "Klienti", value: "Kërkesë nga terreni", icon: Users },
+  { label: "Konfigurimi", value: "2 dritare, derë hyrjeje", icon: Settings2 },
+  { label: "Çmimi", value: "Llogaritur nga çmimet e kompanisë", icon: Tags },
+  { label: "Oferta", value: "Draft -> Dërguar -> Pranuar", icon: ClipboardList },
+  { label: "Fatura", value: "Nga puna e pranuar", icon: FileText },
+  { label: "Pagesa", value: "Saldo e dukshme", icon: BadgeEuro },
+];
+
+const albanianFaqItems = [
+  {
+    question: "Çfarë është Kornizo?",
+    answer:
+      "Kornizo është një mjet SaaS për bizneset e dritareve dhe dyerve. Ai lidh klientët, konfigurimin e produkteve, llogaritjen e çmimeve, ofertat, projektet, faturat dhe pagesat në një rrjedhë të vetme.",
+  },
+  {
+    question: "Për kë është Kornizo?",
+    answer:
+      "Kornizo është për kompani që shesin, ofertojnë, instalojnë ose menaxhojnë punë me dritare dhe dyer, sidomos për ekipe që duan çmimet e kompanisë dhe ndjekjen e ofertave në të njëjtin sistem.",
+  },
+  {
+    question: "A mbështet Kornizo çmimet e kompanisë sime?",
+    answer:
+      "Po. Kornizo përfshin çmime sipas kompanisë për sisteme profilesh, xhama, panele, mekanizma, shtesa dhe parametra të tjerë të llogaritjes.",
+  },
+  {
+    question: "A mund ta përdorin disa punonjës Kornizo-n?",
+    answer:
+      "Po. Kornizo mbështet anëtarë dhe role brenda organizatës, që kompania të punojë nga një llogari e përbashkët.",
+  },
+  {
+    question: "Çfarë përfshihet në provën 14-ditore?",
+    answer:
+      "Prova e lansimit përfshin produktin e plotë Kornizo Standard për 14 ditë. Nuk është demo e kufizuar.",
+  },
+  {
+    question: "Çfarë ndodh kur përfundon prova?",
+    answer:
+      "Qasja normale në punën e tenantit pauzohet derisa llogaria të aktivizohet. Të dhënat ekzistuese mbeten të ruajtura.",
+  },
+  {
+    question: "A duhet të instaloj ndonjë program?",
+    answer:
+      "Jo. Kornizo punon në shfletues, kështu që ekipi juaj hyn përmes aplikacionit web.",
+  },
+  {
+    question: "A mund të ndjek fatura dhe pagesa në Kornizo?",
+    answer:
+      "Po. Kornizo përfshin fatura, pagesa, saldo të papaguara, vonesa dhe kredi klienti.",
+  },
+  {
+    question: "A do të ketë plane të tjera?",
+    answer:
+      "Kornizo po rritet. Plane shtesë dhe mjete të avancuara për madhësi e rrjedha të ndryshme kompanish do të prezantohen me kohë.",
+  },
+];
+
+const albanianTemporaryCtaPages = {
+  trial: {
+    locale: "sq" as const,
+    logoHref: "/",
+    signInLabel: "Hyr",
+    noFormNotice: "Asnjë formular nuk është aktiv këtu ende dhe kjo faqe nuk mbledh ose ruan të dhëna kontakti.",
+    title: "Kërkesat për provë falas do të hapen së shpejti",
+    eyebrow: "Provë 14-ditore e Kornizo Standard",
+    description:
+      "Rrjedha publike e aplikimit nuk është hapur ende. Milestone-i i radhës i lansimit do të shtojë kërkesën, shqyrtimin dhe aprovimin për prova të plota Standard.",
+    primaryLabel: "Kthehu në ballinë",
+    primaryHref: "/",
+    secondaryLabel: "Hyr",
+    secondaryHref: "/sign-in",
+  },
+  demo: {
+    locale: "sq" as const,
+    logoHref: "/",
+    signInLabel: "Hyr",
+    noFormNotice: "Asnjë formular nuk është aktiv këtu ende dhe kjo faqe nuk mbledh ose ruan të dhëna kontakti.",
+    title: "Kërkesat për demo do të hapen së shpejti",
+    eyebrow: "Demo e produktit Kornizo",
+    description:
+      "Rrjedha publike për kërkesë demo nuk është hapur ende. Kjo faqe qëllimisht nuk ruan të dhëna derisa të ndërtohet rrjedha reale e aplikimit.",
+    primaryLabel: "Kthehu në ballinë",
+    primaryHref: "/",
+    secondaryLabel: "Hyr",
+    secondaryHref: "/sign-in",
+  },
+};
+
+const albanianTrustItems = [
+  { title: "Një rrjedhë e lidhur pune", icon: ListChecks },
+  { title: "Çmimet e kompanisë brenda ofertës", icon: Tags },
+  { title: "Funksionalitet i plotë gjatë provës", icon: CheckCircle2 },
+  { title: "Rrugë aplikacioni me qasje të kontrolluar", icon: ShieldCheck },
+  { title: "Saldo klientësh gjithmonë e dukshme", icon: CreditCard },
+  { title: "Shënime dhe kontekst ekipi", icon: MessageSquareText },
+];
+
+export const publicMarketing = {
+  sq: {
+    locale: "sq" as const,
+    basePath: "/",
+    metadata: {
+      title: "Kornizo | Konfigurim, oferta, fatura dhe pagesa për dritare e dyer",
+      description:
+        "Kornizo ndihmon kompanitë e dritareve dhe dyerve të konfigurojnë produkte, të llogarisin çmime, të krijojnë oferta, të ndjekin projekte, të faturojnë dhe të menaxhojnë pagesa.",
+      ogTitle: "Kornizo - Nga konfigurimi i dritareve te pagesa",
+      ogDescription:
+        "Një rrjedhë e lidhur pune për kompani dritaresh dhe dyersh: klientë, konfigurim, çmime, oferta, fatura dhe pagesa.",
+    },
+    nav: [
+      { label: "Produkti", href: navHrefs.product },
+      { label: "Si funksionon", href: navHrefs.workflow },
+      { label: "Funksionet", href: navHrefs.features },
+      { label: "Standard", href: navHrefs.standard },
+      { label: "FAQ", href: navHrefs.faq },
+    ],
+    actions: {
+      signIn: "Hyr",
+      requestTrial: "Kërko provë falas",
+      requestDemo: "Kërko demo",
+      openNavigation: "Hap navigimin",
+      homepageAria: "Ballina Kornizo",
+    },
+    hero: {
+      eyebrow: "Për kompani dritaresh dhe dyersh",
+      title: "Nga konfigurimi i dritareve te pagesa - në një vend.",
+      description:
+        "Kornizo ndihmon kompanitë e dritareve dhe dyerve të konfigurojnë produkte, të llogarisin çmime, të krijojnë oferta profesionale, të ndjekin projekte, të lëshojnë fatura dhe të jenë në kontroll të pagesave.",
+      bullets: ["Provë Standard 14 ditë", "Funksionalitet i plotë gjatë provës"],
+    },
+    productPreview: {
+      chromeLabel: "Rrjedha e produktit Kornizo",
+      standardTrial: "Provë Standard",
+      sidebar: ["Dashboard", "Projektet", "Klientët", "Faturat", "Çmimet"],
+      eyebrow: "Konfiguro ofertën",
+      title: "Paketë dritaresh dhe dyersh",
+      calculated: "Llogaritur",
+    },
+    productProof: {
+      eyebrow: "Dëshmi produkti",
+      title: "Rrjedhë reale për oferta, jo CRM i përgjithshëm.",
+      description:
+        "Faqja publike pasqyron aplikacionin aktual të tenantit: klientë, konfigurator, projekte, oferta, fatura, pagesa, çmime, shënime dhe cilësime kompanie.",
+    },
+    workflow: {
+      eyebrow: "Si funksionon",
+      title: "Nga klienti te pagesa, hap pas hapi.",
+      description:
+        "Kornizo e mban të dukshme rrugën komerciale, që ekipi të kalojë nga kërkesa fillestare te fatura e paguar pa humbur kontekst.",
+      steps: albanianWorkflowSteps,
+    },
+    features: {
+      eyebrow: "Funksionet",
+      title: "Të grupuara sipas mënyrës si punojnë bizneset e dritareve.",
+      description: "Çdo funksion i shfaqur këtu ekziston në produktin aktual Kornizo.",
+      groups: albanianFeatureGroups,
+    },
+    standard: {
+      eyebrow: "Një plan në lansim",
+      badge: "Produkt i plotë",
+      pricingNote:
+        "Çmimi publik nuk është publikuar ende. Kornizo po rritet dhe plane shtesë e mjete të avancuara për madhësi e rrjedha të ndryshme kompanish do të prezantohen me kohë.",
+      plan: albanianStandardPlan,
+    },
+    trustMetrics: [
+      { title: "Çmime sipas kompanisë", text: "Çmimet vijnë nga katalogu dhe cilësimet tuaja.", icon: BadgeEuro },
+      { title: "Nga oferta te fatura", text: "Puna e pranuar vazhdon në faturim dhe pagesa.", icon: FileText },
+      { title: "Aplikacion i mbrojtur", text: "Rrugët e tenantit dhe platformës mbajnë kontrollin serverik të qasjes.", icon: ShieldCheck },
+    ],
+    faq: {
+      eyebrow: "FAQ",
+      title: "Përgjigje të qarta para se të hapet rrjedha e provës.",
+      description: "Në këtë milestone nuk u shpikën çmime, dëshmi klientësh ose pretendime për aplikim aktiv.",
+      items: albanianFaqItems,
+    },
+    finalCta: {
+      eyebrow: "Kornizo Standard",
+      title: "Gati t'i menaxhoni ofertat e dritareve në një vend?",
+      description: "Provo përvojën e plotë Kornizo për 14 ditë kur të hapen kërkesat publike për provë.",
+    },
+    footer: {
+      description: "Konfigurim dritaresh dhe dyersh, oferta, projekte, fatura dhe pagesa në një produkt të lidhur.",
+      product: "Produkti",
+      trial: "Prova",
+      demo: "Demo",
+    },
+    proofItems: albanianProductProofItems,
+    trustItems: albanianTrustItems,
+    temporaryCtaPages: albanianTemporaryCtaPages,
+  },
+  en: {
+    locale: "en" as const,
+    basePath: "/en",
+    metadata: {
+      title: "Kornizo | Window configuration, offers, invoices and payments",
+      description:
+        "Kornizo helps window and door companies configure products, calculate prices, create professional offers, track projects, issue invoices and stay on top of payments.",
+      ogTitle: "Kornizo - From window configuration to payment",
+      ogDescription:
+        "A connected workflow for window and door companies: customers, configuration, pricing, offers, invoices and payments.",
+    },
+    nav: [
+      { label: "Product", href: navHrefs.product },
+      { label: "How it works", href: navHrefs.workflow },
+      { label: "Features", href: navHrefs.features },
+      { label: "Standard", href: navHrefs.standard },
+      { label: "FAQ", href: navHrefs.faq },
+    ],
+    actions: {
+      signIn: "Sign in",
+      requestTrial: "Request free trial",
+      requestDemo: "Request demo",
+      openNavigation: "Open navigation",
+      homepageAria: "Kornizo homepage",
+    },
+    hero: {
+      eyebrow: "Built for window and door companies",
+      title: "From window configuration to payment - all in one place.",
+      description:
+        "Kornizo helps window and door companies configure products, calculate prices, create professional offers, track projects, issue invoices and stay on top of payments.",
+      bullets: ["14-day Standard trial", "Full functionality during trial"],
+    },
+    productPreview: {
+      chromeLabel: "Kornizo product workflow",
+      standardTrial: "Standard trial",
+      sidebar: ["Dashboard", "Projects", "Clients", "Invoices", "Pricing"],
+      eyebrow: "Configure offer",
+      title: "Window and door package",
+      calculated: "Calculated",
+    },
+    productProof: {
+      eyebrow: "Product proof",
+      title: "A real workflow for offers, not a generic CRM.",
+      description:
+        "The public page mirrors Kornizo's current tenant application: clients, configurator, projects, offers, invoices, payments, pricing, notes and company settings.",
+    },
+    workflow: {
+      eyebrow: "How it works",
+      title: "Customer to payment, step by step.",
+      description:
+        "Kornizo keeps the commercial path visible so a team can move from enquiry to paid invoice without losing context.",
+      steps: englishWorkflowSteps,
+    },
+    features: {
+      eyebrow: "Capabilities",
+      title: "Grouped around the way window businesses actually work.",
+      description: "Every capability shown here exists in the current Kornizo product.",
+      groups: englishFeatureGroups,
+    },
+    standard: {
+      eyebrow: "One launch plan",
+      badge: "Full product",
+      pricingNote:
+        "Pricing is not published yet. Kornizo is growing, and additional plans and advanced tools for different company sizes and workflows will be introduced over time.",
+      plan: englishStandardPlan,
+    },
+    trustMetrics: [
+      { title: "Company pricing", text: "Prices come from your own catalog and settings.", icon: BadgeEuro },
+      { title: "Offer to invoice", text: "Accepted work can continue into invoicing and payments.", icon: FileText },
+      { title: "Protected app", text: "Tenant and platform routes keep their authenticated server gates.", icon: ShieldCheck },
+    ],
+    faq: {
+      eyebrow: "FAQ",
+      title: "Clear answers before the trial flow opens.",
+      description: "No pricing, testimonials or application claims are invented for this milestone.",
+      items: englishFaqItems,
+    },
+    finalCta: {
+      eyebrow: "Kornizo Standard",
+      title: "Ready to manage your window offers in one place?",
+      description: "Try the complete Kornizo experience for 14 days when public trial requests open.",
+    },
+    footer: {
+      description: "Window and door configuration, offers, projects, invoices and payments in one connected product.",
+      product: "Product",
+      trial: "Trial",
+      demo: "Demo",
+    },
+    proofItems: englishProductProofItems,
+    trustItems: englishTrustItems,
+    temporaryCtaPages: englishTemporaryCtaPages,
+  },
+} satisfies Record<PublicLocale, unknown>;
+
+export type PublicMarketingContent = (typeof publicMarketing)[PublicLocale];
+
+export const publicNavItems = publicMarketing.en.nav;
+export const workflowSteps = englishWorkflowSteps;
+export const featureGroups = englishFeatureGroups;
+export const standardPlan = englishStandardPlan;
+export const productProofItems = englishProductProofItems;
+export const faqItems = englishFaqItems;
+export const temporaryCtaPages = englishTemporaryCtaPages;
+export const trustItems = englishTrustItems;

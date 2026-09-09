@@ -8,7 +8,7 @@ function request(pathname: string) {
 
 describe("public/protected route proxy", () => {
   it("allows public marketing routes without a session cookie", () => {
-    for (const pathname of ["/", "/request-trial", "/request-demo", "/sign-in"]) {
+    for (const pathname of ["/", "/en", "/request-trial", "/request-demo", "/en/request-trial", "/en/request-demo", "/sign-in"]) {
       const response = proxy(request(pathname));
       expect(response.headers.get("location")).toBeNull();
     }

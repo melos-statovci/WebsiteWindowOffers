@@ -123,6 +123,20 @@
 }
 
 @layer utilities {
+  .public-primary-action {
+    background-color: #020617;
+    color: #f8fafc;
+  }
+  .public-primary-action:hover {
+    background-color: #1e293b;
+  }
+  html.dark .public-primary-action {
+    background-color: #ffffff;
+    color: #020617;
+  }
+  html.dark .public-primary-action:hover {
+    background-color: #e5e7eb;
+  }
   .brand-wordmark {
     background: linear-gradient(90deg, #f5f5f5, #a3a3a3);
     -webkit-background-clip: text;

@@ -8,7 +8,7 @@ import { getSessionCookie } from "better-auth/cookies";
 // typing the URL directly.
 
 const AUTH_PAGES = ["/sign-in", "/sign-up"];
-const PUBLIC_PAGES = ["/", "/request-trial", "/request-demo"];
+const PUBLIC_PAGES = ["/", "/en", "/request-trial", "/request-demo", "/en/request-trial", "/en/request-demo"];
 
 export default function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;

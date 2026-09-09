@@ -1,8 +1,14 @@
 import Link from "next/link";
 import { ArrowLeft, LogIn } from "lucide-react";
+import { LanguageSwitcher } from "@/components/public/language-switcher";
+import type { PublicLocale } from "@/lib/public-routing";
 import { cn } from "@/lib/utils";
 
 interface TemporaryRequestPageProps {
+  locale: PublicLocale;
+  logoHref: string;
+  signInLabel: string;
+  noFormNotice: string;
   eyebrow: string;
   title: string;
   description: string;
@@ -13,6 +19,10 @@ interface TemporaryRequestPageProps {
 }
 
 export function TemporaryRequestPage({
+  locale,
+  logoHref,
+  signInLabel,
+  noFormNotice,
   eyebrow,
   title,
   description,
@@ -22,25 +32,28 @@ export function TemporaryRequestPage({
   secondaryHref,
 }: TemporaryRequestPageProps) {
   return (
-    <main className="min-h-screen overflow-x-hidden bg-slate-50 px-4 py-6 text-slate-700 sm:px-6">
+    <main lang={locale} className="min-h-screen overflow-x-hidden bg-slate-50 px-4 py-6 text-slate-700 sm:px-6">
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-4xl min-w-0 flex-col">
         <header className="flex items-center justify-between gap-4 py-3">
           <Link
-            href="/"
+            href={logoHref}
             className="flex items-center gap-3 rounded-lg text-sm font-semibold text-slate-900 outline-none transition-colors hover:text-slate-500 focus-visible:ring-2 focus-visible:ring-neutral-500/60"
           >
-            <span className="grid size-9 place-items-center rounded-lg bg-slate-900 font-heading text-base font-bold text-slate-50 dark:bg-slate-800">
+            <span className="grid size-9 place-items-center rounded-lg bg-slate-950 font-heading text-base font-bold text-slate-50">
               K
             </span>
             Kornizo
           </Link>
-          <Link
-            href="/sign-in"
-            className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm font-semibold text-slate-700 outline-none transition-colors hover:bg-slate-200/60 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-neutral-500/60"
-          >
-            <LogIn className="size-4" />
-            Sign in
-          </Link>
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher locale={locale} />
+            <Link
+              href="/sign-in"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm font-semibold text-slate-700 outline-none transition-colors hover:bg-slate-200/60 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-neutral-500/60"
+            >
+              <LogIn className="size-4" />
+              {signInLabel}
+            </Link>
+          </div>
         </header>
 
         <section className="grid flex-1 place-items-center py-16">
@@ -55,7 +68,7 @@ export function TemporaryRequestPage({
               {description}
             </p>
             <p className="mt-4 max-w-xl text-sm leading-6 text-slate-400">
-              No form is active here yet, and this page does not collect or store lead data.
+              {noFormNotice}
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <RequestLink href={primaryHref} variant="primary">
@@ -88,7 +101,7 @@ function RequestLink({
       className={cn(
         "inline-flex h-11 items-center justify-center gap-2 rounded-lg px-5 text-sm font-bold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-neutral-500/60",
         variant === "primary"
-          ? "bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+          ? "public-primary-action shadow-sm shadow-slate-950/10"
           : "border border-slate-200 bg-slate-50 text-slate-900 hover:bg-slate-200/60",
         className,
       )}

@@ -15,6 +15,12 @@ migrations, tests, and source code remain authoritative.
 
 2. **Public homepage** — COMPLETE
    - Public product positioning and launch copy.
+   - Albanian is the default public language at `/`.
+   - English is the secondary public language at `/en`.
+   - Public trial/demo placeholders are localized at `/request-trial`,
+     `/request-demo`, `/en/request-trial`, and `/en/request-demo`.
+   - Public content uses shared locale dictionaries and a compact language
+     switcher instead of duplicated independent page implementations.
    - No fake pricing tiers.
 
 3. **Trial/demo applications** — NEXT
@@ -36,6 +42,8 @@ migrations, tests, and source code remain authoritative.
 ## Locked Launch Decisions
 
 - Kornizo Standard is the only real launch plan.
+- Albanian is the default public marketing locale; English remains available
+  through stable `/en` routes.
 - Trial is 14 days and includes the full Standard product.
 - Trial expiry is derived from timestamps, not a mutable days-left field.
 - No cron is required for expiry correctness.
