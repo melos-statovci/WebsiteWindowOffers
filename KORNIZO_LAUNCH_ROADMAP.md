@@ -21,6 +21,8 @@ migrations, tests, and source code remain authoritative.
      `/request-demo`, `/en/request-trial`, and `/en/request-demo`.
    - Public content uses shared locale dictionaries and a compact language
      switcher instead of duplicated independent page implementations.
+   - Final visual polish tightened the hero, product preview, workflow sequence,
+     feature cards, Standard plan panel, and responsive header behavior.
    - No fake pricing tiers.
 
 3. **Trial/demo applications** — NEXT

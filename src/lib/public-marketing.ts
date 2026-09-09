@@ -224,8 +224,8 @@ const albanianWorkflowSteps = [
     icon: FileCheck2,
   },
   {
-    title: "Faturoni klientin",
-    description: "Krijo fatura nga puna e pranuar ose manualisht, me të dhënat e faturimit të kompanisë në vend.",
+    title: "Lësho faturën",
+    description: "Krijo faturë nga puna e pranuar ose manualisht, me të dhënat e faturimit të kompanisë në vend.",
     icon: FileText,
   },
   {
@@ -249,7 +249,7 @@ const albanianFeatureGroups = [
     features: ["Menaxhim klientësh", "Projekte dhe oferta profesionale", "Ndjekje e statusit të ofertave"],
   },
   {
-    title: "Faturoni dhe ndiqni pagesat",
+    title: "Faturoni dhe ndiq pagesat",
     description: "Vazhdo punën financiare pasi oferta të pranohet.",
     icon: Landmark,
     features: ["Fatura", "Pagesa", "Detyrime të hapura dhe kredi klienti"],
@@ -381,7 +381,7 @@ export const publicMarketing = {
       title: "Kornizo | Konfigurim, oferta, fatura dhe pagesa për dritare e dyer",
       description:
         "Kornizo ndihmon kompanitë e dritareve dhe dyerve të konfigurojnë produkte, të llogarisin çmime, të krijojnë oferta, të ndjekin projekte, të faturojnë dhe të menaxhojnë pagesa.",
-      ogTitle: "Kornizo - Nga konfigurimi i dritareve te pagesa",
+      ogTitle: "Kornizo - Nga konfigurimi i dritareve deri te pagesa",
       ogDescription:
         "Një rrjedhë e lidhur pune për kompani dritaresh dhe dyersh: klientë, konfigurim, çmime, oferta, fatura dhe pagesa.",
     },
@@ -401,7 +401,7 @@ export const publicMarketing = {
     },
     hero: {
       eyebrow: "Për kompani dritaresh dhe dyersh",
-      title: "Nga konfigurimi i dritareve te pagesa - në një vend.",
+      title: "Nga konfigurimi i dritareve deri te pagesa, në një vend.",
       description:
         "Kornizo ndihmon kompanitë e dritareve dhe dyerve të konfigurojnë produkte, të llogarisin çmime, të krijojnë oferta profesionale, të ndjekin projekte, të lëshojnë fatura dhe të jenë në kontroll të pagesave.",
       bullets: ["Provë Standard 14 ditë", "Funksionalitet i plotë gjatë provës"],
@@ -413,6 +413,7 @@ export const publicMarketing = {
       eyebrow: "Konfiguro ofertën",
       title: "Paketë dritaresh dhe dyersh",
       calculated: "Llogaritur",
+      stageLabels: ["Konfig.", "Çmimi", "Oferta"],
     },
     productProof: {
       eyebrow: "Dëshmi produkti",
@@ -493,7 +494,7 @@ export const publicMarketing = {
     },
     hero: {
       eyebrow: "Built for window and door companies",
-      title: "From window configuration to payment - all in one place.",
+      title: "From window configuration to payment, all in one place.",
       description:
         "Kornizo helps window and door companies configure products, calculate prices, create professional offers, track projects, issue invoices and stay on top of payments.",
       bullets: ["14-day Standard trial", "Full functionality during trial"],
@@ -505,6 +506,7 @@ export const publicMarketing = {
       eyebrow: "Configure offer",
       title: "Window and door package",
       calculated: "Calculated",
+      stageLabels: ["Config", "Price", "Offer"],
     },
     productProof: {
       eyebrow: "Product proof",

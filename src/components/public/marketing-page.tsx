@@ -33,7 +33,7 @@ function PublicHeader({ content }: { content: PublicMarketingContent }) {
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-slate-50/90 backdrop-blur-xl">
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-4 px-4 sm:px-6 lg:px-8">
         <LogoLink href={content.basePath} ariaLabel={content.actions.homepageAria} />
-        <nav className="hidden items-center gap-1 md:flex" aria-label="Primary navigation">
+        <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary navigation">
           {content.nav.map((item) => (
             <Link
               key={item.href}
@@ -44,7 +44,7 @@ function PublicHeader({ content }: { content: PublicMarketingContent }) {
             </Link>
           ))}
         </nav>
-        <div className="ml-auto hidden items-center gap-2 md:flex">
+        <div className="ml-auto hidden items-center gap-2 lg:flex">
           <LanguageSwitcher locale={content.locale} />
           <HeaderLink href="/sign-in" variant="ghost">
             <LogIn className="size-4" />
@@ -54,7 +54,7 @@ function PublicHeader({ content }: { content: PublicMarketingContent }) {
             {content.actions.requestTrial}
           </HeaderLink>
         </div>
-        <details className="group relative ml-auto md:hidden">
+        <details className="group relative ml-auto lg:hidden">
           <summary className="grid size-10 cursor-pointer list-none place-items-center rounded-lg border border-slate-200 bg-slate-100 text-slate-700 outline-none transition-colors hover:bg-slate-200/60 focus-visible:ring-2 focus-visible:ring-neutral-500/60 [&::-webkit-details-marker]:hidden">
             <Menu className="size-5" />
             <span className="sr-only">{content.actions.openNavigation}</span>
@@ -136,12 +136,12 @@ function HeroSection({ content }: { content: PublicMarketingContent }) {
   return (
     <section className="relative border-b border-slate-200 bg-slate-50" id="product">
       <div className="absolute inset-x-0 top-0 h-px bg-slate-300/60" />
-      <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-14 sm:px-6 sm:py-18 lg:grid-cols-[0.95fr_1.05fr] lg:items-center lg:px-8 lg:py-24">
+      <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:px-8 lg:py-20">
         <div className="min-w-0">
           <p className="inline-flex rounded-md border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold tracking-[0.18em] text-slate-500 uppercase">
             {content.hero.eyebrow}
           </p>
-          <h1 className="mt-6 max-w-4xl text-wrap font-heading text-4xl font-bold leading-[1.05] text-slate-950 sm:text-6xl lg:text-7xl">
+          <h1 className="mt-6 max-w-4xl text-wrap font-heading text-4xl font-bold leading-[1.05] text-slate-950 sm:text-6xl lg:text-[4.65rem]">
             {content.hero.title}
           </h1>
           <p className="mt-6 max-w-2xl text-base leading-7 text-slate-500 sm:text-lg sm:leading-8">
@@ -196,17 +196,19 @@ function HeroLink({
 }
 
 function ProductPreview({ content }: { content: PublicMarketingContent }) {
+  const [customer, configuration, price, offer, invoice, payment] = content.proofItems;
+
   return (
-    <div className="relative min-w-0 max-w-full lg:max-w-[610px] lg:justify-self-end">
-      <div className="absolute -inset-4 rounded-[2rem] border border-slate-200 bg-slate-100/55" />
-      <div className="relative max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-2xl shadow-slate-950/10">
+    <div className="relative min-w-0 max-w-full lg:max-w-[660px] lg:justify-self-end">
+      <div className="absolute -inset-3 rounded-[1.75rem] border border-slate-200 bg-slate-100/55 shadow-2xl shadow-slate-950/10" />
+      <div className="relative max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
         <div className="flex h-12 items-center gap-2 border-b border-slate-200 px-4">
           <span className="size-2.5 rounded-full bg-rose-400" />
           <span className="size-2.5 rounded-full bg-amber-400" />
           <span className="size-2.5 rounded-full bg-emerald-500" />
           <span className="ml-3 text-xs font-semibold text-slate-400">{content.productPreview.chromeLabel}</span>
         </div>
-        <div className="grid gap-0 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <div className="grid gap-0 lg:grid-cols-[190px_minmax(0,1fr)]">
           <aside className="hidden border-r border-slate-200 bg-slate-50/70 p-4 lg:block">
             <div className="mb-5 flex items-center gap-3">
               <span className="grid size-9 place-items-center rounded-lg bg-slate-950 font-heading font-bold text-slate-50">
@@ -233,52 +235,67 @@ function ProductPreview({ content }: { content: PublicMarketingContent }) {
           </aside>
           <div className="min-w-0 p-4 sm:p-5">
             <div className="grid min-w-0 gap-4">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold tracking-[0.16em] text-slate-400 uppercase">{content.productPreview.eyebrow}</div>
-                    <div className="mt-1 font-heading text-xl font-bold text-slate-950">{content.productPreview.title}</div>
+              <div className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 lg:grid-cols-[1.05fr_0.95fr]">
+                <div className="min-w-0">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold tracking-[0.16em] text-slate-400 uppercase">{content.productPreview.eyebrow}</div>
+                      <div className="mt-1 font-heading text-xl font-bold text-slate-950">{content.productPreview.title}</div>
+                    </div>
+                    <span className="w-fit rounded-md bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-600">
+                      {content.productPreview.calculated}
+                    </span>
                   </div>
-                  <span className="w-fit rounded-md bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-600">
-                    {content.productPreview.calculated}
-                  </span>
-                </div>
-                <div className="grid gap-4">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                    <div className="mx-auto aspect-[3/4] max-w-[130px] rounded-md border-[6px] border-slate-600 bg-slate-100 p-1">
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-100 p-4">
+                    <div className="mx-auto aspect-[3/4] max-w-[126px] rounded-md border-[6px] border-slate-600 bg-slate-50 p-1 shadow-sm">
                       <div className="grid h-full grid-cols-2 gap-1">
                         <span className="border border-slate-400 bg-sky-50/70" />
                         <span className="border border-slate-400 bg-sky-50/70" />
                         <span className="col-span-2 border border-slate-400 bg-sky-50/70" />
                       </div>
                     </div>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {content.proofItems.slice(0, 4).map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <div key={item.label} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-100 p-3">
-                          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-slate-200 text-slate-700">
-                            <Icon className="size-4" />
-                          </span>
-                          <div className="min-w-0">
-                            <div className="text-xs font-bold tracking-wide text-slate-400 uppercase">{item.label}</div>
-                            <div className="text-sm font-semibold text-slate-900">{item.value}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[11px] font-bold text-slate-500">
+                      {content.productPreview.stageLabels.map((label) => (
+                        <span key={label} className="rounded-md bg-slate-50 px-2 py-1">{label}</span>
+                      ))}
+                    </div>
                   </div>
                 </div>
+                <div className="grid min-w-0 gap-3">
+                  {[customer, configuration, price, offer].map((item, index) => {
+                    const Icon = item.icon;
+                    return (
+                      <div key={item.label} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-100 p-3">
+                        <span className={cn(
+                          "grid size-9 shrink-0 place-items-center rounded-lg text-slate-700",
+                          index === 2 ? "bg-emerald-50 text-emerald-700" : "bg-slate-200",
+                        )}>
+                          <Icon className="size-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold tracking-wide text-slate-400 uppercase">{item.label}</div>
+                          <div className="text-sm font-semibold text-slate-900">{item.value}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {content.proofItems.slice(4).map((item) => {
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[invoice, payment].map((item) => {
                   const Icon = item.icon;
                   return (
-                    <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                      <Icon className="mb-5 size-5 text-slate-700" />
-                      <div className="text-xs font-bold tracking-wide text-slate-400 uppercase">{item.label}</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900">{item.value}</div>
+                    <div key={item.label} className="grid min-h-28 grid-cols-[auto_1fr] gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <span className="grid size-10 place-items-center rounded-lg bg-slate-200 text-slate-800">
+                        <Icon className="size-5" />
+                      </span>
+                      <div>
+                        <div className="text-xs font-bold tracking-wide text-slate-400 uppercase">{item.label}</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">{item.value}</div>
+                        <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
+                          <span className={cn("block h-full rounded-full", item === payment ? "w-3/5 bg-emerald-500" : "w-4/5 bg-slate-500")} />
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
@@ -327,21 +344,24 @@ function WorkflowSection({ content }: { content: PublicMarketingContent }) {
           title={content.workflow.title}
           description={content.workflow.description}
         />
-        <ol className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <ol className="grid gap-3 md:grid-cols-2 lg:grid-cols-6">
           {content.workflow.steps.map((step, index) => {
             const Icon = step.icon;
             return (
-              <li key={step.title} className="rounded-xl border border-slate-200 bg-slate-100 p-5">
-                <div className="mb-8 flex items-center justify-between gap-3">
-                  <span className="grid size-11 place-items-center rounded-lg bg-slate-200 text-slate-800">
+              <li key={step.title} className="group relative overflow-hidden rounded-xl border border-slate-200 bg-slate-100 p-4 transition-colors hover:border-slate-300 hover:bg-slate-50">
+                <div className="mb-5 flex items-center justify-between gap-3">
+                  <span className="grid size-10 place-items-center rounded-lg bg-slate-200 text-slate-800 transition-colors group-hover:bg-slate-950 group-hover:text-slate-50">
                     <Icon className="size-5" />
                   </span>
-                  <span className="font-heading text-3xl font-bold text-slate-300">
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-heading text-xs font-bold text-slate-400">
                     {String(index + 1).padStart(2, "0")}
                   </span>
                 </div>
-                <h3 className="font-heading text-xl font-bold text-slate-950">{step.title}</h3>
+                <h3 className="font-heading text-lg font-bold leading-snug text-slate-950">{step.title}</h3>
                 <p className="mt-3 text-sm leading-6 text-slate-500">{step.description}</p>
+                {index < content.workflow.steps.length - 1 ? (
+                  <span className="pointer-events-none absolute top-9 right-0 hidden h-px w-3 bg-slate-300 lg:block" aria-hidden="true" />
+                ) : null}
               </li>
             );
           })}
@@ -364,8 +384,13 @@ function FeaturesSection({ content }: { content: PublicMarketingContent }) {
           {content.features.groups.map((group) => {
             const Icon = group.icon;
             return (
-              <article key={group.title} className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-                <Icon className="size-6 text-slate-800" />
+              <article key={group.title} className="rounded-xl border border-slate-200 bg-slate-50 p-5 transition-colors hover:border-slate-300 hover:bg-white">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="grid size-11 place-items-center rounded-lg bg-slate-200 text-slate-800">
+                    <Icon className="size-5" />
+                  </span>
+                  <span className="h-px flex-1 bg-slate-200" />
+                </div>
                 <h3 className="mt-5 font-heading text-lg font-bold text-slate-950">{group.title}</h3>
                 <p className="mt-2 text-sm leading-6 text-slate-500">{group.description}</p>
                 <ul className="mt-5 space-y-2">
@@ -389,46 +414,50 @@ function StandardSection({ content }: { content: PublicMarketingContent }) {
   return (
     <section id="standard" className="border-b border-slate-200 bg-slate-50 py-16 sm:py-20">
       <SectionInner>
-        <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-          <div>
-            <p className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">{content.standard.eyebrow}</p>
-            <h2 className="mt-4 font-heading text-4xl font-bold text-slate-950 sm:text-5xl">
-              {content.standard.plan.name}
-            </h2>
-            <p className="mt-4 max-w-xl text-lg leading-8 text-slate-500">
-              {content.standard.plan.summary}
-            </p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <HeroLink href={`${content.basePath === "/" ? "" : content.basePath}/request-trial`} variant="primary">
-                {content.actions.requestTrial}
-                <ArrowRight className="size-4" />
-              </HeroLink>
-              <HeroLink href={`${content.basePath === "/" ? "" : content.basePath}/request-demo`} variant="outline">
-                {content.actions.requestDemo}
-              </HeroLink>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-100 p-5 sm:p-7">
-            <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-xl shadow-slate-950/5">
+          <div className="grid gap-0 lg:grid-cols-[0.88fr_1.12fr]">
+            <div className="border-b border-slate-200 p-6 sm:p-8 lg:border-r lg:border-b-0">
               <div>
-                <div className="font-heading text-2xl font-bold text-slate-950">{content.standard.plan.name}</div>
-                <div className="mt-1 text-sm font-semibold text-emerald-600">{content.standard.plan.trial}</div>
+                <p className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">{content.standard.eyebrow}</p>
+                <h2 className="mt-4 font-heading text-4xl font-bold text-slate-950 sm:text-5xl">
+                  {content.standard.plan.name}
+                </h2>
+                <p className="mt-4 max-w-xl text-lg leading-8 text-slate-500">
+                  {content.standard.plan.summary}
+                </p>
+                <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+                  <HeroLink href={`${content.basePath === "/" ? "" : content.basePath}/request-trial`} variant="primary">
+                    {content.actions.requestTrial}
+                    <ArrowRight className="size-4" />
+                  </HeroLink>
+                  <HeroLink href={`${content.basePath === "/" ? "" : content.basePath}/request-demo`} variant="outline">
+                    {content.actions.requestDemo}
+                  </HeroLink>
+                </div>
               </div>
-              <span className="inline-flex w-fit items-center gap-2 rounded-md bg-slate-200 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-slate-700">
-                <ShieldCheck className="size-4" />
-                {content.standard.badge}
-              </span>
             </div>
-            <ul className="mt-6 grid gap-3 sm:grid-cols-2">
-              {content.standard.plan.included.map((feature) => (
-                <li key={feature} className="flex items-start gap-3 text-sm font-semibold leading-6 text-slate-700">
-                  <Check className="mt-1 size-4 shrink-0 text-emerald-500" />
-                  <span>{feature}</span>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-500">
-              {content.standard.pricingNote}
+            <div className="bg-slate-50 p-5 sm:p-7">
+              <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="font-heading text-2xl font-bold text-slate-950">{content.standard.plan.name}</div>
+                  <div className="mt-1 text-sm font-semibold text-emerald-600">{content.standard.plan.trial}</div>
+                </div>
+                <span className="inline-flex w-fit items-center gap-2 rounded-md bg-slate-200 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-slate-700">
+                  <ShieldCheck className="size-4" />
+                  {content.standard.badge}
+                </span>
+              </div>
+              <ul className="mt-6 grid gap-3 sm:grid-cols-2">
+                {content.standard.plan.included.map((feature) => (
+                  <li key={feature} className="flex items-start gap-3 text-sm font-semibold leading-6 text-slate-700">
+                    <Check className="mt-1 size-4 shrink-0 text-emerald-500" />
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-6 rounded-xl border border-slate-200 bg-slate-100 p-4 text-sm leading-6 text-slate-500">
+                {content.standard.pricingNote}
+              </div>
             </div>
           </div>
         </div>

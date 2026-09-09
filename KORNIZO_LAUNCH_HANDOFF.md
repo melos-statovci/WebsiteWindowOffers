@@ -1,12 +1,13 @@
 # Kornizo Launch Handoff
 
-Status: **Milestone 1 complete. Milestone 2 complete, including bilingual public-site follow-up. Milestone 3 is next.**
+Status: **Milestone 1 complete. Milestone 2 complete, including bilingual public-site follow-up and final public visual polish. Milestone 3 is next.**
 
 ## Starting State
 
 - Branch: `clone/proferto`
 - Milestone 2 starting HEAD: `ac7c65a`
 - Milestone 2 bilingual follow-up starting HEAD: `ca7aa70`
+- Milestone 2B public visual polish starting HEAD: `159d288c9bc1b66d45a4517f8b26302da8b8a8dc`
 - Tracking remote: `melos/clone/proferto`
 - Repository: `/Users/solution25/Website/WebsiteWindowOffers`
 - Milestone 2 final HEAD: see final report / `git rev-parse HEAD` after this
@@ -16,8 +17,9 @@ Status: **Milestone 1 complete. Milestone 2 complete, including bilingual public
 
 Milestone 1 established Kornizo Standard and the customer access lifecycle.
 Milestone 2 added the public Kornizo homepage, truthful temporary public CTA
-pages, and the Albanian-default / English-secondary public language pass. Do
-not redo Milestone 1 or Milestone 2 in the next session.
+pages, the Albanian-default / English-secondary public language pass, and the
+final public visual polish pass. Do not redo Milestone 1 or Milestone 2 in the
+next session.
 
 ## Milestone 2 Public Homepage
 
@@ -44,22 +46,29 @@ not redo Milestone 1 or Milestone 2 in the next session.
 - Navigation is localized. Albanian: Produkti, Si funksionon, Funksionet,
   Standard, FAQ, Hyr, Kërko provë falas. English: Product, How it works,
   Features, Standard, FAQ, Sign in, Request free trial.
-- Hero positioning is localized. Albanian: "Nga konfigurimi i dritareve te
-  pagesa - në një vend." English: "From window configuration to payment - all
-  in one place." The supporting copy explicitly names window and door
+- Hero positioning is localized. Albanian: "Nga konfigurimi i dritareve deri
+  te pagesa, në një vend." English: "From window configuration to payment,
+  all in one place." The supporting copy explicitly names window and door
   companies.
 - Product visual strategy: no screenshots were committed. The hero uses a
   safe, composed product-window preview based on real tenant surfaces:
   Dashboard, Projects, Clients, Invoices, Pricing, configurator, offer status,
-  invoice and payment visibility. It contains no DEV customer data, emails,
-  credentials or real screenshots.
+  invoice and payment visibility. The final polish made this preview richer and
+  more product-proving with a window/door configuration area, compact localized
+  stage labels, offer-state cards, invoice/payment progress, and stronger
+  desktop framing. It contains no DEV customer data, emails, credentials or real
+  screenshots.
 - Workflow section presents the real path in both languages: customer ->
   configure windows/doors -> calculate price -> create/track offer/project ->
-  invoice -> payment.
+  invoice -> payment. The final polish changed the section into a connected
+  six-step sequence with tighter cards and hover states while preserving the
+  same product truth.
 - Features are grouped by business value: Configure and calculate, Sell and
   organize, Invoice and get paid, Work as a company.
 - Standard section presents exactly one launch plan: `Kornizo Standard`.
-  It states a 14-day full trial and does not invent a public price.
+  It states a 14-day full trial and does not invent a public price. The final
+  polish presents Standard as one stronger plan panel instead of fake tier
+  cards.
 - Future-plan teaser is localized and limited to a careful note that Kornizo is
   growing and additional plans/tools may be introduced over time. No names,
   prices, dates or specific future features are promised.
@@ -98,13 +107,19 @@ not redo Milestone 1 or Milestone 2 in the next session.
 
 ## Milestone 2 Theme And Responsive Notes
 
+- Final public visual polish tightened hero spacing, reduced the desktop H1
+  scale slightly, moved the full navigation breakpoint to `lg` to prevent
+  tablet wrapping, improved feature-card hierarchy, and kept CTA widths stable
+  across Albanian and English.
 - The public pages use the existing class-based theme model from
   `src/app/layout.tsx` and avoid changing tenant theme plumbing.
 - Dark-mode public CTA contrast was verified against the app's slate-token
   remapping and uses neutral tokens with explicit dark text colors where needed.
 - Desktop and mobile visual validation used local headless Chrome screenshots.
-  The final screenshots showed no horizontal overflow or clipped text in the
-  measured viewport.
+  The final Milestone 2B pass also checked laptop and tablet homepage viewports,
+  plus all six public localized routes in desktop/mobile and light/dark. The
+  final screenshots and DOM metrics showed no horizontal overflow or clipped
+  visible text in the measured viewports.
 
 ## Milestone 2 Files Added/Changed
 
@@ -129,7 +144,7 @@ not redo Milestone 1 or Milestone 2 in the next session.
 - `src/proxy.test.ts` - public/protected route proxy tests.
 - `src/proxy.ts` - public-route allowlist.
 - `KORNIZO_LAUNCH_ROADMAP.md` and `KORNIZO_LAUNCH_HANDOFF.md` - milestone
-  state updates.
+  state updates, including the final public visual polish pass.
 
 ## Milestone 2 Verification
 
@@ -137,7 +152,7 @@ not redo Milestone 1 or Milestone 2 in the next session.
   - `npm test` green: 54 unit tests.
   - `npm run check` green.
 - After original homepage edits:
-  - `npm test` green: 60 unit tests.
+  - `npm test` green: 62 unit tests.
   - `npm run lint` green.
   - `npm run typecheck` green.
   - `npm run build` green.
@@ -158,6 +173,18 @@ not redo Milestone 1 or Milestone 2 in the next session.
   - Local headless Chrome visual checks covered Albanian and English public
     routes in desktop/mobile and light/dark. DOM metrics reported no horizontal
     overflow and no clipped visible text.
+- After Milestone 2B public visual polish:
+  - `npm run typecheck` green after the visual/component edits.
+  - Local homepage visual audit covered Albanian and English at 1440x1100,
+    1280x900, 820x1100 and 390x1100 in light/dark; no horizontal overflow and
+    no clipped visible text were reported.
+  - Local public-route visual audit covered `/`, `/en`, `/request-trial`,
+    `/request-demo`, `/en/request-trial` and `/en/request-demo` in
+    desktop/mobile and light/dark; no horizontal overflow and no clipped visible
+    text were reported.
+  - Local HTTP checks: `/`, `/en`, `/request-trial`, `/request-demo`,
+    `/en/request-trial`, and `/en/request-demo` returned 200 while logged out;
+    `/dashboard` and `/platform` redirected to `/sign-in`.
 - Final full gate after edits:
   - `npm test` green: 60 unit tests.
   - `npm run test:db` green: 197 DB/integration tests.

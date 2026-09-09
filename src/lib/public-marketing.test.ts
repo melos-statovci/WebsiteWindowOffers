@@ -40,7 +40,7 @@ describe("public marketing launch constraints", () => {
       "Konfiguro dritaret dhe dyert",
       "Llogarit çmimin",
       "Krijo dhe ndiq ofertën",
-      "Faturoni klientin",
+      "Lësho faturën",
       "Ndiq pagesën",
     ]);
   });
