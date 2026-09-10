@@ -1,6 +1,6 @@
 # Kornizo Launch Handoff
 
-Status: **Milestone 1 complete. Milestone 2 complete, including bilingual public-site follow-up and final public visual polish. Milestone 3 complete. Milestone 4 is next.**
+Status: **Milestones 1-4 complete. Milestone 5 (Trial UX + launch hardening) is next.**
 
 ## Starting State
 
@@ -8,11 +8,14 @@ Status: **Milestone 1 complete. Milestone 2 complete, including bilingual public
 - Milestone 2 starting HEAD: `ac7c65a`
 - Milestone 2 bilingual follow-up starting HEAD: `ca7aa70`
 - Milestone 2B public visual polish starting HEAD: `159d288c9bc1b66d45a4517f8b26302da8b8a8dc`
+- Milestone 4 starting HEAD: `ca10dcb9271c1e08759b74342f846b0af8262cff`
 - Tracking remote: `melos/clone/proferto`
 - Repository: `/Users/solution25/Website/WebsiteWindowOffers`
 - Milestone 2 final HEAD: see final report / `git rev-parse HEAD` after this
   handoff update is committed and pushed.
 - Milestone 3 final HEAD: see final report / `git rev-parse HEAD` after this
+  handoff update is committed and pushed.
+- Milestone 4 final HEAD: see final report / `git rev-parse HEAD` after this
   handoff update is committed and pushed.
 
 ## Completed Milestones
@@ -263,15 +266,240 @@ flows, while preserving the hard stop before tenant provisioning.
 - Existing DEV organizations were checked after migration 0016; zero
   organizations were missing `organization_accounts` rows.
 
-## Milestone 4 Must Add
+## Milestone 4 Approval -> Organization + Trial Provisioning
 
-- Convert approved trial applications into tenant access through a trusted
-  Platform Admin provisioning flow.
-- Decide whether provisioning creates a new organization only, can attach to an
-  existing organization, or supports both with explicit operator choice.
-- Start the 14-day Standard trial only during Milestone 4 provisioning.
-- Reuse the trusted provisioning primitive and keep public routes unable to
-  call it.
+### Locked policy
+
+A Trial Application provisions exactly **one NEW organization**. Attach to an
+existing organization, organization chooser during approval, merge and owner
+transfer were explicitly NOT built. Joining an existing Kornizo company remains
+the Better Auth organization/member/invitation flow.
+
+Flow: `TRIAL APPLICATION -> APPROVE & START TRIAL -> NEW ORGANIZATION ->
+applicant = OWNER -> Kornizo Standard -> 14-day trial`.
+
+### Schema (migration `0017_trial_application_provisioning`)
+
+Added to `trial_applications`:
+
+- `organization_id uuid` -> `organization(id)` **ON DELETE RESTRICT**. The
+  canonical application -> organization link. Never client-supplied. RESTRICT
+  (not CASCADE/SET NULL) because a provisioned application is historical
+  acquisition evidence; the organization must not vanish beneath it. Test/DEV
+  teardown unlinks explicitly first (`TestCleanup.run()`).
+- `provisioning_status text not null default 'not_started'` -
+  `not_started | in_progress | provisioned | failed`.
+- `provisioning_slug text` - the stable, application-derived organization slug.
+  Persisted on the FIRST claim and never rewritten. **This is the exactly-once
+  key.**
+- `provisioning_started_at`, `provisioned_at`, `provisioning_attempts`,
+  `provisioning_error_code` (sanitized category only).
+
+Constraints/indexes:
+
+- `trial_applications_organization_uidx` - partial UNIQUE on `organization_id`:
+  one organization belongs to at most one application, and vice versa.
+- `trial_applications_provisioning_slug_uidx` - partial UNIQUE on the slug.
+- `trial_applications_provisioned_shape_chk` - `provisioned` implies
+  `organization_id is not null and provisioned_at is not null`.
+- `trial_applications_link_requires_approval_chk` - `organization_id is null or
+  status = 'approved'`, so a pending/rejected row can never carry tenant access.
+- Audit CHECK extended with `TRIAL_APPLICATION_PROVISIONED` and
+  `TRIAL_APPLICATION_PROVISIONING_FAILED`.
+
+The migration is additive only; no destructive statement.
+
+### Trusted provisioning architecture
+
+`src/server/provisioning.ts` was split into RESUMABLE PHASES (still no
+`"use server"`, still not imported by any public route/action):
+
+- `stableProvisioningSlug(name, recordId)` - pure, re-exported from
+  `src/lib/provisioning-slug.ts` so it is unit-testable offline.
+- `createOrAdoptOrganization({userId, name, slug})` - **look up by slug first**,
+  then create via Better Auth's server-only `userId` path, then look up **once
+  more** if creation threw. Returns `created: false` when adopting.
+- `completeOrganizationProvisioning({organizationId, ownerUserId})` - idempotent
+  `ensureOrganizationProfile` + `ensureOrganizationAccount` + `ensureDefaultPricing`,
+  then verification.
+- `verifyOrganizationProvisioning()` - reads `member`/`organization_accounts` on
+  the pool and `organization_profiles`/`price_lists` **inside `withOrg`**, so the
+  check proves visibility under the tenant's own RLS rather than bypassing it.
+- `createTrustedProvisionedOrganization()` still composes both phases for
+  DEV/test fixtures.
+
+`src/server/platform/provisioning.ts` owns the application-level lifecycle:
+claim -> create/adopt -> link -> complete -> verify -> mark provisioned + audit.
+
+### Exact idempotency mechanism
+
+The claim transaction persists `provisioning_slug` (derived from the application
+id) and commits **before** Better Auth is called. `organization.slug` is UNIQUE.
+Therefore, for a given application:
+
+- first attempt creates the organization;
+- an attempt after a crash finds the slug taken and **adopts** that
+  organization;
+- a concurrent attempt that loses the unique-slug race also adopts it.
+
+No input produces two organizations for one application. The
+`organization_id` linkage is written immediately after create/adopt (belt and
+braces; the slug alone would already find it).
+
+### Exact concurrency mechanism
+
+`SELECT ... FOR UPDATE` on the application row inside the claim transaction
+serializes concurrent approvals. The loser sees `in_progress` and is refused
+with `PROVISIONING_IN_PROGRESS` rather than racing. A claim older than
+`STALE_CLAIM_MS` (2 minutes) may be taken over so a crashed attempt is
+recoverable; correctness never depends on that window — the slug key does.
+
+### Retry and partial-failure semantics
+
+- Retry is allowed from `failed` and from a stale `in_progress`.
+- Retrying a `provisioned` application is an idempotent no-op reporting success.
+- Every completion step is `INSERT ... ON CONFLICT DO NOTHING`, so retry
+  converges to exactly one owner membership, one profile, one account, one
+  active price list.
+- On failure the application stays **approved** with
+  `provisioning_status='failed'` and a sanitized `provisioning_error_code`.
+  Nothing auto-retries; a page refresh does not re-provision.
+
+### Trial start semantics
+
+The 14-day trial starts when `ensureOrganizationAccount()` first inserts the
+`organization_accounts` row — i.e. at successful provisioning, not at
+submission or approval. It remains the SINGLE writer of `trial_started_at` /
+`trial_ends_at`; the platform approval path computes no dates of its own.
+
+### Applicant owner membership, profile, account, pricing
+
+The applicant becomes `owner` through Better Auth's own organization-creation
+path. No parallel owner table exists. Profile, account and default pricing come
+from the existing canonical helpers, unchanged.
+
+### Applicant own-session activation
+
+`activateProvisionedOrganizationAction(headers)` runs in the APPLICANT'S session
+and **takes no input at all**: it derives the user from the session, loads their
+own application, requires `approved` + `provisioned`, re-verifies the `member`
+row, then calls `setActiveOrganization` for the current session. A platform
+admin never mutates another user's session. `resolveContext()` also still
+auto-activates a sole organization, so a returning applicant cannot get stuck.
+
+### Platform UX
+
+- Approve button is now **"Aprovo & nis provën 14-ditore"**.
+- The detail page gains a **Provizionimi** panel: status, provisioned-at,
+  attempts, sanitized failure reason, and a link to the created organization
+  with plan / commercial access / trial dates / days remaining / operational
+  status (canonical data — no second platform representation).
+- Failure shows **DËSHTOI** + a human reason + **"Provo provizionimin përsëri"**.
+  No stack traces or raw errors reach the operator.
+- The Applications list shows a provisioning badge next to APPROVED, so
+  "approved but not actually provisioned" can never read as success.
+
+### Applicant UX
+
+- Provisioned: "Prova juaj në Kornizo është gati." / "Keni 14 ditë qasje të plotë
+  në Kornizo Standard." + **Filloni me Kornizo** (EN: "Your Kornizo trial is
+  ready." / "You have 14 days of full access to Kornizo Standard." / "Start
+  using Kornizo"). Once the session already has the org active, the CTA becomes
+  "Hap aplikacionin" / "Open app".
+- Approved but not yet provisioned keeps the truthful "access is being prepared,
+  the trial has not started yet" wording.
+
+### Audit
+
+`TRIAL_APPLICATION_APPROVED` remains the human decision event;
+`TRIAL_APPLICATION_PROVISIONED` records the resulting organization, slug, plan,
+commercial access and trial end; `TRIAL_APPLICATION_PROVISIONING_FAILED` records
+a sanitized `errorCode` + attempt. Actor always comes from the authenticated
+platform context. No note text, secrets or raw errors are logged.
+
+## Milestone 4 Files Added/Changed
+
+- `src/db/schema/platform.ts` - provisioning columns, constraints, audit actions.
+- `src/db/migrations/0017_trial_application_provisioning.sql` (+ snapshot/journal).
+- `src/server/provisioning.ts` - resumable phases (create/adopt, complete, verify).
+- `src/lib/provisioning-slug.ts` - pure slug + sanitized failure text (shared by
+  server and client components).
+- `src/server/platform/provisioning.ts` - application-level provisioning
+  lifecycle + `getProvisionedOrganizationSummary`.
+- `src/server/platform/actions/applications.ts` / `.action.ts` - approval now
+  provisions; `retryTrialApplicationProvisioningAction` added.
+- `src/domain/validation/acquisition.ts` - retry schema; **fixed** the
+  `offersPerMonth` preprocess (see Known Issues).
+- `src/server/acquisition.ts` / `.action.ts` - provisioning fields on
+  `TrialApplicationRow`; `activateProvisionedOrganizationAction`.
+- `src/components/public/start-using-kornizo.tsx` - applicant activation button.
+- `src/components/public/application-status-page.tsx` - trial-ready state.
+- `src/app/platform/applications/*` - approve/retry controls, provisioning panel,
+  list badge.
+- `src/app/platform/ui.tsx` - audit badges for the two new actions.
+- `src/app/request-trial/page.tsx`, `src/app/en/request-trial/page.tsx` - copy now
+  says approval creates the company and starts the trial.
+- `src/db/testing/fixtures.ts` - unlink acquisition rows before dropping orgs.
+- Tests: `src/server/platform/provisioning.dbtest.ts` (26),
+  `src/lib/provisioning-slug.test.ts` (5),
+  `src/domain/validation/acquisition.test.ts` (7),
+  updated `src/server/acquisition.dbtest.ts`.
+
+## Milestone 4 Verification
+
+- `npm test` green: **78** unit tests.
+- `npm run test:db` green: **237** DB/integration tests (was 211).
+- `npm run lint`, `npm run typecheck`, `npm run build`, `npm run check` green.
+- `npx drizzle-kit check` green.
+- `npm run db:migrate` applied 0017 to Neon **DEVELOPMENT** and re-ran
+  idempotently. Live schema query confirmed all columns, both partial unique
+  indexes, all CHECKs, the RESTRICT FK, and the extended audit CHECK.
+- Browser E2E (local dev + Neon DEV, real Better Auth sessions): logged-out
+  `/request-trial`; applicant submits through the real UI; PENDING status; no
+  tenant access; platform inbox; **Aprovo & nis provën** -> I PROVIZIONUAR;
+  organization link; STANDARD / TRIAL / correct dates / 14 days / ACTIVE;
+  organization appears in Platform Organizations; both audit events on Activity;
+  applicant sees "Prova juaj në Kornizo është gati"; **Filloni me Kornizo** ->
+  `/dashboard` with "Kornizo Standard · Trial · 14 ditë" and role Owner;
+  `/clients` and `/pricing` load; EN status page correct; approve/retry controls
+  correctly absent once provisioned.
+- Browser failure/retry E2E: forced a partial failure, confirmed **DËSHTOI** +
+  sanitized reason + no internals leaked, refresh did NOT auto-provision, Retry
+  recovered to I PROVIZIONUAR with **no second organization** and exactly one
+  `organization_accounts` row.
+- All E2E rows (application, organization, applicant user, audit events) were
+  cleaned up afterwards; a DEV query confirmed zero remaining.
+
+## Milestone 4 Known Issues
+
+- **Pre-existing bug found and fixed:** the public trial form failed with an
+  internal error whenever the optional "Oferta në muaj" field was left blank. A
+  server action drops `undefined` values, so the key arrived MISSING; the Zod
+  preprocess only handled `""`/`null`, so `Number(undefined)` produced `NaN`,
+  which slipped past the optional inner schema and reached the integer column.
+  Fixed in `src/domain/validation/acquisition.ts` with regression tests. This was
+  a Milestone 3 defect that the DB tests missed because they always passed a
+  value.
+- `timestamp without time zone` columns are parsed by node-postgres as LOCAL
+  time, while `now()` (timestamptz) is not, so `AccountState.trialStartedAt`
+  appears shifted by the machine's UTC offset relative to `serverNow` on a
+  non-UTC developer machine. SQL itself reports zero skew and production runs
+  UTC, so there is no production impact; it is a pre-existing schema-wide
+  modelling quirk, not introduced here. Assertions about trial timing are done
+  in SQL for this reason. Worth a deliberate decision if timestamps are ever
+  revisited.
+- Browser validation again used local headless Chrome/CDP carrying real Better
+  Auth session cookies minted through the server API (the same path
+  `scripts/e2e-fixtures.ts` uses). No password was typed into any form, no seed
+  route, query-string login or auth bypass was added.
+- The pg SSL warning from previous phases remains unchanged.
+
+## Milestone 5 Starting State
+
+- Approval-to-tenant provisioning is complete, audited and idempotent.
+- Remaining trial polish for Milestone 5: expiry messaging//`trial-expired`
+  refinement, near-expiry prompts, support handoff copy, and any further
+  regression coverage. Provisioning itself should not need rework.
 
 ## Milestone 3 Replaced/Extended
 
@@ -399,7 +627,7 @@ flows, while preserving the hard stop before tenant provisioning.
 
 ## Next Milestone
 
-Milestone 4: approved application -> organization/trial provisioning.
+Milestone 5: trial UX + launch hardening.
 
 Do not start Stripe, billing, onboarding tokens, fake higher plans, or a cheaper
 Starter plan unless explicitly requested in the next milestone prompt.
@@ -411,3 +639,9 @@ Starter plan unless explicitly requested in the next milestone prompt.
 - Do not add a cron dependency for trial expiry.
 - Do not weaken tenant RLS or make `kornizo_app` BYPASSRLS.
 - Do not put SaaS lifecycle state in the tenant `clients` table.
+- Do not add attach-to-existing-organization, an organization chooser during
+  approval, merge, or owner transfer.
+- Do not compute trial start/end anywhere except `ensureOrganizationAccount()`.
+- Do not let a platform admin set another user's active organization.
+- Do not expose `src/server/provisioning.ts` to a public route or server action.
+- Do not rewrite `provisioning_slug` once set — it is the exactly-once key.

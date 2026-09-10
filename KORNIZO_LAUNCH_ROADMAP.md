@@ -38,11 +38,26 @@ migrations, tests, and source code remain authoritative.
    - Approval only changes the application status; it does not provision an
      organization, member, account, trial, pricing, profile, or tenant access.
 
-4. **Approval -> organization/trial provisioning**
-   - Platform approval creates or attaches an organization to the existing user.
-   - Approved account receives a 14-day full Kornizo Standard trial.
+4. **Approval -> organization/trial provisioning** — COMPLETE
+   - Platform approval creates ONE NEW organization for the applicant. There is
+     no attach-to-existing-organization flow; joining an existing company stays
+     with the Better Auth invitation flow.
+   - The applicant becomes the Better Auth `owner` of the new organization.
+   - The approved account receives a 14-day full Kornizo Standard trial, which
+     starts at successful provisioning.
+   - `trial_applications` carries the canonical application -> organization
+     link plus an explicit provisioning lifecycle
+     (`not_started | in_progress | provisioned | failed`).
+   - Provisioning is exactly-once, concurrency-safe and retryable: a stable
+     application-derived organization slug is persisted before Better Auth is
+     called, and `organization.slug` is UNIQUE, so a crash or a concurrent
+     approval can never create a second organization.
+   - Provisioning failure is visible and operator-retryable; it never silently
+     reports success and never auto-retries on refresh.
+   - The applicant activates their own organization in their OWN session; a
+     platform admin never mutates another user's session.
 
-5. **Trial UX + launch hardening**
+5. **Trial UX + launch hardening** — NEXT
    - Polish trial messaging, expiration states, support handoff, and regression
      coverage.
 
@@ -63,3 +78,8 @@ migrations, tests, and source code remain authoritative.
 - A Better Auth user account alone is not tenant access.
 - Missing `organization_accounts` metadata fails closed with
   `account_not_ready`.
+- A Trial Application provisions exactly ONE new organization. Attaching an
+  applicant to an existing organization, organization chooser, merge and owner
+  transfer are explicitly out of scope.
+- `ensureOrganizationAccount()` is the single writer of the trial window; no
+  other code computes trial start/end dates.
