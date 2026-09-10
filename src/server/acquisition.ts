@@ -12,6 +12,7 @@ import type { PublicLocale } from "@/lib/public-routing";
 
 export type TrialApplicationStatus = "pending" | "approved" | "rejected";
 export type DemoRequestStatus = "new" | "contacted" | "closed";
+export type TrialProvisioningStatus = "not_started" | "in_progress" | "provisioned" | "failed";
 
 export interface TrialApplicationRow {
   id: string;
@@ -29,6 +30,13 @@ export interface TrialApplicationRow {
   reviewedAt: Date | null;
   reviewedByEmail: string | null;
   internalReviewNote: string | null;
+  // Milestone 4 provisioning linkage/state. Platform-written only; a public
+  // submission can never set any of these.
+  organizationId: string | null;
+  provisioningStatus: TrialProvisioningStatus;
+  provisionedAt: Date | null;
+  provisioningAttempts: number;
+  provisioningErrorCode: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -83,6 +91,11 @@ function asDemoStatus(value: string): DemoRequestStatus {
   return "new";
 }
 
+function asProvisioningStatus(value: string): TrialProvisioningStatus {
+  if (value === "in_progress" || value === "provisioned" || value === "failed") return value;
+  return "not_started";
+}
+
 function trialRow(row: typeof trialApplications.$inferSelect): TrialApplicationRow {
   return {
     id: row.id,
@@ -100,6 +113,11 @@ function trialRow(row: typeof trialApplications.$inferSelect): TrialApplicationR
     reviewedAt: row.reviewedAt,
     reviewedByEmail: row.reviewedByEmail,
     internalReviewNote: row.internalReviewNote,
+    organizationId: row.organizationId,
+    provisioningStatus: asProvisioningStatus(row.provisioningStatus),
+    provisionedAt: row.provisionedAt,
+    provisioningAttempts: row.provisioningAttempts,
+    provisioningErrorCode: row.provisioningErrorCode,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -154,6 +172,50 @@ export async function getCurrentTrialApplication(reqHeaders: Headers): Promise<{
     userHasTenantMembership(session.user.id),
   ]);
   return { session, application, hasTenantAccess };
+}
+
+/**
+ * APPLICANT-SIDE activation. Runs in the APPLICANT'S OWN authenticated session.
+ *
+ * A platform admin must never mutate another user's session, so activation of a
+ * newly provisioned organization is deliberately pulled by the applicant rather
+ * than pushed by the reviewer. Every input is derived server-side from the
+ * caller's session — the caller supplies nothing at all, so it cannot choose an
+ * organization, an owner, a plan or a trial window.
+ */
+export async function activateProvisionedOrganizationAction(
+  reqHeaders: Headers,
+): Promise<PublicActionResult<{ organizationId: string }>> {
+  const session = await auth.api.getSession({ headers: reqHeaders });
+  if (!session) return { ok: false, error: { code: "UNAUTHENTICATED", message: "Kyçuni për të vazhduar." } };
+
+  const application = await getTrialApplicationByUserId(session.user.id);
+  if (!application || application.status !== "approved" || application.provisioningStatus !== "provisioned") {
+    return { ok: false, error: { code: "FORBIDDEN", message: "Qasja juaj nuk është ende gati." } };
+  }
+  const organizationId = application.organizationId;
+  if (!organizationId) {
+    return { ok: false, error: { code: "FORBIDDEN", message: "Qasja juaj nuk është ende gati." } };
+  }
+
+  // Re-verify membership from the authoritative table; never trust the link
+  // alone to grant this session an active organization.
+  const membership = await db
+    .select({ id: member.id })
+    .from(member)
+    .where(and(eq(member.organizationId, organizationId), eq(member.userId, session.user.id)))
+    .limit(1);
+  if (membership.length === 0) {
+    return { ok: false, error: { code: "FORBIDDEN", message: "Qasja juaj nuk është ende gati." } };
+  }
+
+  try {
+    await auth.api.setActiveOrganization({ headers: reqHeaders, body: { organizationId } });
+  } catch (e) {
+    console.error("[acquisition] active organization activation failed:", e);
+    return { ok: false, error: { code: "INTERNAL", message: "Nuk u aktivizua. Provoni përsëri." } };
+  }
+  return { ok: true, data: { organizationId } };
 }
 
 export async function noOrganizationDestination(userId: string, locale: PublicLocale = "sq"): Promise<string> {

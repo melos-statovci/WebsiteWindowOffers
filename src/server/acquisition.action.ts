@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import {
+  activateProvisionedOrganizationAction,
   submitDemoRequestAction,
   submitTrialApplicationAction,
 } from "@/server/acquisition";
@@ -18,6 +19,20 @@ export async function submitTrialApplication(input: TrialApplicationSubmitInput)
     revalidatePath("/en/application-status");
     revalidatePath("/platform");
     revalidatePath("/platform/applications");
+  }
+  return res;
+}
+
+/**
+ * "Start using Kornizo" — the applicant activates THEIR OWN provisioned
+ * organization in THEIR OWN session. Takes no input by design.
+ */
+export async function activateProvisionedOrganization() {
+  const res = await activateProvisionedOrganizationAction(await headers());
+  if (res.ok) {
+    revalidatePath("/application-status");
+    revalidatePath("/en/application-status");
+    revalidatePath("/dashboard");
   }
   return res;
 }
