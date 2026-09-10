@@ -20,7 +20,9 @@ export type PlatformAuditAction =
   | "TRIAL_EXTENDED"
   | "TRIAL_APPLICATION_APPROVED"
   | "TRIAL_APPLICATION_REJECTED"
-  | "DEMO_REQUEST_STATUS_CHANGED";
+  | "DEMO_REQUEST_STATUS_CHANGED"
+  | "TRIAL_APPLICATION_PROVISIONED"
+  | "TRIAL_APPLICATION_PROVISIONING_FAILED";
 
 // Minimal executor shape shared by the pool db and a transaction handle — so the
 // helper can be called inside db.transaction(tx => ...) for atomicity.
