@@ -121,7 +121,7 @@ export const platformAuditEvents = pgTable(
   (table) => [
     check(
       "platform_audit_events_action_chk",
-      sql`${table.action} in ('PLAN_CHANGED','ORGANIZATION_SUSPENDED','ORGANIZATION_REACTIVATED','INTERNAL_NOTE_UPDATED','CUSTOMER_ACTIVATED','TRIAL_EXTENDED','TRIAL_APPLICATION_APPROVED','TRIAL_APPLICATION_REJECTED','DEMO_REQUEST_STATUS_CHANGED')`,
+      sql`${table.action} in ('PLAN_CHANGED','ORGANIZATION_SUSPENDED','ORGANIZATION_REACTIVATED','INTERNAL_NOTE_UPDATED','CUSTOMER_ACTIVATED','TRIAL_EXTENDED','TRIAL_APPLICATION_APPROVED','TRIAL_APPLICATION_REJECTED','DEMO_REQUEST_STATUS_CHANGED','TRIAL_APPLICATION_PROVISIONED','TRIAL_APPLICATION_PROVISIONING_FAILED')`,
     ),
     index("platform_audit_events_created_idx").on(table.createdAt),
     index("platform_audit_events_org_idx").on(table.organizationId),
@@ -130,8 +130,23 @@ export const platformAuditEvents = pgTable(
 );
 
 // trial_applications — public acquisition applications for a future Kornizo
-// tenant. Linked to a Better Auth user, but deliberately NOT linked to an
-// organization because Milestone 3 stops before provisioning.
+// tenant. Linked to a Better Auth user AND (after Milestone 4 provisioning) to
+// the ONE organization created from it.
+//
+// PROVISIONING MODEL (Milestone 4). Creating a tenant spans Better Auth
+// organization/member writes and Kornizo profile/account/pricing writes; those
+// do not share one SQL transaction, so the lifecycle is modelled explicitly
+// rather than pretended atomic:
+//
+//   not_started -> in_progress -> provisioned
+//                       \-------> failed -> in_progress -> ...
+//
+// Exactly-once organization creation does NOT rely on this status column. It
+// relies on `provisioning_slug`: a stable slug derived from the application id
+// and persisted BEFORE Better Auth is called. `organization.slug` is UNIQUE, so
+// a crash between "organization created" and "organization_id recorded" cannot
+// produce a second organization — the retry either finds the slug taken and
+// adopts that organization, or creates it. See src/server/provisioning.ts.
 export const trialApplications = pgTable(
   "trial_applications",
   {
@@ -155,6 +170,24 @@ export const trialApplications = pgTable(
     reviewedByUserId: uuid("reviewed_by_user_id"),
     reviewedByEmail: text("reviewed_by_email"),
     internalReviewNote: text("internal_review_note"),
+    // --- Milestone 4 provisioning linkage/state (platform-written only) ---
+    // The ONE organization created from this application. Never client-supplied.
+    //
+    // RESTRICT, not CASCADE/SET NULL: a provisioned application is historical
+    // acquisition evidence, so the organization it points at may not simply
+    // vanish beneath it. (Org hard-delete is not a product feature; test/DEV
+    // teardown unlinks these rows explicitly first.)
+    organizationId: uuid("organization_id").references(() => organization.id, { onDelete: "restrict" }),
+    // 'not_started' | 'in_progress' | 'provisioned' | 'failed'
+    provisioningStatus: text("provisioning_status").notNull().default("not_started"),
+    // Stable, application-derived organization slug. Persisted on the FIRST
+    // claim and never rewritten — this is the exactly-once key.
+    provisioningSlug: text("provisioning_slug"),
+    provisioningStartedAt: timestamp("provisioning_started_at"),
+    provisionedAt: timestamp("provisioned_at"),
+    provisioningAttempts: integer("provisioning_attempts").notNull().default(0),
+    // Sanitized failure CATEGORY only — never a raw DB/Better Auth error string.
+    provisioningErrorCode: text("provisioning_error_code"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -166,7 +199,31 @@ export const trialApplications = pgTable(
     uniqueIndex("trial_applications_normalized_email_uidx").on(table.normalizedEmail),
     index("trial_applications_status_idx").on(table.status),
     index("trial_applications_created_idx").on(table.createdAt),
+    // One organization may belong to at most one trial application, and one
+    // application to at most one organization.
+    uniqueIndex("trial_applications_organization_uidx")
+      .on(table.organizationId)
+      .where(sql`${table.organizationId} is not null`),
+    uniqueIndex("trial_applications_provisioning_slug_uidx")
+      .on(table.provisioningSlug)
+      .where(sql`${table.provisioningSlug} is not null`),
+    index("trial_applications_provisioning_status_idx").on(table.provisioningStatus),
     check("trial_applications_status_chk", sql`${table.status} in ('pending','approved','rejected')`),
+    check(
+      "trial_applications_provisioning_status_chk",
+      sql`${table.provisioningStatus} in ('not_started','in_progress','provisioned','failed')`,
+    ),
+    // A provisioned application MUST carry its organization and a timestamp.
+    check(
+      "trial_applications_provisioned_shape_chk",
+      sql`${table.provisioningStatus} <> 'provisioned' or (${table.organizationId} is not null and ${table.provisionedAt} is not null)`,
+    ),
+    // Only an APPROVED application may ever be linked to an organization, so a
+    // rejected/pending row can never carry tenant access.
+    check(
+      "trial_applications_link_requires_approval_chk",
+      sql`${table.organizationId} is null or ${table.status} = 'approved'`,
+    ),
     check("trial_applications_company_size_chk", sql`${table.companySize} in ('1-5','6-15','16-50','51+')`),
     check("trial_applications_offers_per_month_chk", sql`${table.offersPerMonth} is null or (${table.offersPerMonth} >= 0 and ${table.offersPerMonth} <= 100000)`),
   ],

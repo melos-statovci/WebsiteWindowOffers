@@ -79,9 +79,17 @@ export class TestCleanup {
    * Delete only the tracked organizations (cascades to all tenant data) and the
    * tracked users. Ordered orgs-first so cascades run before the users vanish.
    * Runs as the privileged migration/owner pool passed to the constructor.
+   *
+   * trial_applications.organization_id is ON DELETE RESTRICT (a provisioned
+   * application must not lose the organization it documents), so any acquisition
+   * row pointing at a tracked org is removed FIRST — deliberately explicit, and
+   * only ever against ids this test created.
    */
   async run(): Promise<void> {
     if (this.orgIds.size > 0) {
+      await this.ownerPool.query(`delete from trial_applications where organization_id = any($1::uuid[])`, [
+        [...this.orgIds],
+      ]);
       await this.ownerPool.query(`delete from organization where id = any($1::uuid[])`, [
         [...this.orgIds],
       ]);
