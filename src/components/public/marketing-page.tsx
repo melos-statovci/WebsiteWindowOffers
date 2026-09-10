@@ -11,7 +11,13 @@ import { LanguageSwitcher } from "@/components/public/language-switcher";
 import type { PublicMarketingContent } from "@/lib/public-marketing";
 import { cn } from "@/lib/utils";
 
-export function MarketingPage({ content }: { content: PublicMarketingContent }) {
+export function MarketingPage({
+  content,
+  supportEmail,
+}: {
+  content: PublicMarketingContent;
+  supportEmail: string;
+}) {
   return (
     <main lang={content.locale} className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-700">
       <PublicHeader content={content} />
@@ -23,7 +29,7 @@ export function MarketingPage({ content }: { content: PublicMarketingContent }) 
       <TrustSection content={content} />
       <FaqSection content={content} />
       <FinalCtaSection content={content} />
-      <PublicFooter content={content} />
+      <PublicFooter content={content} supportEmail={supportEmail} />
     </main>
   );
 }
@@ -552,7 +558,22 @@ function FinalCtaSection({ content }: { content: PublicMarketingContent }) {
   );
 }
 
-function PublicFooter({ content }: { content: PublicMarketingContent }) {
+/**
+ * `supportEmail` is passed in from the page (a Server Component) rather than
+ * read here, so the marketing page stays a pure function of its content
+ * dictionary and one resolved config value.
+ *
+ * The footer is where a launch-ready public site is expected to carry its
+ * contact and legal links; before Milestone 5 it carried neither.
+ */
+function PublicFooter({
+  content,
+  supportEmail,
+}: {
+  content: PublicMarketingContent;
+  supportEmail: string;
+}) {
+  const base = content.basePath === "/" ? "" : content.basePath;
   return (
     <footer className="border-t border-neutral-800 bg-black text-neutral-300">
       <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-[1fr_auto] lg:px-8">
@@ -567,12 +588,22 @@ function PublicFooter({ content }: { content: PublicMarketingContent }) {
             {content.footer.description}
           </p>
         </div>
-        <nav className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-semibold" aria-label="Footer navigation">
-          <Link href="#product" className="hover:text-white">{content.footer.product}</Link>
-          <Link href="/sign-in" className="hover:text-white">{content.actions.signIn}</Link>
-          <Link href={`${content.basePath === "/" ? "" : content.basePath}/request-trial`} className="hover:text-white">{content.footer.trial}</Link>
-          <Link href={`${content.basePath === "/" ? "" : content.basePath}/request-demo`} className="hover:text-white">{content.footer.demo}</Link>
-        </nav>
+        <div className="flex flex-col gap-4 md:items-end">
+          <nav className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-semibold" aria-label="Footer navigation">
+            <Link href="#product" className="hover:text-white">{content.footer.product}</Link>
+            <Link href="/sign-in" className="hover:text-white">{content.actions.signIn}</Link>
+            <Link href={`${base}/request-trial`} className="hover:text-white">{content.footer.trial}</Link>
+            <Link href={`${base}/request-demo`} className="hover:text-white">{content.footer.demo}</Link>
+            <Link href={`${base}/privacy`} className="hover:text-white">{content.footer.privacy}</Link>
+            <Link href={`${base}/terms`} className="hover:text-white">{content.footer.terms}</Link>
+          </nav>
+          <p className="text-sm text-slate-400 md:text-right">
+            {content.footer.contactLabel}:{" "}
+            <a href={`mailto:${supportEmail}`} className="font-semibold text-slate-300 hover:text-white">
+              {supportEmail}
+            </a>
+          </p>
+        </div>
       </div>
     </footer>
   );

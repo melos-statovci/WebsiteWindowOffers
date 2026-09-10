@@ -8,7 +8,21 @@ import { getSessionCookie } from "better-auth/cookies";
 // typing the URL directly.
 
 const AUTH_PAGES = ["/sign-in", "/sign-up"];
-const PUBLIC_PAGES = ["/", "/en", "/request-trial", "/request-demo", "/en/request-trial", "/en/request-demo"];
+// Logged-out-reachable pages. Legal pages MUST be here: a visitor deciding
+// whether to sign up has to be able to read the privacy policy and terms
+// without an account, and the footer links to them from the public homepage.
+const PUBLIC_PAGES = [
+  "/",
+  "/en",
+  "/request-trial",
+  "/request-demo",
+  "/en/request-trial",
+  "/en/request-demo",
+  "/privacy",
+  "/terms",
+  "/en/privacy",
+  "/en/terms",
+];
 
 export default function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
