@@ -49,8 +49,8 @@ export const organizationProfiles = pgTable("organization_profiles", {
   // src/db/schema/platform.ts). It was previously unread dead state.
   logoStorageKey: text("logo_storage_key"),
   settings: jsonb("settings").notNull().default({}),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at")
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .$onUpdate(() => new Date())
     .notNull(),
@@ -82,8 +82,8 @@ export const clients = pgTable(
     address: text("address"),
     city: text("city"),
     nui: text("nui"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
@@ -137,7 +137,7 @@ export const priceLists = pgTable(
     // Audit only: the member who saved this version. Intentionally NOT a FK — a
     // later-deleted user must never cascade-delete pricing history.
     createdByUserId: text("created_by_user_id"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     unique("price_lists_org_version_uidx").on(table.organizationId, table.version),
@@ -192,8 +192,8 @@ export const projects = pgTable(
     vatRate: numeric("vat_rate", { precision: 5, scale: 4 }).notNull().default("0"),
     // Record<string, boolean> of toggle options (Marzha, Zbritje, TVSH, ...).
     options: jsonb("options").notNull().default({}),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
@@ -261,8 +261,8 @@ export const projectItems = pgTable(
     // Stable display order within a project (append-on-add). Avoids relying on
     // insertion timestamp for ordering.
     sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
@@ -351,8 +351,8 @@ export const invoices = pgTable(
     status: text("status").notNull().default("Draft"),
     // Invoice VAT fraction (0..1), e.g. 0.18. Frozen at issue.
     vatRate: numeric("vat_rate", { precision: 5, scale: 4 }).notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
@@ -412,7 +412,7 @@ export const invoiceLines = pgTable(
     sourceProjectItemId: uuid("source_project_item_id"),
     // Stable display order within the invoice (append-on-add).
     sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     foreignKey({
@@ -450,7 +450,7 @@ export const payments = pgTable(
     // Payment method free text (Para në dorë / Transfertë bankare / Kartelë …).
     method: text("method").notNull(),
     note: text("note"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     // Same-tenant Client relationship, NO ACTION (blocks client delete while
@@ -497,7 +497,7 @@ export const notes = pgTable(
     text: text("text").notNull(),
     authorUserId: uuid("author_user_id"),
     authorName: text("author_name").notNull().default(""),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     // Same-tenant Client relationship, ON DELETE CASCADE: deleting a client

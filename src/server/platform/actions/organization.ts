@@ -174,15 +174,22 @@ export const extendTrialAction = createPlatformAction({
           : before.serverNow;
       const newTrialEndsAt = new Date(base.getTime() + input.days * MS_PER_DAY);
       const trialStartedAt = before.trialStartedAt ?? before.serverNow;
+      // Bind ISO-8601 UTC strings, never bare Date objects. node-postgres
+      // serializes a Date in the PROCESS timezone; the columns are timestamptz
+      // (migration 0018) so either form is now interpreted correctly, but the
+      // explicit UTC string keeps the written instant independent of where the
+      // server happens to run. See the timestamp audit in the launch handoff.
+      const trialStartedAtUtc = trialStartedAt.toISOString();
+      const newTrialEndsAtUtc = newTrialEndsAt.toISOString();
 
       await tx.execute(sql`
         insert into organization_accounts (organization_id, plan, commercial_access, trial_started_at, trial_ends_at)
-        values (${input.organizationId}, 'STANDARD', 'trial', ${trialStartedAt}, ${newTrialEndsAt})
+        values (${input.organizationId}, 'STANDARD', 'trial', ${trialStartedAtUtc}, ${newTrialEndsAtUtc})
         on conflict (organization_id) do update
           set plan = 'STANDARD',
               commercial_access = 'trial',
-              trial_started_at = coalesce(organization_accounts.trial_started_at, ${trialStartedAt}),
-              trial_ends_at = ${newTrialEndsAt},
+              trial_started_at = coalesce(organization_accounts.trial_started_at, ${trialStartedAtUtc}),
+              trial_ends_at = ${newTrialEndsAtUtc},
               activated_at = null,
               updated_at = now()
       `);

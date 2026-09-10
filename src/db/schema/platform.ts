@@ -36,7 +36,7 @@ export const platformAdmins = pgTable("platform_admins", {
   email: text("email").notNull().default(""),
   // Free-text provenance ("bootstrap", "granted by X on ...").
   note: text("note"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // organization_accounts — per-tenant SaaS account state (1:1 with a Better Auth
@@ -56,19 +56,19 @@ export const organizationAccounts = pgTable(
     // CommercialAccess: 'trial' | 'active'. Trial expiration is derived from
     // trial_ends_at and server time; 'trial_expired' is NOT stored.
     commercialAccess: text("commercial_access").notNull().default("trial"),
-    trialStartedAt: timestamp("trial_started_at").defaultNow(),
-    trialEndsAt: timestamp("trial_ends_at").default(sql`now() + interval '14 days'`),
-    activatedAt: timestamp("activated_at"),
+    trialStartedAt: timestamp("trial_started_at", { withTimezone: true }).defaultNow(),
+    trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }).default(sql`now() + interval '14 days'`),
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
     // 'active' | 'suspended'. Suspension blocks tenant app access; it never
     // deletes or alters business data.
     status: text("status").notNull().default("active"),
-    suspendedAt: timestamp("suspended_at"),
+    suspendedAt: timestamp("suspended_at", { withTimezone: true }),
     suspendedReason: text("suspended_reason"),
     // Private control-plane note (invisible to tenant members). NOT the tenant's
     // client notes table.
     internalNote: text("internal_note"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
@@ -116,7 +116,7 @@ export const platformAuditEvents = pgTable(
     organizationName: text("organization_name"),
     // Structured, non-sensitive change description.
     metadata: jsonb("metadata").notNull().default({}),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     check(
@@ -166,7 +166,7 @@ export const trialApplications = pgTable(
     offersPerMonth: integer("offers_per_month"),
     message: text("message"),
     status: text("status").notNull().default("pending"),
-    reviewedAt: timestamp("reviewed_at"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     reviewedByUserId: uuid("reviewed_by_user_id"),
     reviewedByEmail: text("reviewed_by_email"),
     internalReviewNote: text("internal_review_note"),
@@ -183,13 +183,13 @@ export const trialApplications = pgTable(
     // Stable, application-derived organization slug. Persisted on the FIRST
     // claim and never rewritten — this is the exactly-once key.
     provisioningSlug: text("provisioning_slug"),
-    provisioningStartedAt: timestamp("provisioning_started_at"),
-    provisionedAt: timestamp("provisioned_at"),
+    provisioningStartedAt: timestamp("provisioning_started_at", { withTimezone: true }),
+    provisionedAt: timestamp("provisioned_at", { withTimezone: true }),
     provisioningAttempts: integer("provisioning_attempts").notNull().default(0),
     // Sanitized failure CATEGORY only — never a raw DB/Better Auth error string.
     provisioningErrorCode: text("provisioning_error_code"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
@@ -245,11 +245,11 @@ export const demoRequests = pgTable(
     country: text("country").notNull(),
     message: text("message"),
     status: text("status").notNull().default("new"),
-    statusChangedAt: timestamp("status_changed_at"),
+    statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
     statusChangedByUserId: uuid("status_changed_by_user_id"),
     statusChangedByEmail: text("status_changed_by_email"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
