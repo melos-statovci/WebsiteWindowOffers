@@ -57,11 +57,32 @@ migrations, tests, and source code remain authoritative.
    - The applicant activates their own organization in their OWN session; a
      platform admin never mutates another user's session.
 
-5. **Trial UX + launch hardening** — NEXT
-   - Polish trial messaging, expiration states, support handoff, and regression
-     coverage.
+5. **Trial UX + launch hardening** — COMPLETE
+   - Timestamp semantics deliberately resolved: every absolute-instant column
+     is `timestamptz` (migration 0018), business calendar dates stay `date`.
+     The conversion was proven, not assumed. Instant behaviour is identical
+     under UTC, Europe/Zurich, America/New_York and Pacific/Kiritimati.
+   - Trial indicator is subtle, server-authoritative and grammatically correct
+     in Albanian; near expiry it becomes more noticeable without reducing any
+     functionality.
+   - `/trial-expired` is Albanian, theme-correct, truthful about data being
+     kept, and offers only actions that actually work.
+   - Active conversion, trial extension and suspension/reactivation are
+     coherent end to end; an activated customer is never described in trial
+     language and never sees meaningless Extend Trial controls.
+   - Applicant post-approval states are honest, including a distinct
+     provisioning-failure state that no longer claims access is being prepared.
+   - Platform operators can now see failed provisioning, which was previously
+     invisible because such an application still reads as `approved`.
+   - One configured support contact replaces five hard-coded copies; the public
+     site has a contact and legal links for the first time.
+   - `/privacy` and `/terms` exist in both locales as clearly-flagged drafts.
+   - Launch-critical failure states are safe; no raw SQL, stack trace, digest,
+     internal id or auth internal reaches any customer-facing surface.
+   - The full customer journey passes as one continuous test, and business data
+     provably survives expiry, activation, suspension and re-login.
 
-6. **Production deployment**
+6. **Production deployment** — NEXT
    - Production environment, migrations, secrets, and deployment validation.
 
 ## Locked Launch Decisions
@@ -83,3 +104,10 @@ migrations, tests, and source code remain authoritative.
   transfer are explicitly out of scope.
 - `ensureOrganizationAccount()` is the single writer of the trial window; no
   other code computes trial start/end dates.
+- Absolute instants are `timestamptz`. Business calendar dates (invoice issue
+  and due dates, payment date) stay `date`. Drizzle columns for instants must
+  carry `{ withTimezone: true }`, or the read path produces an Invalid Date.
+- Public legal pages are pre-review DRAFTS, marked `robots: index: false`
+  until a human legal review signs them off.
+- `KORNIZO_SUPPORT_EMAIL` is the single switch for the customer-facing contact;
+  it defaults to the address the application already shipped with.
