@@ -7,12 +7,11 @@ import { getPlatformOverview } from "@/server/platform/organizations";
 import { getAcquisitionOverview } from "@/server/acquisition";
 import { PLAN_TIERS } from "@/lib/plan";
 import { CommercialAccessBadge, Metric, PanelCard, PlanBadge, StatusBadge } from "./ui";
+import { isoDay } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-function fmtDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+
 
 export default async function PlatformDashboardPage() {
   const [o, acquisition] = await Promise.all([getPlatformOverview(), getAcquisitionOverview()]);
@@ -34,7 +33,28 @@ export default async function PlatformDashboardPage() {
         <Metric label="Përdorues" value={o.totalUsers} />
         <Metric label="Trial aplikime" value={acquisition.pendingTrialApplications} tone={acquisition.pendingTrialApplications ? "amber" : "default"} />
         <Metric label="Demo të reja" value={acquisition.newDemoRequests} tone={acquisition.newDemoRequests ? "amber" : "default"} />
+        <Metric
+          label="Provizionim i dështuar"
+          value={acquisition.failedProvisioning}
+          tone={acquisition.failedProvisioning ? "rose" : "default"}
+        />
       </div>
+
+      {acquisition.failedProvisioning > 0 ? (
+        <PanelCard title="Kërkon veprim">
+          <p className="text-sm text-slate-500">
+            {acquisition.failedProvisioning} aplikim(e) të aprovuar nuk u provizionuan.
+            Aplikanti është në pritje dhe statusi i vendimit tregon “approved”, ndaj
+            problemi nuk shfaqet në numrat e vendimeve.
+          </p>
+          <Link
+            href="/platform/applications?tab=trial&provisioning=failed"
+            className="mt-3 inline-flex text-sm font-semibold text-violet-500 hover:text-violet-600"
+          >
+            Shiko aplikimet e dështuara →
+          </Link>
+        </PanelCard>
+      ) : null}
 
       <PanelCard
         title="Plani i produktit"
@@ -77,7 +97,7 @@ export default async function PlatformDashboardPage() {
                     <PlanBadge plan={org.plan} />
                     <CommercialAccessBadge access={org.effectiveCommercialAccess} />
                     <StatusBadge status={org.status} />
-                    <span className="w-20 text-right text-xs text-slate-400">{fmtDate(org.createdAt)}</span>
+                    <span className="w-20 text-right text-xs text-slate-400">{isoDay(org.createdAt)}</span>
                   </span>
                 </Link>
               </li>

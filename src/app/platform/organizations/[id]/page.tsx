@@ -123,6 +123,10 @@ export default async function OrganizationDetailPage({ params }: { params: Promi
     </PanelCard>
   );
 
+  // "active" here is the DERIVED effective access, so a customer activated
+  // after their trial lapsed is correctly shown as active rather than expired.
+  const isActiveCustomer = org.effectiveCommercialAccess === "active";
+
   const account = (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-2">
@@ -132,29 +136,57 @@ export default async function OrganizationDetailPage({ params }: { params: Promi
           </p>
         </PanelCard>
         <PanelCard title="Qasja komerciale">
+          {/* An ACTIVE customer must not read as a trial. Once activated, the
+              trial window is HISTORY: it no longer governs access, so it is
+              labelled as the previous trial and the days-remaining row (which
+              would be meaningless) is not shown at all. Before Milestone 5 this
+              panel showed live-looking "Fillimi/Fundi i trial" rows to
+              activated customers. */}
           <div className="mb-3 space-y-2 text-sm text-slate-500">
             <div className="flex justify-between gap-4">
               <span>Gjendja</span>
               <CommercialAccessBadge access={org.effectiveCommercialAccess} />
             </div>
-            <div className="flex justify-between gap-4">
-              <span>Fillimi i trial</span>
-              <span className="text-slate-900">{fmt(org.trialStartedAt)}</span>
-            </div>
-            <div className="flex justify-between gap-4">
-              <span>Fundi i trial</span>
-              <span className="text-slate-900">{fmt(org.trialEndsAt)}</span>
-            </div>
-            {org.effectiveCommercialAccess === "trial" && (
-              <div className="flex justify-between gap-4">
-                <span>Ditë të mbetura</span>
-                <span className="text-slate-900">{org.trialDaysRemaining}</span>
-              </div>
+            {isActiveCustomer ? (
+              <>
+                <div className="flex justify-between gap-4">
+                  <span>Plani</span>
+                  <span className="text-slate-900">{STANDARD_PLAN_NAME}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span>Klient aktiv prej</span>
+                  <span className="text-slate-900">{fmt(org.activatedAt)}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span>Trial i mëparshëm</span>
+                  <span className="text-slate-900">
+                    {org.trialStartedAt || org.trialEndsAt
+                      ? `${fmtDate(org.trialStartedAt)} → ${fmtDate(org.trialEndsAt)}`
+                      : "—"}
+                  </span>
+                </div>
+                <p className="pt-1 text-xs text-slate-400">
+                  Skadimi i trial nuk kufizon më qasjen e këtij klienti.
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between gap-4">
+                  <span>Fillimi i trial</span>
+                  <span className="text-slate-900">{fmt(org.trialStartedAt)}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span>Fundi i trial</span>
+                  <span className="text-slate-900">{fmt(org.trialEndsAt)}</span>
+                </div>
+                {org.effectiveCommercialAccess === "trial" && (
+                  <div className="flex justify-between gap-4">
+                    <span>Ditë të mbetura</span>
+                    <span className="text-slate-900">{org.trialDaysRemaining}</span>
+                  </div>
+                )}
+              </>
             )}
-            <div className="flex justify-between gap-4">
-              <span>Aktivizuar</span>
-              <span className="text-slate-900">{fmt(org.activatedAt)}</span>
-            </div>
           </div>
           <LifecycleControl
             organizationId={org.id}

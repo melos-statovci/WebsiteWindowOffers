@@ -320,10 +320,19 @@ export type ApplicationSort = "created_desc" | "created_asc" | "company_asc";
 export async function listTrialApplications(input: {
   q?: string;
   status?: TrialApplicationStatus | "all";
+  /**
+   * Provisioning filter, independent of the decision status. Needed because an
+   * application whose provisioning failed still has status `approved`, so no
+   * decision filter can isolate it.
+   */
+  provisioning?: TrialProvisioningStatus | "all";
   sort?: ApplicationSort;
 } = {}): Promise<TrialApplicationRow[]> {
   const filters = [];
   if (input.status && input.status !== "all") filters.push(eq(trialApplications.status, input.status));
+  if (input.provisioning && input.provisioning !== "all") {
+    filters.push(eq(trialApplications.provisioningStatus, input.provisioning));
+  }
   const q = input.q?.trim();
   if (q) {
     filters.push(
@@ -394,13 +403,24 @@ export async function getDemoRequest(id: string): Promise<DemoRequestRow | null>
 export async function getAcquisitionOverview(): Promise<{
   pendingTrialApplications: number;
   newDemoRequests: number;
+  failedProvisioning: number;
 }> {
-  const [trial, demo] = await Promise.all([
+  // `failedProvisioning` answers the one operator question the dashboard could
+  // not previously answer: "did provisioning fail?". An application approved by
+  // a human whose tenant never got created is an APPLICANT WAITING ON US with
+  // nothing on screen to say so — it is not visible in any status count,
+  // because its decision status is a perfectly healthy `approved`.
+  const [trial, demo, failed] = await Promise.all([
     db.select({ n: sql<number>`count(*)::int` }).from(trialApplications).where(eq(trialApplications.status, "pending")),
     db.select({ n: sql<number>`count(*)::int` }).from(demoRequests).where(eq(demoRequests.status, "new")),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(trialApplications)
+      .where(eq(trialApplications.provisioningStatus, "failed")),
   ]);
   return {
     pendingTrialApplications: Number(trial[0]?.n ?? 0),
     newDemoRequests: Number(demo[0]?.n ?? 0),
+    failedProvisioning: Number(failed[0]?.n ?? 0),
   };
 }

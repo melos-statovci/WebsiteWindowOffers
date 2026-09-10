@@ -8,6 +8,7 @@ import {
   type TrialProvisioningStatus,
 } from "@/server/acquisition";
 import { PanelCard } from "../ui";
+import { isoDay } from "@/lib/format";
 import { DemoStatusControl } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -15,9 +16,6 @@ export const dynamic = "force-dynamic";
 const inputCls =
   "h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-violet-500 focus:outline-none";
 
-function fmtDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 function TrialBadge({ status }: { status: TrialApplicationStatus }) {
   const cls =
@@ -57,20 +55,29 @@ function DemoBadge({ status }: { status: DemoRequestStatus }) {
 export default async function ApplicationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; q?: string; trialStatus?: string; demoStatus?: string; sort?: string }>;
+  searchParams: Promise<{ tab?: string; q?: string; trialStatus?: string; provisioning?: string; demoStatus?: string; sort?: string }>;
 }) {
   const sp = await searchParams;
   const tab = sp.tab === "demo" ? "demo" : "trial";
   const q = sp.q?.trim() ?? "";
   const trialStatus: TrialApplicationStatus | "all" =
     sp.trialStatus === "pending" || sp.trialStatus === "approved" || sp.trialStatus === "rejected" ? sp.trialStatus : "all";
+  // Provisioning is filtered separately from the decision: a failed
+  // provisioning still reads as `approved`, so it cannot be found any other way.
+  const provisioning: TrialProvisioningStatus | "all" =
+    sp.provisioning === "provisioned" ||
+    sp.provisioning === "failed" ||
+    sp.provisioning === "in_progress" ||
+    sp.provisioning === "not_started"
+      ? sp.provisioning
+      : "all";
   const demoStatus: DemoRequestStatus | "all" =
     sp.demoStatus === "new" || sp.demoStatus === "contacted" || sp.demoStatus === "closed" ? sp.demoStatus : "all";
   const sort: ApplicationSort =
     sp.sort === "created_asc" || sp.sort === "company_asc" ? sp.sort : "created_desc";
 
   const [trials, demos] = await Promise.all([
-    listTrialApplications({ q, status: trialStatus, sort }),
+    listTrialApplications({ q, status: trialStatus, provisioning, sort }),
     listDemoRequests({ q, status: demoStatus, sort }),
   ]);
 
@@ -102,6 +109,18 @@ export default async function ApplicationsPage({
               <option value="pending">Pending</option>
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
+            </select>
+          </div>
+        ) : null}
+        {tab === "trial" ? (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-400">Provizionimi</label>
+            <select name="provisioning" defaultValue={provisioning} className={inputCls}>
+              <option value="all">Të gjitha</option>
+              <option value="provisioned">Trial aktiv</option>
+              <option value="failed">Dështoi</option>
+              <option value="in_progress">Në proces</option>
+              <option value="not_started">Pa provizionim</option>
             </select>
           </div>
         ) : (
@@ -171,7 +190,7 @@ export default async function ApplicationsPage({
                           {app.status === "approved" ? <ProvisioningBadge status={app.provisioningStatus} /> : null}
                         </div>
                       </td>
-                      <td className="py-3 pr-4 text-slate-400">{fmtDate(app.createdAt)}</td>
+                      <td className="py-3 pr-4 text-slate-400">{isoDay(app.createdAt)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -194,7 +213,7 @@ export default async function ApplicationsPage({
                         <DemoBadge status={demo.status} />
                       </div>
                       <p className="mt-1 text-sm text-slate-500">{demo.name} · {demo.email} · {demo.phone}</p>
-                      <p className="mt-1 text-xs text-slate-400">{demo.country} · {fmtDate(demo.createdAt)}</p>
+                      <p className="mt-1 text-xs text-slate-400">{demo.country} · {isoDay(demo.createdAt)}</p>
                       {demo.message ? <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">{demo.message}</p> : null}
                     </div>
                     <DemoStatusControl id={demo.id} status={demo.status} />

@@ -35,8 +35,9 @@ export function PanelCard({
   );
 }
 
-export function Metric({ label, value, tone = "default" }: { label: string; value: number | string; tone?: "default" | "emerald" | "amber" }) {
-  const valueColor = tone === "emerald" ? "text-emerald-500" : tone === "amber" ? "text-amber-500" : "text-slate-900";
+export function Metric({ label, value, tone = "default" }: { label: string; value: number | string; tone?: "default" | "emerald" | "amber" | "rose" }) {
+  const valueColor =
+    tone === "emerald" ? "text-emerald-500" : tone === "amber" ? "text-amber-500" : tone === "rose" ? "text-rose-500" : "text-slate-900";
   return (
     <Card className="p-5">
       <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</div>
