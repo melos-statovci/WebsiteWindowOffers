@@ -85,6 +85,8 @@ afterAll(async () => {
       `delete from platform_audit_events where metadata->>'trialApplicationId' = $1`,
       [trialApplicationId],
     );
+    // Unlink before TestCleanup drops the organization (FK is ON DELETE RESTRICT).
+    await ownerPool.query(`delete from trial_applications where id = $1`, [trialApplicationId]);
   }
   if (demoRequestId) {
     await ownerPool.query(
@@ -214,23 +216,28 @@ describe("platform application review", () => {
     if (!res.ok) expect(res.error.code).toBe("FORBIDDEN");
   });
 
-  it("Platform Admin approves a pending application and writes audit without provisioning", async () => {
+  it("Platform Admin approval records the decision, provisions a tenant, and never logs the internal note", async () => {
     const before = (await listAuditEvents({ action: "TRIAL_APPLICATION_APPROVED" })).total;
     const res = await reviewTrialApplicationAction(
       { id: trialApplicationId, decision: "approved", internalReviewNote: "internal only" },
       H(platformCookie),
     );
     expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.provisioning?.state).toBe("provisioned");
 
-    const row = await ownerPool.query(`select status, reviewed_by_user_id, reviewed_by_email from trial_applications where id=$1`, [trialApplicationId]);
+    const row = await ownerPool.query(
+      `select status, reviewed_by_user_id, reviewed_by_email, organization_id, provisioning_status
+       from trial_applications where id=$1`,
+      [trialApplicationId],
+    );
     expect(row.rows[0].status).toBe("approved");
     expect(row.rows[0].reviewed_by_user_id).toBe(platformUserId);
     expect(row.rows[0].reviewed_by_email).toBe(platformEmail);
-
-    const applicantOrgs = await auth.api.listOrganizations({ headers: H(applicantCookie) });
-    expect(applicantOrgs).toHaveLength(0);
-    const memberCount = await ownerPool.query(`select count(*)::int as n from member where user_id=$1`, [applicantUserId]);
-    expect(memberCount.rows[0].n).toBe(0);
+    expect(row.rows[0].provisioning_status).toBe("provisioned");
+    expect(isUuid(row.rows[0].organization_id)).toBe(true);
+    // Track for teardown: approval created a real organization.
+    cleanup.org(row.rows[0].organization_id);
 
     const after = await listAuditEvents({ action: "TRIAL_APPLICATION_APPROVED" });
     expect(after.total).toBe(before + 1);
