@@ -2,11 +2,13 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/auth";
 import { SuspendedSignOut } from "@/app/suspended/sign-out";
+import { supportEmail } from "@/lib/support-contact";
 
 export default async function AccountNotReadyPage() {
   const h = await headers();
   const session = await auth.api.getSession({ headers: h });
   if (!session) redirect("/sign-in");
+  const email = supportEmail();
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
@@ -21,8 +23,8 @@ export default async function AccountNotReadyPage() {
         </p>
         <p className="mt-3 text-sm text-slate-500">
           Për ndihmë, na kontaktoni te{" "}
-          <a className="font-medium text-slate-900 underline" href="mailto:info@arios.systems">
-            info@arios.systems
+          <a className="font-medium text-slate-900 underline" href={`mailto:${email}`}>
+            {email}
           </a>
           .
         </p>
