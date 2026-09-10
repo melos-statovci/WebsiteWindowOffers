@@ -22,6 +22,11 @@ const PUBLIC_PAGES = [
   "/terms",
   "/en/privacy",
   "/en/terms",
+  // General contact: a visitor with a question must be able to reach Kornizo
+  // without an account, and it is the support fallback when no support address
+  // is configured — so it can never require a session.
+  "/contact",
+  "/en/contact",
 ];
 
 export default function proxy(req: NextRequest) {

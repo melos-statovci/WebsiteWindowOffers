@@ -2,13 +2,13 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/auth";
 import { SuspendedSignOut } from "@/app/suspended/sign-out";
-import { supportEmail } from "@/lib/support-contact";
+import { configuredSupportEmail, contactPath } from "@/lib/support-contact";
 
 export default async function AccountNotReadyPage() {
   const h = await headers();
   const session = await auth.api.getSession({ headers: h });
   if (!session) redirect("/sign-in");
-  const email = supportEmail();
+  const email = configuredSupportEmail();
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
@@ -22,10 +22,19 @@ export default async function AccountNotReadyPage() {
           në aplikacion nuk hapet derisa ekipi i platformës ta përgatisë llogarinë.
         </p>
         <p className="mt-3 text-sm text-slate-500">
-          Për ndihmë, na kontaktoni te{" "}
-          <a className="font-medium text-slate-900 underline" href={`mailto:${email}`}>
-            {email}
-          </a>
+          Për ndihmë, na kontaktoni{" "}
+          {email ? (
+            <>
+              te{" "}
+              <a className="font-medium text-slate-900 underline" href={`mailto:${email}`}>
+                {email}
+              </a>
+            </>
+          ) : (
+            <a className="font-medium text-slate-900 underline" href={contactPath("sq")}>
+              përmes formularit të kontaktit
+            </a>
+          )}
           .
         </p>
         <div className="mt-6">

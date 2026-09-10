@@ -10,7 +10,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/auth";
 import { getAccountState } from "@/server/platform/accounts";
-import { supportEmail } from "@/lib/support-contact";
+import { configuredSupportEmail, contactPath } from "@/lib/support-contact";
 import { SuspendedSignOut } from "./sign-out";
 
 export default async function SuspendedPage() {
@@ -25,7 +25,7 @@ export default async function SuspendedPage() {
   if (!activeId) redirect("/request-trial");
   const account = await getAccountState(activeId);
   if (account.status !== "suspended") redirect("/dashboard");
-  const email = supportEmail();
+  const email = configuredSupportEmail();
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
@@ -44,10 +44,19 @@ export default async function SuspendedPage() {
           </p>
         ) : null}
         <p className="mt-3 text-sm text-slate-500">
-          Për ta riaktivizuar llogarinë, na kontaktoni te{" "}
-          <a className="font-medium text-slate-900 underline" href={`mailto:${email}`}>
-            {email}
-          </a>
+          Për ta riaktivizuar llogarinë, na kontaktoni{" "}
+          {email ? (
+            <>
+              te{" "}
+              <a className="font-medium text-slate-900 underline" href={`mailto:${email}`}>
+                {email}
+              </a>
+            </>
+          ) : (
+            <a className="font-medium text-slate-900 underline" href={contactPath("sq")}>
+              përmes formularit të kontaktit
+            </a>
+          )}
           .
         </p>
         <div className="mt-6">

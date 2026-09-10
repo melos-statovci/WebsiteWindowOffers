@@ -121,7 +121,11 @@ export const platformAuditEvents = pgTable(
   (table) => [
     check(
       "platform_audit_events_action_chk",
-      sql`${table.action} in ('PLAN_CHANGED','ORGANIZATION_SUSPENDED','ORGANIZATION_REACTIVATED','INTERNAL_NOTE_UPDATED','CUSTOMER_ACTIVATED','TRIAL_EXTENDED','TRIAL_APPLICATION_APPROVED','TRIAL_APPLICATION_REJECTED','DEMO_REQUEST_STATUS_CHANGED','TRIAL_APPLICATION_PROVISIONED','TRIAL_APPLICATION_PROVISIONING_FAILED')`,
+      // 'DEMO_REQUEST_STATUS_CHANGED' is RETAINED for historical rows only. The
+      // audit trail is append-only and immutable even to the application, so
+      // rewriting old event names is not an option and would be dishonest
+      // anyway. New code emits 'CONTACT_REQUEST_STATUS_CHANGED'.
+      sql`${table.action} in ('PLAN_CHANGED','ORGANIZATION_SUSPENDED','ORGANIZATION_REACTIVATED','INTERNAL_NOTE_UPDATED','CUSTOMER_ACTIVATED','TRIAL_EXTENDED','TRIAL_APPLICATION_APPROVED','TRIAL_APPLICATION_REJECTED','DEMO_REQUEST_STATUS_CHANGED','CONTACT_REQUEST_STATUS_CHANGED','TRIAL_APPLICATION_PROVISIONED','TRIAL_APPLICATION_PROVISIONING_FAILED')`,
     ),
     index("platform_audit_events_created_idx").on(table.createdAt),
     index("platform_audit_events_org_idx").on(table.organizationId),
@@ -229,20 +233,45 @@ export const trialApplications = pgTable(
   ],
 );
 
-// demo_requests — lightweight public demo/contact requests. These never create
-// a Better Auth user and never grant tenant access.
-export const demoRequests = pgTable(
-  "demo_requests",
+// contact_requests — every public inbound message that is NOT a trial
+// application. One table, one lifecycle, discriminated by `intent`, so a future
+// contact reason does not need its own database system.
+//
+// Milestone 5.5 replaced the dedicated `demo_requests` table with this one
+// (migration 0019, a RENAME that preserved the existing rows). "Request a demo"
+// remains a real, visible, distinct public action — it simply persists as
+// `intent = 'demo'`.
+//
+// NOTHING HERE CREATES TENANCY. No Better Auth user, no organization, no
+// membership, no organization_accounts row, no pricing, no trial. That is what
+// separates a contact request from a trial application.
+//
+// No RLS: this is control-plane data like platform_admins and
+// platform_audit_events, readable only behind the platform-admin gate. The
+// runtime role holds SELECT/INSERT/UPDATE and no DELETE.
+//
+// CASING: `intent` is stored lower-case to match `status` on this same table
+// ('new'/'contacted'/'closed'). Display casing is a UI concern.
+export const contactRequests = pgTable(
+  "contact_requests",
   {
     id: uuid("id")
       .default(sql`gen_random_uuid()`)
       .primaryKey(),
+    // 'demo'    — visitor wants Kornizo demonstrated before committing.
+    // 'general' — visitor has a question / needs support.
+    // Deliberately NO default: an insert must state which it is, so a general
+    // contact can never be silently filed as a sales demo lead.
+    intent: text("intent").notNull(),
     name: text("name").notNull(),
-    companyName: text("company_name").notNull(),
+    // Nullable because a general question does not require a company, a phone
+    // or a country. The intent CHECKs below still require them for a demo, so
+    // the proven demo shape is enforced by the database, not just by Zod.
+    companyName: text("company_name"),
     email: text("email").notNull(),
     normalizedEmail: text("normalized_email").notNull(),
-    phone: text("phone").notNull(),
-    country: text("country").notNull(),
+    phone: text("phone"),
+    country: text("country"),
     message: text("message"),
     status: text("status").notNull().default("new"),
     statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
@@ -255,9 +284,36 @@ export const demoRequests = pgTable(
       .notNull(),
   },
   (table) => [
-    uniqueIndex("demo_requests_normalized_email_uidx").on(table.normalizedEmail),
-    index("demo_requests_status_idx").on(table.status),
-    index("demo_requests_created_idx").on(table.createdAt),
-    check("demo_requests_status_chk", sql`${table.status} in ('new','contacted','closed')`),
+    // Duplicate suppression, now scoped to (email, intent) and only while the
+    // request is still OPEN.
+    //
+    // The old index was UNIQUE on normalized_email alone, table-wide and
+    // forever. Carried into a generic contact table that would mean: asking for
+    // a demo permanently blocks you from ever sending a support question, and a
+    // contact form accepts exactly ONE message per person for all time. Scoping
+    // by intent fixes the first; excluding 'closed' fixes the second, by using
+    // the lifecycle the operator already drives — once a conversation is closed,
+    // the same person may start a new one.
+    //
+    // Demo behaviour is unchanged in the case that matters: an OPEN demo
+    // request still suppresses a repeat submission.
+    uniqueIndex("contact_requests_open_email_intent_uidx")
+      .on(table.normalizedEmail, table.intent)
+      .where(sql`status <> 'closed'`),
+    index("contact_requests_status_idx").on(table.status),
+    index("contact_requests_intent_idx").on(table.intent),
+    index("contact_requests_created_idx").on(table.createdAt),
+    check("contact_requests_status_chk", sql`${table.status} in ('new','contacted','closed')`),
+    check("contact_requests_intent_chk", sql`${table.intent} in ('demo','general')`),
+    // A demo request must still carry the fields the demo funnel collects.
+    check(
+      "contact_requests_demo_shape_chk",
+      sql`${table.intent} <> 'demo' or (${table.companyName} is not null and ${table.phone} is not null and ${table.country} is not null)`,
+    ),
+    // A general question without a question is not a question.
+    check(
+      "contact_requests_general_shape_chk",
+      sql`${table.intent} <> 'general' or ${table.message} is not null`,
+    ),
   ],
 );

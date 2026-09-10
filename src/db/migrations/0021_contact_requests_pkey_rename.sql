@@ -1,0 +1,12 @@
+-- 0021_contact_requests_pkey_rename
+--
+-- Cosmetic tail of the Milestone 5.5 rename. `ALTER TABLE ... RENAME TO` in
+-- 0019 renamed the table but not its primary-key constraint, so a table called
+-- `contact_requests` was still carrying `demo_requests_pkey`. Drizzle does not
+-- model that constraint's name, which is why drizzle-kit never emitted this and
+-- why the 0021 snapshot is intentionally identical to 0020's.
+--
+-- Renaming the constraint renames its backing index with it. No data is
+-- touched, and this is the last piece of dead demo-domain naming in the
+-- database.
+ALTER TABLE "contact_requests" RENAME CONSTRAINT "demo_requests_pkey" TO "contact_requests_pkey";

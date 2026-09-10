@@ -28,6 +28,47 @@ const claimStrings = collectStrings(publicMarketing)
   .filter((line) => !DENIAL.test(line))
   .join("\n");
 
+describe("acquisition CTA structure (Milestone 5.5)", () => {
+  it("keeps BOTH Request Free Trial and Request a Demo — they mean different things", () => {
+    // Trial: the visitor wants to use Kornizo themselves (account -> approval
+    // -> 14-day trial). Demo: the visitor wants Kornizo shown to them first (no
+    // account, no tenant). Neither replaces the other, and neither was replaced
+    // by "Contact us".
+    expect(publicMarketing.sq.actions.requestTrial).toBe("Kërko provë falas");
+    expect(publicMarketing.sq.actions.requestDemo).toBe("Kërko një demo");
+    expect(publicMarketing.en.actions.requestTrial).toBe("Request free trial");
+    expect(publicMarketing.en.actions.requestDemo).toBe("Request a demo");
+  });
+
+  it("never says 'book a demo' — there is no scheduling system", () => {
+    // Promising a booking with no calendar behind it would be a lie.
+    expect(claimStrings).not.toMatch(/book a demo|rezervo.*demo|schedule a demo|caktoni.*demo/i);
+  });
+
+  it("promises no response time or meeting duration", () => {
+    expect(claimStrings).not.toMatch(/within 24 hours|brenda 24 or/i);
+    expect(claimStrings).not.toMatch(/\b\d+[- ]?(minute|minutësh|min)\b/i);
+  });
+
+  it("offers Contact in navigation and footer, not as a third hero CTA", () => {
+    // The hero keeps exactly two actions so the Trial/Demo hierarchy stays
+    // obvious; general Contact lives in nav + footer.
+    for (const locale of ["sq", "en"] as const) {
+      const content = publicMarketing[locale];
+      const contactNav = content.nav.filter((item) => /^(Kontakt|Contact)$/.test(item.label));
+      expect(contactNav).toHaveLength(1);
+      expect(contactNav[0].href).toBe(locale === "en" ? "/en/contact" : "/contact");
+      expect(content.footer.contactLabel).toBe(locale === "en" ? "Contact" : "Kontakt");
+    }
+  });
+
+  it("keeps the locale-correct contact route (no /sq, no cross-locale links)", () => {
+    expect(publicMarketing.sq.nav.some((i) => i.href === "/en/contact")).toBe(false);
+    expect(publicMarketing.en.nav.some((i) => i.href === "/contact")).toBe(false);
+    expect(JSON.stringify(publicMarketing)).not.toMatch(/"\/sq/);
+  });
+});
+
 describe("public marketing launch constraints", () => {
   it("links to privacy and terms in the footer of both languages", () => {
     // A launch-ready public site needs reachable legal pages; before

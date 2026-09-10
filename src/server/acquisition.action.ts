@@ -4,11 +4,13 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import {
   activateProvisionedOrganizationAction,
-  submitDemoRequestAction,
+  submitDemoContactRequestAction,
+  submitGeneralContactRequestAction,
   submitTrialApplicationAction,
 } from "@/server/acquisition";
 import type {
-  DemoRequestSubmitInput,
+  DemoContactRequestInput,
+  GeneralContactRequestInput,
   TrialApplicationSubmitInput,
 } from "@/domain/validation/acquisition";
 
@@ -37,8 +39,19 @@ export async function activateProvisionedOrganization() {
   return res;
 }
 
-export async function submitDemoRequest(input: DemoRequestSubmitInput) {
-  const res = await submitDemoRequestAction(input);
+/** "Request a demo" — a contact request with intent 'demo'. No account, no tenant. */
+export async function submitDemoRequest(input: DemoContactRequestInput) {
+  const res = await submitDemoContactRequestAction(input);
+  if (res.ok) {
+    revalidatePath("/platform");
+    revalidatePath("/platform/applications");
+  }
+  return res;
+}
+
+/** "Contact Kornizo" — a contact request with intent 'general'. No account, no tenant. */
+export async function submitGeneralContactRequest(input: GeneralContactRequestInput) {
+  const res = await submitGeneralContactRequestAction(input);
   if (res.ok) {
     revalidatePath("/platform");
     revalidatePath("/platform/applications");

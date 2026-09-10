@@ -144,6 +144,31 @@ describe("legal drafts — no fabricated compliance claims", () => {
   });
 });
 
+describe("legal drafts — Milestone 5.5 contact terminology", () => {
+  it("describes contact-request data rather than a demo-only concept", () => {
+    // The data flow changed: one contact_requests table with a demo/general
+    // intent. The privacy draft must describe what is actually collected.
+    expect(fullText(legalContent.en.privacy)).toMatch(/Contact request data/i);
+    expect(fullText(legalContent.en.privacy)).toMatch(/both demo requests and general questions/i);
+    expect(fullText(legalContent.sq.privacy)).toMatch(/kërkesës për kontakt/i);
+  });
+
+  it("still states a contact request creates no account", () => {
+    expect(fullText(legalContent.en.privacy)).toMatch(/contact request does not create an account/i);
+    expect(fullText(legalContent.sq.privacy)).toMatch(/Kërkesa për kontakt nuk krijon llogari/);
+  });
+
+  it("offers a contact route without embedding an address in the copy", () => {
+    // The address is injected at render time only when configured; the copy
+    // itself carries no address and no Arios identity.
+    for (const [, doc] of documents) {
+      expect(doc.contactFallback.length).toBeGreaterThan(0);
+      expect(fullText(doc)).not.toMatch(/@/);
+      expect(fullText(doc)).not.toMatch(/arios/i);
+    }
+  });
+});
+
 describe("legal drafts — matches what the product actually does", () => {
   it("states the trial is 14 days and starts when the account is ready", () => {
     expect(legalContent.en.terms.sections.some((s) => /14-day trial/i.test(s.heading))).toBe(true);
@@ -175,6 +200,15 @@ describe("legal drafts — matches what the product actually does", () => {
   it("states there is no impersonation feature", () => {
     expect(fullText(legalContent.en.privacy)).toMatch(/no feature for signing in as you/i);
     expect(fullText(legalContent.sq.privacy)).toMatch(/impersonim/);
+  });
+
+  it("introduces no automatic deletion or retention schedule", () => {
+    // No automatic deletion exists and none was added in Milestone 5.5.
+    for (const [, doc] of documents) {
+      const text = fullText(doc);
+      expect(text).not.toMatch(/automatically delet|fshihen automatikisht|auto-delete/i);
+      expect(text).not.toMatch(/after \d+ (days|months|years)/i);
+    }
   });
 
   it("admits openly where a decision has not been made", () => {

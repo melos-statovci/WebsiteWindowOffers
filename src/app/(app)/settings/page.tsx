@@ -14,7 +14,7 @@ import { STANDARD_FEATURES, STANDARD_PLAN_NAME, offerDesigns } from "@/lib/plan"
 import { eurAfter } from "@/lib/format";
 import { useApp } from "@/components/providers/providers";
 import { useAuth } from "@/components/providers/session-provider";
-import { useSupportEmail } from "@/components/providers/support-contact";
+import { useSupportContact } from "@/components/providers/support-contact";
 import { accessLine, daysRemaining } from "@/lib/trial-copy";
 import { isoDay } from "@/lib/format";
 import { authClient } from "@/auth/client";
@@ -321,7 +321,7 @@ function PerdoruesitPanel() {
 
 function AbonimiPanel() {
   const { effectiveCommercialAccess, trialDaysRemaining, trialEndsAt } = useAuth();
-  const email = useSupportEmail();
+  const support = useSupportContact();
   const accessText =
     effectiveCommercialAccess === "trial"
       ? `Trial · ${daysRemaining(trialDaysRemaining)}`
@@ -359,10 +359,9 @@ function AbonimiPanel() {
 
       <p className="text-xs text-slate-400">
         Menaxhimi i pagesave dhe faturimi automatik nuk janë aktivizuar ende. Për
-        vazhdim të trial, aktivizim klienti ose çdo pyetje për llogarinë, na
-        shkruani te{" "}
-        <a className="font-medium text-slate-500 underline" href={`mailto:${email}`}>
-          {email}
+        vazhdim të trial, aktivizim klienti ose çdo pyetje për llogarinë,{" "}
+        <a className="font-medium text-slate-500 underline" href={support.href}>
+          {support.email ? `na shkruani te ${support.email}` : "na kontaktoni"}
         </a>
         .
       </p>

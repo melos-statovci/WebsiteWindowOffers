@@ -1,15 +1,16 @@
 import Link from "next/link";
 import {
-  listDemoRequests,
+  listContactRequests,
   listTrialApplications,
   type ApplicationSort,
-  type DemoRequestStatus,
+  type ContactRequestIntent,
+  type ContactRequestStatus,
   type TrialApplicationStatus,
   type TrialProvisioningStatus,
 } from "@/server/acquisition";
-import { PanelCard } from "../ui";
+import { IntentBadge, PanelCard } from "../ui";
 import { isoDay } from "@/lib/format";
-import { DemoStatusControl } from "./actions";
+import { ContactStatusControl } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,7 @@ function ProvisioningBadge({ status }: { status: TrialProvisioningStatus }) {
   return <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-bold uppercase ${cls}`}>{label}</span>;
 }
 
-function DemoBadge({ status }: { status: DemoRequestStatus }) {
+function ContactStatusBadge({ status }: { status: ContactRequestStatus }) {
   const cls =
     status === "closed"
       ? "bg-slate-200 text-slate-600"
@@ -52,13 +53,14 @@ function DemoBadge({ status }: { status: DemoRequestStatus }) {
   return <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-bold uppercase ${cls}`}>{status}</span>;
 }
 
+
 export default async function ApplicationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; q?: string; trialStatus?: string; provisioning?: string; demoStatus?: string; sort?: string }>;
+  searchParams: Promise<{ tab?: string; q?: string; trialStatus?: string; provisioning?: string; contactStatus?: string; intent?: string; sort?: string }>;
 }) {
   const sp = await searchParams;
-  const tab = sp.tab === "demo" ? "demo" : "trial";
+  const tab = sp.tab === "contact" ? "contact" : "trial";
   const q = sp.q?.trim() ?? "";
   const trialStatus: TrialApplicationStatus | "all" =
     sp.trialStatus === "pending" || sp.trialStatus === "approved" || sp.trialStatus === "rejected" ? sp.trialStatus : "all";
@@ -71,14 +73,18 @@ export default async function ApplicationsPage({
     sp.provisioning === "not_started"
       ? sp.provisioning
       : "all";
-  const demoStatus: DemoRequestStatus | "all" =
-    sp.demoStatus === "new" || sp.demoStatus === "contacted" || sp.demoStatus === "closed" ? sp.demoStatus : "all";
+  const contactStatus: ContactRequestStatus | "all" =
+    sp.contactStatus === "new" || sp.contactStatus === "contacted" || sp.contactStatus === "closed"
+      ? sp.contactStatus
+      : "all";
+  const intent: ContactRequestIntent | "all" =
+    sp.intent === "demo" || sp.intent === "general" ? sp.intent : "all";
   const sort: ApplicationSort =
     sp.sort === "created_asc" || sp.sort === "company_asc" ? sp.sort : "created_desc";
 
-  const [trials, demos] = await Promise.all([
+  const [trials, contacts] = await Promise.all([
     listTrialApplications({ q, status: trialStatus, provisioning, sort }),
-    listDemoRequests({ q, status: demoStatus, sort }),
+    listContactRequests({ q, status: contactStatus, intent, sort }),
   ]);
 
   return (
@@ -86,13 +92,14 @@ export default async function ApplicationsPage({
       <div>
         <h1 className="font-heading text-2xl font-semibold text-slate-900">Applications</h1>
         <p className="mt-1 text-sm text-slate-400">
-          Trial Applications dhe Demo Requests në një inbox operativ.
+          Trial Applications dhe Contact Requests (demo + kontakt i përgjithshëm)
+          në një inbox operativ.
         </p>
       </div>
 
       <div className="flex flex-wrap gap-2">
         <Tab href="/platform/applications?tab=trial" active={tab === "trial"}>Trial Applications</Tab>
-        <Tab href="/platform/applications?tab=demo" active={tab === "demo"}>Demo Requests</Tab>
+        <Tab href="/platform/applications?tab=contact" active={tab === "contact"}>Contact Requests</Tab>
       </div>
 
       <form method="get" className="flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-slate-100 p-4">
@@ -126,7 +133,7 @@ export default async function ApplicationsPage({
         ) : (
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-400">Statusi</label>
-            <select name="demoStatus" defaultValue={demoStatus} className={inputCls}>
+            <select name="contactStatus" defaultValue={contactStatus} className={inputCls}>
               <option value="all">Të gjitha</option>
               <option value="new">New</option>
               <option value="contacted">Contacted</option>
@@ -134,6 +141,16 @@ export default async function ApplicationsPage({
             </select>
           </div>
         )}
+        {tab === "contact" ? (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-400">Arsyeja</label>
+            <select name="intent" defaultValue={intent} className={inputCls}>
+              <option value="all">Të gjitha</option>
+              <option value="demo">Demo</option>
+              <option value="general">Kontakt i përgjithshëm</option>
+            </select>
+          </div>
+        ) : null}
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-400">Rendit</label>
           <select name="sort" defaultValue={sort} className={inputCls}>
@@ -145,7 +162,7 @@ export default async function ApplicationsPage({
         <button type="submit" className="h-9 rounded-md bg-violet-500 px-4 text-sm font-medium text-white hover:bg-violet-600">
           Filtro
         </button>
-        {(q || trialStatus !== "all" || demoStatus !== "all" || sort !== "created_desc") && (
+        {(q || trialStatus !== "all" || provisioning !== "all" || contactStatus !== "all" || intent !== "all" || sort !== "created_desc") && (
           <Link href={`/platform/applications?tab=${tab}`} className="h-9 rounded-md border border-slate-200 px-4 text-sm leading-9 text-slate-500 hover:bg-slate-200">
             Pastro
           </Link>
@@ -199,27 +216,50 @@ export default async function ApplicationsPage({
           )}
         </PanelCard>
       ) : (
-        <PanelCard title={`Demo Requests (${demos.length})`}>
-          {demos.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-400">Asnjë Demo Request.</p>
+        <PanelCard title={`Contact Requests (${contacts.length})`}>
+          {contacts.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-400">Asnjë kërkesë kontakti.</p>
           ) : (
-            <div className="space-y-3">
-              {demos.map((demo) => (
-                <div key={demo.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="font-heading text-base font-semibold text-slate-900">{demo.companyName}</h2>
-                        <DemoBadge status={demo.status} />
-                      </div>
-                      <p className="mt-1 text-sm text-slate-500">{demo.name} · {demo.email} · {demo.phone}</p>
-                      <p className="mt-1 text-xs text-slate-400">{demo.country} · {isoDay(demo.createdAt)}</p>
-                      {demo.message ? <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">{demo.message}</p> : null}
-                    </div>
-                    <DemoStatusControl id={demo.id} status={demo.status} />
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-xs tracking-wide text-slate-400 uppercase">
+                    <th className="py-2 pr-4 font-medium">Kontakti</th>
+                    <th className="py-2 pr-4 font-medium">Kompania</th>
+                    <th className="py-2 pr-4 font-medium">Arsyeja</th>
+                    <th className="py-2 pr-4 font-medium">Statusi</th>
+                    <th className="py-2 pr-4 font-medium">Dërguar</th>
+                    <th className="py-2 pr-4 font-medium">Veprim</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contacts.map((request) => (
+                    <tr key={request.id} className="border-b border-slate-200/70 last:border-0 hover:bg-slate-50">
+                      <td className="py-3 pr-4">
+                        <Link
+                          href={`/platform/applications/contact/${request.id}`}
+                          className="font-medium text-slate-900 hover:text-violet-500"
+                        >
+                          {request.name}
+                        </Link>
+                        <div className="text-xs text-slate-400">{request.email}</div>
+                      </td>
+                      {/* A general question may legitimately have no company. */}
+                      <td className="py-3 pr-4 text-slate-600">{request.companyName ?? "—"}</td>
+                      <td className="py-3 pr-4">
+                        <IntentBadge intent={request.intent} />
+                      </td>
+                      <td className="py-3 pr-4">
+                        <ContactStatusBadge status={request.status} />
+                      </td>
+                      <td className="py-3 pr-4 text-slate-400">{isoDay(request.createdAt)}</td>
+                      <td className="py-3 pr-4">
+                        <ContactStatusControl id={request.id} status={request.status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </PanelCard>

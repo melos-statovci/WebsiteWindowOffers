@@ -14,6 +14,23 @@ describe("public/protected route proxy", () => {
     }
   });
 
+  it("allows the public contact page without a session cookie", () => {
+    // /contact is both a public acquisition surface and the support fallback
+    // when KORNIZO_SUPPORT_EMAIL is unset, so gating it would dead-end the very
+    // people it exists for.
+    for (const pathname of ["/contact", "/en/contact"]) {
+      const response = proxy(request(pathname));
+      expect(response.headers.get("location")).toBeNull();
+    }
+  });
+
+  it("keeps the demo request funnel public in both locales", () => {
+    for (const pathname of ["/request-demo", "/en/request-demo"]) {
+      const response = proxy(request(pathname));
+      expect(response.headers.get("location")).toBeNull();
+    }
+  });
+
   it("allows the public legal pages without a session cookie", () => {
     // A visitor deciding whether to sign up has to be able to read the privacy
     // policy and terms, and the public footer links to them.

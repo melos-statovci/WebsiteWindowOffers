@@ -391,11 +391,13 @@ export const publicMarketing = {
       { label: "Funksionet", href: navHrefs.features },
       { label: "Standard", href: navHrefs.standard },
       { label: "FAQ", href: navHrefs.faq },
+      // A real route, not a hash anchor: general contact is its own page.
+      { label: "Kontakt", href: "/contact" },
     ],
     actions: {
       signIn: "Hyr",
       requestTrial: "Kërko provë falas",
-      requestDemo: "Kërko demo",
+      requestDemo: "Kërko një demo",
       openNavigation: "Hap navigimin",
       homepageAria: "Ballina Kornizo",
     },
@@ -487,11 +489,12 @@ export const publicMarketing = {
       { label: "Features", href: navHrefs.features },
       { label: "Standard", href: navHrefs.standard },
       { label: "FAQ", href: navHrefs.faq },
+      { label: "Contact", href: "/en/contact" },
     ],
     actions: {
       signIn: "Sign in",
       requestTrial: "Request free trial",
-      requestDemo: "Request demo",
+      requestDemo: "Request a demo",
       openNavigation: "Open navigation",
       homepageAria: "Kornizo homepage",
     },

@@ -8,9 +8,9 @@ import type { PublicLocale } from "@/lib/public-routing";
 const text = {
   sq: {
     eyebrow: "Demo e produktit",
-    title: "Kërko një prezantim të Kornizo",
+    title: "Kërko një demo",
     description:
-      "Dërgoni të dhënat e kontaktit dhe kompanisë. Kjo kërkesë nuk krijon llogari, trial apo qasje në tenant.",
+      "Dërgoni të dhënat e kontaktit dhe kompanisë dhe do t'ju kontaktojmë për të organizuar demonstrimin. Kjo kërkesë nuk krijon llogari, provë apo qasje në aplikacion.",
     name: "Emri juaj",
     companyName: "Kompania",
     email: "Email biznesi",
@@ -20,15 +20,15 @@ const text = {
     optional: "opsionale",
     submit: "Dërgo kërkesën",
     loading: "Duke dërguar...",
-    success: "Kërkesa për demo u ruajt.",
-    duplicate: "Kemi tashmë një kërkesë demo për këtë email.",
+    success: "Kërkesa për demo u dërgua. Do t'ju kontaktojmë.",
+    duplicate: "Kemi tashmë një kërkesë demo të hapur për këtë email. Do t'ju kontaktojmë.",
     generic: "Kërkesa nuk u dërgua. Provoni përsëri.",
   },
   en: {
     eyebrow: "Product demo",
-    title: "Request a Kornizo demo",
+    title: "Request a demo",
     description:
-      "Send your contact and company details. This request does not create an account, a trial, or tenant access.",
+      "Send your contact and company details and we will contact you to arrange the demonstration. This request does not create an account, a trial, or app access.",
     name: "Your name",
     companyName: "Company",
     email: "Business email",
@@ -38,8 +38,8 @@ const text = {
     optional: "optional",
     submit: "Submit request",
     loading: "Submitting...",
-    success: "Demo request saved.",
-    duplicate: "We already have a demo request for this email.",
+    success: "Demo request sent. We will contact you.",
+    duplicate: "We already have an open demo request for this email. We will contact you.",
     generic: "The request was not submitted. Try again.",
   },
 } as const;

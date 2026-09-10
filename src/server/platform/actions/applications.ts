@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   retryTrialApplicationProvisioningSchema,
   reviewTrialApplicationSchema,
-  setDemoRequestStatusSchema,
+  setContactRequestStatusSchema,
 } from "@/domain/validation/acquisition";
 import { createPlatformAction, fail } from "@/server/platform/action";
 import { recordAuditEvent } from "@/server/platform/audit";
@@ -128,22 +128,24 @@ export const retryTrialApplicationProvisioningAction = createPlatformAction({
   },
 });
 
-export const setDemoRequestStatusAction = createPlatformAction({
-  input: setDemoRequestStatusSchema,
+export const setContactRequestStatusAction = createPlatformAction({
+  input: setContactRequestStatusSchema,
   handler: async ({ input, ctx, db }) => {
     return db.transaction(async (tx) => {
       const current = await tx.execute(sql`
-        select id, company_name, status
-        from demo_requests
+        select id, intent, name, company_name, status
+        from contact_requests
         where id = ${input.id}
         for update
       `);
-      const row = current.rows[0] as { id: string; company_name: string; status: string } | undefined;
-      if (!row) throw fail("NOT_FOUND", "Demo kërkesa nuk u gjet.");
+      const row = current.rows[0] as
+        | { id: string; intent: string; name: string; company_name: string | null; status: string }
+        | undefined;
+      if (!row) throw fail("NOT_FOUND", "Kërkesa nuk u gjet.");
       if (row.status === input.status) return { id: input.id, status: input.status };
 
       await tx.execute(sql`
-        update demo_requests
+        update contact_requests
         set status = ${input.status},
             status_changed_at = now(),
             status_changed_by_user_id = ${ctx.userId},
@@ -154,10 +156,15 @@ export const setDemoRequestStatusAction = createPlatformAction({
       await recordAuditEvent(tx, {
         actorUserId: ctx.userId,
         actorEmail: ctx.user.email,
-        action: "DEMO_REQUEST_STATUS_CHANGED",
+        action: "CONTACT_REQUEST_STATUS_CHANGED",
         metadata: {
-          demoRequestId: input.id,
-          companyName: row.company_name,
+          contactRequestId: input.id,
+          intent: row.intent,
+          // company_name is nullable for a general question; fall back to the
+          // person's name so the audit row still identifies who this was about.
+          // The MESSAGE is never logged — it is the visitor's content, exactly
+          // like the internal review note on a trial application.
+          companyName: row.company_name ?? row.name,
           oldStatus: row.status,
           newStatus: input.status,
         },

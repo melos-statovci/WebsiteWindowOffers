@@ -13,12 +13,14 @@ import Link from "next/link";
 import { ArrowLeft, FileWarning } from "lucide-react";
 import { RequestPageShell } from "@/components/public/request-page-shell";
 import { legalContent, LEGAL_LAST_UPDATED, type LegalDocumentId } from "@/lib/legal-content";
-import { supportEmail } from "@/lib/support-contact";
+import { configuredSupportEmail, contactPath } from "@/lib/support-contact";
 import type { PublicLocale } from "@/lib/public-routing";
 
 export function LegalPage({ locale, doc }: { locale: PublicLocale; doc: LegalDocumentId }) {
   const copy = legalContent[locale][doc];
-  const email = supportEmail();
+  // A legal page must give a real way to reach the operator. An address is
+  // shown only when configured; otherwise the contact page is the channel.
+  const email = configuredSupportEmail();
   const home = locale === "en" ? "/en" : "/";
   const signIn = locale === "en" ? "Sign in" : "Hyr";
 
@@ -62,9 +64,15 @@ export function LegalPage({ locale, doc }: { locale: PublicLocale; doc: LegalDoc
             <h2 className="font-heading text-lg font-semibold text-slate-900">{copy.contactHeading}</h2>
             <p className="mt-3 text-sm leading-6 text-slate-500">
               {copy.contactBody}{" "}
-              <a className="font-semibold text-slate-900 underline" href={`mailto:${email}`}>
-                {email}
-              </a>
+              {email ? (
+                <a className="font-semibold text-slate-900 underline" href={`mailto:${email}`}>
+                  {email}
+                </a>
+              ) : (
+                <Link className="font-semibold text-slate-900 underline" href={contactPath(locale)}>
+                  {copy.contactFallback}
+                </Link>
+              )}
               .
             </p>
           </section>

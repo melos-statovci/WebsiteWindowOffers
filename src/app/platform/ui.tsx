@@ -10,6 +10,7 @@ import { STANDARD_PLAN_NAME, type PlanTier } from "@/lib/plan";
 import type { AccountStatus } from "@/server/platform/accounts";
 import type { EffectiveCommercialAccess } from "@/lib/account-lifecycle";
 import type { AuditEventRow, PlatformAuditAction } from "@/server/platform/audit";
+import type { ContactRequestIntent } from "@/server/acquisition";
 
 export function PanelCard({
   title,
@@ -87,6 +88,23 @@ export function BackLink({ href, children }: { href: string; children: React.Rea
   );
 }
 
+/**
+ * Why a contact request exists. The operator's most important distinction on
+ * the Applications screen: a demo is a sales conversation to arrange, a general
+ * contact is a question to answer.
+ */
+export function IntentBadge({ intent }: { intent: ContactRequestIntent }) {
+  return intent === "demo" ? (
+    <span className="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-600 uppercase">
+      Demo
+    </span>
+  ) : (
+    <span className="inline-flex rounded-md bg-slate-200 px-2 py-0.5 text-xs font-bold text-slate-600 uppercase">
+      Kontakt
+    </span>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Audit / Activity rendering (shared by the Activity page + org detail)
 // ---------------------------------------------------------------------------
@@ -99,7 +117,10 @@ const ACTION_META: Record<PlatformAuditAction, { label: string; cls: string }> =
   TRIAL_EXTENDED: { label: "Trial i zgjatur", cls: "bg-blue-50 text-blue-600" },
   TRIAL_APPLICATION_APPROVED: { label: "Trial i aprovuar", cls: "bg-emerald-50 text-emerald-500" },
   TRIAL_APPLICATION_REJECTED: { label: "Trial i refuzuar", cls: "bg-rose-50 text-rose-500" },
-  DEMO_REQUEST_STATUS_CHANGED: { label: "Demo status", cls: "bg-violet-500/15 text-violet-500" },
+  // Historical rows only (pre-Milestone-5.5). Kept renderable so the Activity
+  // page never shows a raw enum for an event that legitimately exists.
+  DEMO_REQUEST_STATUS_CHANGED: { label: "Demo status (arkiv)", cls: "bg-slate-200 text-slate-600" },
+  CONTACT_REQUEST_STATUS_CHANGED: { label: "Kontakt status", cls: "bg-violet-500/15 text-violet-500" },
   TRIAL_APPLICATION_PROVISIONED: { label: "Trial i provizionuar", cls: "bg-emerald-50 text-emerald-500" },
   TRIAL_APPLICATION_PROVISIONING_FAILED: { label: "Provizionimi dështoi", cls: "bg-rose-50 text-rose-500" },
 };
@@ -130,6 +151,10 @@ export function auditSummary(event: AuditEventRow): string {
       return `${String(m.oldStatus ?? "")} → ${String(m.newStatus ?? "")}`;
     case "DEMO_REQUEST_STATUS_CHANGED":
       return `${String(m.oldStatus ?? "")} → ${String(m.newStatus ?? "")}`;
+    case "CONTACT_REQUEST_STATUS_CHANGED": {
+      const intent = m.intent === "general" ? "Kontakt i përgjithshëm" : "Demo";
+      return `${intent}: ${String(m.oldStatus ?? "")} → ${String(m.newStatus ?? "")}`;
+    }
     default:
       return "";
   }

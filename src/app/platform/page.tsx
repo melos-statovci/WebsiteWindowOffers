@@ -32,13 +32,36 @@ export default async function PlatformDashboardPage() {
         <Metric label="Pezulluar" value={o.suspendedOrganizations} tone={o.suspendedOrganizations ? "amber" : "default"} />
         <Metric label="Përdorues" value={o.totalUsers} />
         <Metric label="Trial aplikime" value={acquisition.pendingTrialApplications} tone={acquisition.pendingTrialApplications ? "amber" : "default"} />
-        <Metric label="Demo të reja" value={acquisition.newDemoRequests} tone={acquisition.newDemoRequests ? "amber" : "default"} />
+        <Metric
+          label="Kontakte të reja"
+          value={acquisition.newContactRequests}
+          tone={acquisition.newContactRequests ? "amber" : "default"}
+        />
         <Metric
           label="Provizionim i dështuar"
           value={acquisition.failedProvisioning}
           tone={acquisition.failedProvisioning ? "rose" : "default"}
         />
       </div>
+
+      {acquisition.newContactRequests > 0 ? (
+        <PanelCard title="Kërkesa kontakti të reja">
+          {/* The split matters operationally: a demo is a sales conversation to
+              arrange, a general contact is a question to answer. Shown here
+              rather than as two more dashboard tiles. */}
+          <p className="text-sm text-slate-500">
+            {acquisition.newDemoRequests} demo · {acquisition.newGeneralRequests} kontakt i përgjithshëm
+          </p>
+          <div className="mt-3 flex flex-wrap gap-4 text-sm font-semibold">
+            <Link href="/platform/applications?tab=contact&intent=demo" className="text-violet-500 hover:text-violet-600">
+              Shiko demo →
+            </Link>
+            <Link href="/platform/applications?tab=contact&intent=general" className="text-violet-500 hover:text-violet-600">
+              Shiko kontaktet →
+            </Link>
+          </div>
+        </PanelCard>
+      ) : null}
 
       {acquisition.failedProvisioning > 0 ? (
         <PanelCard title="Kërkon veprim">

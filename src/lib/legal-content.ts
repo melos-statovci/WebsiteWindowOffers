@@ -59,6 +59,8 @@ export interface LegalDocument {
   contactHeading: string;
   /** Sentence introducing the support address (the address is appended). */
   contactBody: string;
+  /** Link text used INSTEAD of an address when none is configured. */
+  contactFallback: string;
   backLabel: string;
 }
 
@@ -90,7 +92,8 @@ const sq: LocaleLegal = {
       "Ky tekst është draft. Ai përshkruan sjelljen aktuale të produktit dhe nuk është ende i rishikuar juridikisht. Përmbajtja mund të ndryshojë përpara lansimit publik.",
     updatedLabel: "Përditësuar më",
     contactHeading: "Kontakt",
-    contactBody: "Për çdo pyetje për të dhënat tuaja ose për këtë politikë, shkruani te",
+    contactBody: "Për çdo pyetje për të dhënat tuaja ose për këtë politikë, na kontaktoni:",
+    contactFallback: "formulari i kontaktit",
     backLabel: "Kthehu në faqen kryesore",
     sections: [
       {
@@ -108,7 +111,7 @@ const sq: LocaleLegal = {
         bullets: [
           "Të dhënat e llogarisë: emri, adresa e email-it dhe fjalëkalimi i ruajtur në formë hash nga sistemi i autentikimit. Fjalëkalimin nuk e ruajmë dhe nuk e shohim si tekst.",
           "Të dhënat e kërkesës për provë: emri i kompanisë, personi i kontaktit, email-i, shteti dhe informacioni i vetëdeklaruar për madhësinë e kompanisë, që i dërgoni në formularin e kërkesës.",
-          "Të dhënat e kërkesës për demo: emri, email-i dhe të dhënat e kompanisë që i jepni vullnetarisht. Kërkesa për demo nuk krijon llogari.",
+          "Të dhënat e kërkesës për kontakt: emri, email-i dhe — sipas rastit — kompania, telefoni dhe mesazhi që i jepni vullnetarisht. Kjo përfshin kërkesat për demo dhe pyetjet e përgjithshme. Kërkesa për kontakt nuk krijon llogari.",
           "Të dhënat e biznesit që futni brenda aplikacionit: klientët, çmimet e kompanisë, konfigurimet e dritareve/dyerve, projektet, ofertat, faturat, pagesat, bilancet dhe shënimet.",
           "Të dhënat e sesionit dhe të autentikimit: cookie e sesionit dhe koha e skadimit, të nevojshme për të mbajtur kyçjen.",
         ],
@@ -117,7 +120,7 @@ const sq: LocaleLegal = {
         heading: "Si i përdorim",
         paragraphs: [
           "Të dhënat e llogarisë dhe të sesionit i përdorim për t'ju kyçur, për t'ju lidhur me kompaninë tuaj dhe për të kontrolluar rolet brenda ekipit.",
-          "Të dhënat e kërkesës për provë dhe demo i përdorim për të shqyrtuar kërkesën, për t'ju kontaktuar për të dhe për të hapur qasjen kur kërkesa aprovohet.",
+          "Të dhënat e kërkesës për provë i përdorim për të shqyrtuar aplikimin, për t'ju kontaktuar për të dhe për të hapur qasjen kur aprovohet. Të dhënat e kërkesës për kontakt i përdorim vetëm për t'ju përgjigjur — për të organizuar demonstrimin ose për t'iu kthyer pyetjes.",
           "Të dhënat e biznesit tuaj i përdorim vetëm për të ofruar funksionet e aplikacionit për kompaninë tuaj. Ato janë të dhënat e kompanisë tuaj, jo tonat.",
           "Nuk i shesim të dhënat tuaja dhe nuk i ndajmë me palë të treta për reklama.",
           "Nuk i përdorim të dhënat e biznesit tuaj për të trajnuar modele të inteligjencës artificiale.",
@@ -182,7 +185,8 @@ const sq: LocaleLegal = {
       "Ky tekst është draft. Ai përshkruan sjelljen aktuale të produktit dhe nuk është ende i rishikuar juridikisht. Përmbajtja mund të ndryshojë përpara lansimit publik.",
     updatedLabel: "Përditësuar më",
     contactHeading: "Kontakt",
-    contactBody: "Për pyetje për këto kushte ose për llogarinë tuaj, shkruani te",
+    contactBody: "Për pyetje për këto kushte ose për llogarinë tuaj, na kontaktoni:",
+    contactFallback: "formulari i kontaktit",
     backLabel: "Kthehu në faqen kryesore",
     sections: [
       {
@@ -266,7 +270,8 @@ const en: LocaleLegal = {
       "This text is a draft. It describes the product's current behaviour and has not yet been legally reviewed. The content may change before the public launch.",
     updatedLabel: "Last updated",
     contactHeading: "Contact",
-    contactBody: "For any question about your data or about this policy, write to",
+    contactBody: "For any question about your data or about this policy, contact us:",
+    contactFallback: "the contact form",
     backLabel: "Back to the homepage",
     sections: [
       {
@@ -284,7 +289,7 @@ const en: LocaleLegal = {
         bullets: [
           "Account data: your name, email address, and a password stored as a hash by the authentication system. We never store or see your password in plain text.",
           "Trial request data: company name, contact person, email, country and the self-declared company-size information you submit in the request form.",
-          "Demo request data: the name, email and company details you provide voluntarily. A demo request does not create an account.",
+          "Contact request data: your name, email and — where applicable — the company, phone and message you provide voluntarily. This covers both demo requests and general questions. A contact request does not create an account.",
           "Business data you enter inside the application: clients, company pricing, window/door configurations, projects, offers, invoices, payments, balances and notes.",
           "Session and authentication data: the session cookie and its expiry, needed to keep you signed in.",
         ],
@@ -293,7 +298,7 @@ const en: LocaleLegal = {
         heading: "How we use it",
         paragraphs: [
           "Account and session data is used to sign you in, connect you to your company and enforce roles within your team.",
-          "Trial and demo request data is used to review your request, contact you about it, and open access when the request is approved.",
+          "Trial request data is used to review your application, contact you about it, and open access when it is approved. Contact request data is used only to reply to you — to arrange the demonstration, or to answer your question.",
           "Your business data is used only to provide the application's features to your company. It is your company's data, not ours.",
           "We do not sell your data and do not share it with third parties for advertising.",
           "We do not use your business data to train artificial-intelligence models.",
@@ -358,7 +363,8 @@ const en: LocaleLegal = {
       "This text is a draft. It describes the product's current behaviour and has not yet been legally reviewed. The content may change before the public launch.",
     updatedLabel: "Last updated",
     contactHeading: "Contact",
-    contactBody: "For questions about these terms or about your account, write to",
+    contactBody: "For questions about these terms or about your account, contact us:",
+    contactFallback: "the contact form",
     backLabel: "Back to the homepage",
     sections: [
       {

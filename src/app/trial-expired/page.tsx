@@ -20,7 +20,7 @@
 import { requireTrialExpiredContext } from "@/auth/session";
 import { STANDARD_PLAN_NAME } from "@/lib/plan";
 import { isoDay } from "@/lib/format";
-import { supportEmail } from "@/lib/support-contact";
+import { configuredSupportEmail, contactPath } from "@/lib/support-contact";
 import { SuspendedSignOut } from "@/app/suspended/sign-out";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +36,14 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 export default async function TrialExpiredPage() {
   const ctx = await requireTrialExpiredContext();
-  const email = supportEmail();
+  // An expired customer must always have a working way to reach Kornizo. When
+  // an address is configured we offer email (with their company pre-filled);
+  // when it is not, /contact IS the channel. Never a placeholder or an empty
+  // mailto, and never the vendor's own address dressed up as Kornizo support.
+  const email = configuredSupportEmail();
+  const contactHref = email
+    ? `mailto:${email}?subject=${encodeURIComponent(`Vazhdimi i Kornizo — ${ctx.activeOrg.name}`)}`
+    : contactPath("sq");
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-slate-50 px-4 py-10">
@@ -66,18 +73,25 @@ export default async function TrialExpiredPage() {
         </div>
 
         <p className="mt-6 text-sm leading-6 text-slate-500">
-          Për të vazhduar me Kornizo, na kontaktoni te{" "}
-          <a className="font-semibold text-slate-900 underline" href={`mailto:${email}`}>
-            {email}
-          </a>
-          .
+          {email ? (
+            <>
+              Për të vazhduar me Kornizo, na kontaktoni te{" "}
+              <a className="font-semibold text-slate-900 underline" href={`mailto:${email}`}>
+                {email}
+              </a>
+              .
+            </>
+          ) : (
+            <>
+              Për të vazhduar me Kornizo, plotësoni formularin e kontaktit dhe do
+              t&apos;ju kontaktojmë.
+            </>
+          )}
         </p>
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <a
-            href={`mailto:${email}?subject=${encodeURIComponent(
-              `Vazhdimi i Kornizo — ${ctx.activeOrg.name}`,
-            )}`}
+            href={contactHref}
             className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-semibold text-slate-50 hover:bg-slate-800"
           >
             Kontakto Kornizo

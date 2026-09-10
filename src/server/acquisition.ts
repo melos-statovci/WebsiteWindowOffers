@@ -1,17 +1,27 @@
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db/client";
-import { demoRequests, member, trialApplications } from "@/db/schema";
+import { contactRequests, member, trialApplications } from "@/db/schema";
 import {
-  demoRequestSubmitSchema,
+  demoContactRequestSchema,
+  generalContactRequestSchema,
   trialApplicationSubmitSchema,
-  type DemoRequestSubmitInput,
+  type DemoContactRequestInput,
+  type GeneralContactRequestInput,
   type TrialApplicationSubmitInput,
 } from "@/domain/validation/acquisition";
 import type { PublicLocale } from "@/lib/public-routing";
 
 export type TrialApplicationStatus = "pending" | "approved" | "rejected";
-export type DemoRequestStatus = "new" | "contacted" | "closed";
+export type ContactRequestStatus = "new" | "contacted" | "closed";
+/**
+ * Why the visitor got in touch.
+ *
+ * "Request a demo" is still a real, distinct public action with its own funnel
+ * and its own page — this is only how it is PERSISTED, so a future contact
+ * reason does not need another table.
+ */
+export type ContactRequestIntent = "demo" | "general";
 export type TrialProvisioningStatus = "not_started" | "in_progress" | "provisioned" | "failed";
 
 export interface TrialApplicationRow {
@@ -41,16 +51,18 @@ export interface TrialApplicationRow {
   updatedAt: Date;
 }
 
-export interface DemoRequestRow {
+export interface ContactRequestRow {
   id: string;
+  intent: ContactRequestIntent;
   name: string;
-  companyName: string;
+  /** Null is legitimate for a general question. */
+  companyName: string | null;
   email: string;
   normalizedEmail: string;
-  phone: string;
-  country: string;
+  phone: string | null;
+  country: string | null;
   message: string | null;
-  status: DemoRequestStatus;
+  status: ContactRequestStatus;
   statusChangedAt: Date | null;
   statusChangedByEmail: string | null;
   createdAt: Date;
@@ -86,9 +98,13 @@ function asTrialStatus(value: string): TrialApplicationStatus {
   return "pending";
 }
 
-function asDemoStatus(value: string): DemoRequestStatus {
+function asContactStatus(value: string): ContactRequestStatus {
   if (value === "contacted" || value === "closed") return value;
   return "new";
+}
+
+function asContactIntent(value: string): ContactRequestIntent {
+  return value === "general" ? "general" : "demo";
 }
 
 function asProvisioningStatus(value: string): TrialProvisioningStatus {
@@ -123,9 +139,10 @@ function trialRow(row: typeof trialApplications.$inferSelect): TrialApplicationR
   };
 }
 
-function demoRow(row: typeof demoRequests.$inferSelect): DemoRequestRow {
+function contactRow(row: typeof contactRequests.$inferSelect): ContactRequestRow {
   return {
     id: row.id,
+    intent: asContactIntent(row.intent),
     name: row.name,
     companyName: row.companyName,
     email: row.email,
@@ -133,7 +150,7 @@ function demoRow(row: typeof demoRequests.$inferSelect): DemoRequestRow {
     phone: row.phone,
     country: row.country,
     message: row.message,
-    status: asDemoStatus(row.status),
+    status: asContactStatus(row.status),
     statusChangedAt: row.statusChangedAt,
     statusChangedByEmail: row.statusChangedByEmail,
     createdAt: row.createdAt,
@@ -276,43 +293,128 @@ export async function submitTrialApplicationAction(
   }
 }
 
-export async function submitDemoRequestAction(
-  rawInput: unknown,
-): Promise<PublicActionResult<{ request: DemoRequestRow | null; duplicate: boolean; ignored?: boolean }>> {
-  const parsed = demoRequestSubmitSchema.safeParse(rawInput);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      error: { code: "VALIDATION", message: "Të dhëna të pavlefshme.", fieldErrors: fieldErrorsFrom(parsed.error) },
-    };
-  }
-  const input: DemoRequestSubmitInput = parsed.data;
-  if (isLikelyBot(input)) return { ok: true, data: { request: null, duplicate: false, ignored: true } };
+export type ContactRequestSubmitResult = PublicActionResult<{
+  request: ContactRequestRow | null;
+  duplicate: boolean;
+  ignored?: boolean;
+}>;
 
+/** An OPEN request from the same email with the same intent, if one exists. */
+async function findOpenContactRequest(
+  normalizedEmail: string,
+  intent: ContactRequestIntent,
+): Promise<ContactRequestRow | null> {
+  const rows = await db
+    .select()
+    .from(contactRequests)
+    .where(
+      and(
+        eq(contactRequests.normalizedEmail, normalizedEmail),
+        eq(contactRequests.intent, intent),
+        sql`${contactRequests.status} <> 'closed'`,
+      ),
+    )
+    .limit(1);
+  return rows[0] ? contactRow(rows[0]) : null;
+}
+
+/**
+ * THE single writer of contact_requests.
+ *
+ * Creates NO Better Auth user, NO organization, NO membership, NO
+ * organization_accounts row, NO pricing and NO trial. A contact request is a
+ * message, not tenancy — that is the whole distinction from a trial
+ * application.
+ *
+ * Duplicate suppression matches the partial unique index: it looks for an OPEN
+ * request with the SAME intent. So a visitor may ask for a demo and separately
+ * ask a general question, and may start a new conversation once the previous
+ * one has been closed by an operator — but cannot spam the same funnel.
+ * Suppression reports success (`duplicate: true`) rather than an error, because
+ * "we already have your request" is the truth and is not the visitor's problem.
+ */
+async function createContactRequest(input: {
+  intent: ContactRequestIntent;
+  name: string;
+  companyName: string | null;
+  email: string;
+  phone: string | null;
+  country: string | null;
+  message: string | null;
+}): Promise<ContactRequestSubmitResult> {
   const normalizedEmail = normalizeEmail(input.email);
-  const existingRows = await db.select().from(demoRequests).where(eq(demoRequests.normalizedEmail, normalizedEmail)).limit(1);
-  if (existingRows[0]) return { ok: true, data: { request: demoRow(existingRows[0]), duplicate: true } };
+  const existing = await findOpenContactRequest(normalizedEmail, input.intent);
+  if (existing) return { ok: true, data: { request: existing, duplicate: true } };
 
   try {
     const rows = await db
-      .insert(demoRequests)
+      .insert(contactRequests)
       .values({
+        intent: input.intent,
         name: input.name,
         companyName: input.companyName,
         email: input.email.trim(),
         normalizedEmail,
         phone: input.phone,
         country: input.country,
-        message: input.message ?? null,
+        message: input.message,
       })
       .returning();
-    return { ok: true, data: { request: demoRow(rows[0]), duplicate: false } };
+    return { ok: true, data: { request: contactRow(rows[0]), duplicate: false } };
   } catch (e) {
-    const duplicateRows = await db.select().from(demoRequests).where(eq(demoRequests.normalizedEmail, normalizedEmail)).limit(1);
-    if (duplicateRows[0]) return { ok: true, data: { request: demoRow(duplicateRows[0]), duplicate: true } };
-    console.error("[acquisition] demo request submit failed:", e);
+    // Lost the race against a concurrent identical submission: the partial
+    // unique index rejected it, so the visitor's request IS on file.
+    const raced = await findOpenContactRequest(normalizedEmail, input.intent);
+    if (raced) return { ok: true, data: { request: raced, duplicate: true } };
+    console.error("[acquisition] contact request submit failed:", e);
     return { ok: false, error: { code: "INTERNAL", message: "Kërkesa nuk u ruajt. Provoni përsëri." } };
   }
+}
+
+/** Public "Request a demo" submission -> contact request with intent 'demo'. */
+export async function submitDemoContactRequestAction(rawInput: unknown): Promise<ContactRequestSubmitResult> {
+  const parsed = demoContactRequestSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION", message: "Të dhëna të pavlefshme.", fieldErrors: fieldErrorsFrom(parsed.error) },
+    };
+  }
+  const input: DemoContactRequestInput = parsed.data;
+  if (isLikelyBot(input)) return { ok: true, data: { request: null, duplicate: false, ignored: true } };
+
+  return createContactRequest({
+    intent: "demo",
+    name: input.name,
+    companyName: input.companyName,
+    email: input.email,
+    phone: input.phone,
+    country: input.country,
+    message: input.message ?? null,
+  });
+}
+
+/** Public "Contact Kornizo" submission -> contact request with intent 'general'. */
+export async function submitGeneralContactRequestAction(rawInput: unknown): Promise<ContactRequestSubmitResult> {
+  const parsed = generalContactRequestSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION", message: "Të dhëna të pavlefshme.", fieldErrors: fieldErrorsFrom(parsed.error) },
+    };
+  }
+  const input: GeneralContactRequestInput = parsed.data;
+  if (isLikelyBot(input)) return { ok: true, data: { request: null, duplicate: false, ignored: true } };
+
+  return createContactRequest({
+    intent: "general",
+    name: input.name,
+    companyName: input.companyName ?? null,
+    email: input.email,
+    phone: input.phone ?? null,
+    country: null,
+    message: input.message,
+  });
 }
 
 export type ApplicationSort = "created_desc" | "created_asc" | "company_asc";
@@ -363,46 +465,56 @@ export async function getTrialApplication(id: string): Promise<TrialApplicationR
   return rows[0] ? trialRow(rows[0]) : null;
 }
 
-export async function listDemoRequests(input: {
+export async function listContactRequests(input: {
   q?: string;
-  status?: DemoRequestStatus | "all";
+  status?: ContactRequestStatus | "all";
+  /** Operator filter: demo leads, general questions, or everything. */
+  intent?: ContactRequestIntent | "all";
   sort?: ApplicationSort;
-} = {}): Promise<DemoRequestRow[]> {
+} = {}): Promise<ContactRequestRow[]> {
   const filters = [];
-  if (input.status && input.status !== "all") filters.push(eq(demoRequests.status, input.status));
+  if (input.status && input.status !== "all") filters.push(eq(contactRequests.status, input.status));
+  if (input.intent && input.intent !== "all") filters.push(eq(contactRequests.intent, input.intent));
   const q = input.q?.trim();
   if (q) {
     filters.push(
       or(
-        ilike(demoRequests.companyName, `%${q}%`),
-        ilike(demoRequests.name, `%${q}%`),
-        ilike(demoRequests.email, `%${q}%`),
-        ilike(demoRequests.country, `%${q}%`),
+        ilike(contactRequests.companyName, `%${q}%`),
+        ilike(contactRequests.name, `%${q}%`),
+        ilike(contactRequests.email, `%${q}%`),
+        ilike(contactRequests.country, `%${q}%`),
       ),
     );
   }
   const orderBy =
     input.sort === "created_asc"
-      ? sql`${demoRequests.createdAt} asc`
+      ? sql`${contactRequests.createdAt} asc`
       : input.sort === "company_asc"
-        ? sql`lower(${demoRequests.companyName}) asc`
-        : desc(demoRequests.createdAt);
+        // company_name is nullable now (a general question may have none), and
+        // NULLs would otherwise sort to the end of an ascending list; fall back
+        // to the person's name so every row still lands somewhere sensible.
+        ? sql`lower(coalesce(${contactRequests.companyName}, ${contactRequests.name})) asc`
+        : desc(contactRequests.createdAt);
   const rows = await db
     .select()
-    .from(demoRequests)
+    .from(contactRequests)
     .where(filters.length ? and(...filters) : undefined)
     .orderBy(orderBy);
-  return rows.map(demoRow);
+  return rows.map(contactRow);
 }
 
-export async function getDemoRequest(id: string): Promise<DemoRequestRow | null> {
-  const rows = await db.select().from(demoRequests).where(eq(demoRequests.id, id)).limit(1);
-  return rows[0] ? demoRow(rows[0]) : null;
+export async function getContactRequest(id: string): Promise<ContactRequestRow | null> {
+  const rows = await db.select().from(contactRequests).where(eq(contactRequests.id, id)).limit(1);
+  return rows[0] ? contactRow(rows[0]) : null;
 }
 
 export async function getAcquisitionOverview(): Promise<{
   pendingTrialApplications: number;
+  /** All NEW contact requests, whatever the intent — the operational number. */
+  newContactRequests: number;
+  /** The demo/general split, so "who wants a sales call" stays visible. */
   newDemoRequests: number;
+  newGeneralRequests: number;
   failedProvisioning: number;
 }> {
   // `failedProvisioning` answers the one operator question the dashboard could
@@ -410,17 +522,27 @@ export async function getAcquisitionOverview(): Promise<{
   // a human whose tenant never got created is an APPLICANT WAITING ON US with
   // nothing on screen to say so — it is not visible in any status count,
   // because its decision status is a perfectly healthy `approved`.
-  const [trial, demo, failed] = await Promise.all([
+  const [trial, contact, failed] = await Promise.all([
     db.select({ n: sql<number>`count(*)::int` }).from(trialApplications).where(eq(trialApplications.status, "pending")),
-    db.select({ n: sql<number>`count(*)::int` }).from(demoRequests).where(eq(demoRequests.status, "new")),
+    // One grouped scan rather than three counts over the same small table.
+    db
+      .select({ intent: contactRequests.intent, n: sql<number>`count(*)::int` })
+      .from(contactRequests)
+      .where(eq(contactRequests.status, "new"))
+      .groupBy(contactRequests.intent),
     db
       .select({ n: sql<number>`count(*)::int` })
       .from(trialApplications)
       .where(eq(trialApplications.provisioningStatus, "failed")),
   ]);
+  const byIntent = new Map(contact.map((row) => [row.intent, Number(row.n)]));
+  const newDemoRequests = byIntent.get("demo") ?? 0;
+  const newGeneralRequests = byIntent.get("general") ?? 0;
   return {
     pendingTrialApplications: Number(trial[0]?.n ?? 0),
-    newDemoRequests: Number(demo[0]?.n ?? 0),
+    newContactRequests: newDemoRequests + newGeneralRequests,
+    newDemoRequests,
+    newGeneralRequests,
     failedProvisioning: Number(failed[0]?.n ?? 0),
   };
 }

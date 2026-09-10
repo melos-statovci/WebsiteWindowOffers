@@ -6,9 +6,9 @@ import { Check, RefreshCw, X } from "lucide-react";
 import {
   retryTrialApplicationProvisioning,
   reviewTrialApplication,
-  setDemoRequestStatus,
+  setContactRequestStatus,
 } from "@/server/platform/actions/applications.action";
-import type { DemoRequestStatus } from "@/server/acquisition";
+import type { ContactRequestStatus } from "@/server/acquisition";
 
 export function TrialReviewControls({ id }: { id: string }) {
   const router = useRouter();
@@ -121,9 +121,9 @@ export function TrialProvisioningRetry({ id }: { id: string }) {
   );
 }
 
-export function DemoStatusControl({ id, status }: { id: string; status: DemoRequestStatus }) {
+export function ContactStatusControl({ id, status }: { id: string; status: ContactRequestStatus }) {
   const router = useRouter();
-  const [value, setValue] = useState<DemoRequestStatus>(status);
+  const [value, setValue] = useState<ContactRequestStatus>(status);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -131,7 +131,7 @@ export function DemoStatusControl({ id, status }: { id: string; status: DemoRequ
     setError("");
     startTransition(async () => {
       try {
-        const res = await setDemoRequestStatus({ id, status: value });
+        const res = await setContactRequestStatus({ id, status: value });
         if (!res.ok) {
           setError(res.error.message);
           return;
@@ -147,7 +147,7 @@ export function DemoStatusControl({ id, status }: { id: string; status: DemoRequ
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
       <select
         value={value}
-        onChange={(e) => setValue(e.target.value as DemoRequestStatus)}
+        onChange={(e) => setValue(e.target.value as ContactRequestStatus)}
         className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-neutral-500/60"
       >
         <option value="new">NEW</option>

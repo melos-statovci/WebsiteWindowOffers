@@ -3,12 +3,16 @@ import pg from "pg";
 import { auth } from "@/auth";
 import { isUuid } from "@/auth/organization";
 import { getAuthContext } from "@/auth/session";
-import { submitDemoRequestAction, submitTrialApplicationAction } from "@/server/acquisition";
+import {
+  submitDemoContactRequestAction,
+  submitGeneralContactRequestAction,
+  submitTrialApplicationAction,
+} from "@/server/acquisition";
 import { getAccountState } from "@/server/platform/accounts";
 import { listAuditEvents } from "@/server/platform/audit";
 import {
   reviewTrialApplicationAction,
-  setDemoRequestStatusAction,
+  setContactRequestStatusAction,
 } from "@/server/platform/actions/applications";
 import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
 
@@ -61,6 +65,7 @@ let tenantCookie = "";
 let tenantOrgId = "";
 let trialApplicationId = "";
 let demoRequestId = "";
+let generalRequestId = "";
 
 beforeAll(async () => {
   const applicant = await signUp("applicant");
@@ -88,13 +93,19 @@ afterAll(async () => {
     // Unlink before TestCleanup drops the organization (FK is ON DELETE RESTRICT).
     await ownerPool.query(`delete from trial_applications where id = $1`, [trialApplicationId]);
   }
-  if (demoRequestId) {
+  // Every contact request this file created, and the audit rows they produced.
+  // Scoped strictly to this run's synthetic .test addresses.
+  const contactIds = await ownerPool.query<{ id: string }>(
+    `select id from contact_requests where normalized_email like $1`,
+    [`acq-${suffix}-%`],
+  );
+  if (contactIds.rowCount) {
     await ownerPool.query(
-      `delete from platform_audit_events where metadata->>'demoRequestId' = $1`,
-      [demoRequestId],
+      `delete from platform_audit_events where metadata->>'contactRequestId' = any($1::text[])`,
+      [contactIds.rows.map((r) => r.id)],
     );
   }
-  await ownerPool.query(`delete from demo_requests where normalized_email like $1`, [`acq-${suffix}-%`]);
+  await ownerPool.query(`delete from contact_requests where normalized_email like $1`, [`acq-${suffix}-%`]);
   await cleanup.run();
   await ownerPool.end();
 });
@@ -171,11 +182,33 @@ describe("trial acquisition creates identity, not tenancy", () => {
   });
 });
 
-describe("demo acquisition remains accountless", () => {
-  it("stores a Demo Request without creating a Better Auth user", async () => {
-    const demoEmail = `acq-${suffix}-demo@example.test`;
-    const before = await ownerPool.query(`select count(*)::int as n from "user" where email=$1`, [demoEmail]);
-    const res = await submitDemoRequestAction({
+// Milestone 5.5 — both public contact entry points persist as ONE
+// contact_requests row discriminated by `intent`. "Request a demo" is still a
+// real, distinct public action; only the storage became generic.
+describe("contact acquisition remains accountless", () => {
+  const demoEmail = `acq-${suffix}-demo@example.test`;
+  const generalEmail = `acq-${suffix}-general@example.test`;
+
+  async function tenancyFootprint(address: string) {
+    const res = await ownerPool.query<{ users: string; members: string; orgs: string; apps: string }>(
+      `select
+         (select count(*) from "user" where lower(email) = $1) as users,
+         (select count(*) from member m join "user" u on u.id = m.user_id where lower(u.email) = $1) as members,
+         (select count(*) from organization where lower(name) like '%' || $2 || '%') as orgs,
+         (select count(*) from trial_applications where normalized_email = $1) as apps`,
+      [address, suffix.toLowerCase()],
+    );
+    const row = res.rows[0];
+    return {
+      users: Number(row.users),
+      members: Number(row.members),
+      apps: Number(row.apps),
+    };
+  }
+
+  it("stores a DEMO request with intent 'demo'", async () => {
+    const before = await tenancyFootprint(demoEmail);
+    const res = await submitDemoContactRequestAction({
       name: "Demo Person",
       companyName: `Acq Demo ${suffix}`,
       email: demoEmail,
@@ -187,14 +220,93 @@ describe("demo acquisition remains accountless", () => {
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     demoRequestId = res.data.request!.id;
+    expect(res.data.request!.intent).toBe("demo");
 
-    const after = await ownerPool.query(`select count(*)::int as n from "user" where email=$1`, [demoEmail]);
-    expect(before.rows[0].n).toBe(0);
-    expect(after.rows[0].n).toBe(0);
+    // No Better Auth user, no membership, no trial application.
+    const after = await tenancyFootprint(demoEmail);
+    expect(before.users).toBe(0);
+    expect(after.users).toBe(0);
+    expect(after.members).toBe(0);
+    expect(after.apps).toBe(0);
   });
 
-  it("suppresses duplicate Demo Requests by normalized email", async () => {
-    const res = await submitDemoRequestAction({
+  it("stores a GENERAL contact with intent 'general' and no company or phone", async () => {
+    const res = await submitGeneralContactRequestAction({
+      name: "General Person",
+      email: generalEmail,
+      message: "A synthetic general question about Kornizo.",
+      formStartedAt: Date.now() - 5000,
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    generalRequestId = res.data.request!.id;
+    expect(res.data.request!.intent).toBe("general");
+    // Company and phone are genuinely optional for a general question.
+    expect(res.data.request!.companyName).toBeNull();
+    expect(res.data.request!.phone).toBeNull();
+    expect(res.data.request!.country).toBeNull();
+    expect(res.data.request!.message).toContain("synthetic general question");
+
+    const after = await tenancyFootprint(generalEmail);
+    expect(after.users).toBe(0);
+    expect(after.members).toBe(0);
+    expect(after.apps).toBe(0);
+  });
+
+  it("requires a message on a general contact", async () => {
+    // Enforced by Zod AND by contact_requests_general_shape_chk.
+    const res = await submitGeneralContactRequestAction({
+      name: "No Question",
+      email: `acq-${suffix}-empty@example.test`,
+      message: "",
+      formStartedAt: Date.now() - 5000,
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("VALIDATION");
+  });
+
+  it("rejects a filled honeypot without creating a row", async () => {
+    const trapEmail = `acq-${suffix}-bot@example.test`;
+    const res = await submitGeneralContactRequestAction({
+      name: "Spam Bot",
+      email: trapEmail,
+      message: "buy cheap things now",
+      website: "http://spam.example",
+      formStartedAt: Date.now() - 5000,
+    });
+    // Inherited demo-form behaviour, asserted as it actually is: the honeypot
+    // field is `z.string().max(0)`, so Zod rejects a filled one BEFORE
+    // isLikelyBot() is reached, and the caller sees VALIDATION rather than the
+    // silent `ignored: true`. The security property that matters is identical —
+    // nothing is persisted. (Silently accepting would leak less to a bot; that
+    // is a deliberate non-change here, since the milestone asked to reuse the
+    // proven controls rather than redesign them.)
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("VALIDATION");
+    const rows = await ownerPool.query(`select count(*)::int n from contact_requests where normalized_email=$1`, [
+      trapEmail,
+    ]);
+    expect(rows.rows[0].n).toBe(0);
+  });
+
+  it("ignores a submission completed implausibly fast", async () => {
+    const fastEmail = `acq-${suffix}-fast@example.test`;
+    const res = await submitGeneralContactRequestAction({
+      name: "Too Fast",
+      email: fastEmail,
+      message: "instant submission attempt",
+      formStartedAt: Date.now(),
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.data.ignored).toBe(true);
+    const rows = await ownerPool.query(`select count(*)::int n from contact_requests where normalized_email=$1`, [
+      fastEmail,
+    ]);
+    expect(rows.rows[0].n).toBe(0);
+  });
+
+  it("suppresses a duplicate OPEN request of the same intent, case-insensitively", async () => {
+    const res = await submitDemoContactRequestAction({
       name: "Demo Person Again",
       companyName: `Acq Demo ${suffix}`,
       email: `ACQ-${suffix}-DEMO@EXAMPLE.TEST`,
@@ -206,6 +318,60 @@ describe("demo acquisition remains accountless", () => {
     if (!res.ok) return;
     expect(res.data.duplicate).toBe(true);
     expect(res.data.request?.id).toBe(demoRequestId);
+  });
+
+  it("lets the SAME person send a general question despite an open demo request", async () => {
+    // The old table-wide UNIQUE on normalized_email made this impossible:
+    // asking for a demo permanently blocked every later contact.
+    const res = await submitGeneralContactRequestAction({
+      name: "Demo Person",
+      email: demoEmail,
+      message: "Separate general question from the same address.",
+      formStartedAt: Date.now() - 5000,
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.duplicate).toBe(false);
+    expect(res.data.request!.intent).toBe("general");
+    expect(res.data.request!.id).not.toBe(demoRequestId);
+  });
+
+  it("lets a CLOSED conversation be reopened with a new request", async () => {
+    // Otherwise the contact form would accept exactly one message per person
+    // for all time.
+    const closedEmail = `acq-${suffix}-closed@example.test`;
+    const first = await submitGeneralContactRequestAction({
+      name: "Returning Person",
+      email: closedEmail,
+      message: "First question, later closed.",
+      formStartedAt: Date.now() - 5000,
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const firstId = first.data.request!.id;
+
+    // While OPEN, a repeat is suppressed.
+    const blocked = await submitGeneralContactRequestAction({
+      name: "Returning Person",
+      email: closedEmail,
+      message: "Second question while the first is open.",
+      formStartedAt: Date.now() - 5000,
+    });
+    expect(blocked.ok).toBe(true);
+    if (blocked.ok) expect(blocked.data.duplicate).toBe(true);
+
+    await setContactRequestStatusAction({ id: firstId, status: "closed" }, H(platformCookie));
+
+    const reopened = await submitGeneralContactRequestAction({
+      name: "Returning Person",
+      email: closedEmail,
+      message: "New question after the previous one was closed.",
+      formStartedAt: Date.now() - 5000,
+    });
+    expect(reopened.ok).toBe(true);
+    if (!reopened.ok) return;
+    expect(reopened.data.duplicate).toBe(false);
+    expect(reopened.data.request!.id).not.toBe(firstId);
   });
 });
 
@@ -250,13 +416,36 @@ describe("platform application review", () => {
     if (!res.ok) expect(res.error.code).toBe("CONFLICT");
   });
 
-  it("Platform Admin changes demo status and writes audit", async () => {
-    const before = (await listAuditEvents({ action: "DEMO_REQUEST_STATUS_CHANGED" })).total;
-    const res = await setDemoRequestStatusAction({ id: demoRequestId, status: "contacted" }, H(platformCookie));
+  it("Platform Admin changes a DEMO contact status and audits it with its intent", async () => {
+    const before = (await listAuditEvents({ action: "CONTACT_REQUEST_STATUS_CHANGED" })).total;
+    const res = await setContactRequestStatusAction({ id: demoRequestId, status: "contacted" }, H(platformCookie));
     expect(res.ok).toBe(true);
-    const after = await listAuditEvents({ action: "DEMO_REQUEST_STATUS_CHANGED" });
+    const after = await listAuditEvents({ action: "CONTACT_REQUEST_STATUS_CHANGED" });
     expect(after.total).toBe(before + 1);
     expect(after.events[0].metadata.newStatus).toBe("contacted");
+    expect(after.events[0].metadata.intent).toBe("demo");
+  });
+
+  it("Platform Admin changes a GENERAL contact status and never logs the message", async () => {
+    const res = await setContactRequestStatusAction({ id: generalRequestId, status: "contacted" }, H(platformCookie));
+    expect(res.ok).toBe(true);
+    const after = await listAuditEvents({ action: "CONTACT_REQUEST_STATUS_CHANGED" });
+    expect(after.events[0].metadata.intent).toBe("general");
+    // The visitor's message is their content and must never reach the audit
+    // trail, exactly like a trial application's internal review note.
+    expect(JSON.stringify(after.events[0].metadata)).not.toContain("synthetic general question");
+  });
+
+  it("a tenant user cannot change a contact request status", async () => {
+    const res = await setContactRequestStatusAction({ id: generalRequestId, status: "closed" }, H(tenantCookie));
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("FORBIDDEN");
+  });
+
+  it("an unauthenticated caller cannot change a contact request status", async () => {
+    const res = await setContactRequestStatusAction({ id: generalRequestId, status: "closed" }, new Headers());
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("UNAUTHENTICATED");
   });
 });
 

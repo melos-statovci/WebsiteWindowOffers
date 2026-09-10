@@ -16,7 +16,8 @@ export function MarketingPage({
   supportEmail,
 }: {
   content: PublicMarketingContent;
-  supportEmail: string;
+  /** Configured support address, or null when /contact is the channel. */
+  supportEmail: string | null;
 }) {
   return (
     <main lang={content.locale} className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-700">
@@ -571,7 +572,7 @@ function PublicFooter({
   supportEmail,
 }: {
   content: PublicMarketingContent;
-  supportEmail: string;
+  supportEmail: string | null;
 }) {
   const base = content.basePath === "/" ? "" : content.basePath;
   return (
@@ -594,15 +595,22 @@ function PublicFooter({
             <Link href="/sign-in" className="hover:text-white">{content.actions.signIn}</Link>
             <Link href={`${base}/request-trial`} className="hover:text-white">{content.footer.trial}</Link>
             <Link href={`${base}/request-demo`} className="hover:text-white">{content.footer.demo}</Link>
+            <Link href={`${base}/contact`} className="hover:text-white">{content.footer.contactLabel}</Link>
             <Link href={`${base}/privacy`} className="hover:text-white">{content.footer.privacy}</Link>
             <Link href={`${base}/terms`} className="hover:text-white">{content.footer.terms}</Link>
           </nav>
-          <p className="text-sm text-slate-400 md:text-right">
-            {content.footer.contactLabel}:{" "}
-            <a href={`mailto:${supportEmail}`} className="font-semibold text-slate-300 hover:text-white">
-              {supportEmail}
-            </a>
-          </p>
+          {/* The address is shown only when one is actually configured;
+              otherwise the Contact link above IS the channel. Never a
+              placeholder, an empty mailto, or an address on a domain Kornizo
+              does not own. */}
+          {supportEmail ? (
+            <p className="text-sm text-slate-400 md:text-right">
+              {content.footer.contactLabel}:{" "}
+              <a href={`mailto:${supportEmail}`} className="font-semibold text-slate-300 hover:text-white">
+                {supportEmail}
+              </a>
+            </p>
+          ) : null}
         </div>
       </div>
     </footer>

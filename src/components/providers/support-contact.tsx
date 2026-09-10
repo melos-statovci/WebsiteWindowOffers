@@ -1,37 +1,46 @@
 "use client";
 
-// Makes the configured Kornizo support address available to client components
-// inside the tenant shell.
+// Makes the Kornizo support contact available to client components inside the
+// tenant shell.
 //
-// The value is resolved on the SERVER (the tenant layout calls supportEmail())
-// and handed to the shell, which provides it here. Client components cannot
-// read process.env at runtime, and a NEXT_PUBLIC_ variable would be frozen into
-// the bundle at build time and duplicate the default — so it is threaded
-// through React context instead, resolved fresh on every server render.
+// Resolved on the SERVER (the tenant layout) and threaded through React context:
+// client components cannot read process.env at runtime, and a NEXT_PUBLIC_
+// variable would be frozen into the bundle at build time.
+//
+// `email` is NULLABLE by design. Since Milestone 5.5 there is no default
+// address — the vendor's own mailbox was removed and Kornizo's domain is not
+// chosen yet — so a consumer must decide whether to render an address at all.
+// `href` always works: mailto: when configured, /contact otherwise.
 
 import { createContext, useContext } from "react";
 
-const SupportContactContext = createContext<string | null>(null);
+export interface SupportContact {
+  /** Configured address, or null when /contact is the channel. */
+  email: string | null;
+  /** Always-usable destination. */
+  href: string;
+}
+
+const SupportContactContext = createContext<SupportContact | null>(null);
 
 export function SupportContactProvider({
-  email,
+  contact,
   children,
 }: {
-  email: string;
+  contact: SupportContact;
   children: React.ReactNode;
 }) {
-  return <SupportContactContext.Provider value={email}>{children}</SupportContactContext.Provider>;
+  return <SupportContactContext.Provider value={contact}>{children}</SupportContactContext.Provider>;
 }
 
 /**
- * The support address to show the customer.
+ * The support contact to show the customer.
  *
- * Throws when used outside the provider rather than falling back to a literal:
- * a silent hard-coded default here is exactly the duplication this module
- * exists to remove.
+ * Throws when used outside the provider rather than inventing a fallback: a
+ * hard-coded address here is exactly what this module exists to prevent.
  */
-export function useSupportEmail(): string {
-  const email = useContext(SupportContactContext);
-  if (!email) throw new Error("useSupportEmail must be used inside <SupportContactProvider>");
-  return email;
+export function useSupportContact(): SupportContact {
+  const contact = useContext(SupportContactContext);
+  if (!contact) throw new Error("useSupportContact must be used inside <SupportContactProvider>");
+  return contact;
 }

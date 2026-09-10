@@ -19,6 +19,7 @@ const ACTIONS: { value: PlatformAuditAction; label: string }[] = [
   { value: "ORGANIZATION_SUSPENDED", label: "Pezulluar" },
   { value: "ORGANIZATION_REACTIVATED", label: "Riaktivizuar" },
   { value: "INTERNAL_NOTE_UPDATED", label: "Shënim i përditësuar" },
+  { value: "CONTACT_REQUEST_STATUS_CHANGED", label: "Kontakt status" },
 ];
 const ACTION_VALUES = ACTIONS.map((a) => a.value);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

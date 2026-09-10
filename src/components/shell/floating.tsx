@@ -6,6 +6,7 @@ import { guideStepKeys } from "@/lib/plan";
 import { isUiDismissed, useStore } from "@/lib/store";
 import { useAuth } from "@/components/providers/session-provider";
 import { NEAR_EXPIRY_DAYS, trialEndsIn } from "@/lib/trial-copy";
+import type { SupportContact } from "@/components/providers/support-contact";
 
 export function FloatingConfig() {
   const { setOverlay } = useApp();
@@ -39,11 +40,12 @@ export function FloatingConfig() {
  * functionality — an expiring trial keeps the full Standard product until it
  * actually expires, at which point /trial-expired takes over.
  *
- * The support address comes from `supportEmail` prop (resolved on the server by
- * the app shell) rather than being read here: this is a client component, and
- * `process.env` is not available to it at runtime.
+ * The support contact comes from a prop (resolved on the server by the app
+ * shell) rather than being read here: this is a client component and
+ * `process.env` is not available to it at runtime. Its `email` may be null, in
+ * which case the notice links to /contact instead of showing an address.
  */
-export function TrialBanner({ supportEmail }: { supportEmail: string }) {
+export function TrialBanner({ supportContact }: { supportContact: SupportContact }) {
   const { effectiveCommercialAccess, trialDaysRemaining } = useAuth();
   const uiDismissals = useStore((s) => s.uiDismissals);
   const dismissUi = useStore((s) => s.dismissUi);
@@ -59,12 +61,9 @@ export function TrialBanner({ supportEmail }: { supportEmail: string }) {
     <div className="flex flex-wrap items-start gap-3 bg-amber-500 px-4 py-3 text-sm text-white sm:items-center">
       <Rocket className="mt-0.5 size-4 shrink-0 sm:mt-0" />
       <p className="flex-1 leading-snug">
-        {trialEndsIn(trialDaysRemaining)} Për të vazhduar më pas, na kontaktoni te{" "}
-        <a
-          href={`mailto:${supportEmail}`}
-          className="font-semibold underline underline-offset-2"
-        >
-          {supportEmail}
+        {trialEndsIn(trialDaysRemaining)} Për të vazhduar më pas,{" "}
+        <a href={supportContact.href} className="font-semibold underline underline-offset-2">
+          {supportContact.email ? `na kontaktoni te ${supportContact.email}` : "na kontaktoni"}
         </a>
         .
       </p>

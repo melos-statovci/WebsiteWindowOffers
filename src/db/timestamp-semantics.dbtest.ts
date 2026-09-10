@@ -52,7 +52,7 @@ const INSTANT_COLUMNS: ReadonlyArray<readonly [string, string]> = [
   ["trial_applications", "created_at"],
   ["platform_audit_events", "created_at"],
   ["platform_admins", "created_at"],
-  ["demo_requests", "status_changed_at"],
+  ["contact_requests", "status_changed_at"],
   ["organization_profiles", "created_at"],
   ["price_lists", "created_at"],
   ["clients", "created_at"],

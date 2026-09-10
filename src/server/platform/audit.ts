@@ -20,7 +20,11 @@ export type PlatformAuditAction =
   | "TRIAL_EXTENDED"
   | "TRIAL_APPLICATION_APPROVED"
   | "TRIAL_APPLICATION_REJECTED"
+  // Retained for HISTORICAL rows only — the audit trail is append-only and
+  // immutable even to the application, so old event names stay as recorded.
+  // New code emits CONTACT_REQUEST_STATUS_CHANGED.
   | "DEMO_REQUEST_STATUS_CHANGED"
+  | "CONTACT_REQUEST_STATUS_CHANGED"
   | "TRIAL_APPLICATION_PROVISIONED"
   | "TRIAL_APPLICATION_PROVISIONING_FAILED";
 

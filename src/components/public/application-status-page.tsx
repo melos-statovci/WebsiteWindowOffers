@@ -8,7 +8,7 @@ import { getCurrentTrialApplication } from "@/server/acquisition";
 import { getAccountState } from "@/server/platform/accounts";
 import type { PublicLocale } from "@/lib/public-routing";
 import { isoDay } from "@/lib/format";
-import { supportEmail } from "@/lib/support-contact";
+import { configuredSupportEmail, contactPath } from "@/lib/support-contact";
 import { daysRemaining } from "@/lib/trial-copy";
 
 const text = {
@@ -24,7 +24,7 @@ const text = {
     stalledTitle: "Kërkesa juaj është aprovuar — po e rregullojmë qasjen.",
     stalledBody: "Aprovimi ka kaluar, por përgatitja e llogarisë nuk përfundoi. Ekipi i Kornizo e ka pamjen e problemit dhe e rimerr nga fillimi; nuk keni nevojë të dërgoni kërkesë të re. Prova 14-ditore nis vetëm kur llogaria bëhet gati.",
     rejectedTitle: "Kërkesa juaj për Trial nuk u aprovua.",
-    rejectedBody: "Nëse dëshironi më shumë informacion, na kontaktoni te",
+    rejectedBody: "Nëse dëshironi më shumë informacion, na kontaktoni:",
     readyTitle: "Prova juaj në Kornizo është gati.",
     readyBody: "Keni 14 ditë qasje të plotë në Kornizo Standard.",
     startCta: "Filloni me Kornizo",
@@ -51,7 +51,7 @@ const text = {
     stalledTitle: "Your request is approved — we are still setting up access.",
     stalledBody: "The approval went through, but preparing the account did not finish. The Kornizo team can see the problem and is picking it up again; you do not need to submit another request. The 14-day trial only starts once the account is ready.",
     rejectedTitle: "Your Trial request was not approved.",
-    rejectedBody: "For more information, contact us at",
+    rejectedBody: "For more information, contact us:",
     readyTitle: "Your Kornizo trial is ready.",
     readyBody: "You have 14 days of full access to Kornizo Standard.",
     startCta: "Start using Kornizo",
@@ -142,7 +142,11 @@ export async function ApplicationStatusPage({ locale }: { locale: PublicLocale }
   if (!state.application) redirect(copy.noApplication);
 
   const app = state.application;
-  const email = supportEmail();
+  // Rejected and stalled applicants must still be able to reach Kornizo. Email
+  // when one is configured, otherwise the contact page — never a placeholder
+  // address and never the vendor's own mailbox as "Kornizo support".
+  const email = configuredSupportEmail();
+  const contactHref = contactPath(locale);
 
   // An APPROVED application that is not provisioned has two very different
   // meanings, and Milestone 3 copy conflated them:
@@ -212,8 +216,11 @@ export async function ApplicationStatusPage({ locale }: { locale: PublicLocale }
                 {statusCopy.showContact ? (
                   <>
                     {" "}
-                    <a className="font-semibold text-slate-900 underline" href={`mailto:${email}`}>
-                      {email}
+                    <a
+                      className="font-semibold text-slate-900 underline"
+                      href={email ? `mailto:${email}` : contactHref}
+                    >
+                      {email ?? copy.contact}
                     </a>
                     .
                   </>

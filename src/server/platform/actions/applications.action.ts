@@ -5,12 +5,12 @@ import { revalidatePath } from "next/cache";
 import {
   retryTrialApplicationProvisioningAction,
   reviewTrialApplicationAction,
-  setDemoRequestStatusAction,
+  setContactRequestStatusAction,
 } from "@/server/platform/actions/applications";
 import type {
   RetryTrialApplicationProvisioningInput,
   ReviewTrialApplicationInput,
-  SetDemoRequestStatusInput,
+  SetContactRequestStatusInput,
 } from "@/domain/validation/acquisition";
 
 function revalidateApplications() {
@@ -40,8 +40,11 @@ export async function retryTrialApplicationProvisioning(input: RetryTrialApplica
   return res;
 }
 
-export async function setDemoRequestStatus(input: SetDemoRequestStatusInput) {
-  const res = await setDemoRequestStatusAction(input, await headers());
-  if (res.ok) revalidateApplications();
+export async function setContactRequestStatus(input: SetContactRequestStatusInput) {
+  const res = await setContactRequestStatusAction(input, await headers());
+  if (res.ok) {
+    revalidateApplications();
+    revalidatePath(`/platform/applications/contact/${input.id}`);
+  }
   return res;
 }
