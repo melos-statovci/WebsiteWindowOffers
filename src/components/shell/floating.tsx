@@ -5,6 +5,7 @@ import { useApp } from "@/components/providers/providers";
 import { guideStepKeys } from "@/lib/plan";
 import { isUiDismissed, useStore } from "@/lib/store";
 import { useAuth } from "@/components/providers/session-provider";
+import { NEAR_EXPIRY_DAYS, trialEndsIn } from "@/lib/trial-copy";
 
 export function FloatingConfig() {
   const { setOverlay } = useApp();
@@ -30,8 +31,19 @@ export function FloatingConfig() {
   );
 }
 
-export function TrialBanner() {
-  const { setOverlay } = useApp();
+/**
+ * Near-expiry notice for a STILL-VALID trial (3 or fewer days left).
+ *
+ * Deliberately restrained: it states the fact and gives one real way to act on
+ * it. It appears only near the end, is dismissible, and reduces no
+ * functionality — an expiring trial keeps the full Standard product until it
+ * actually expires, at which point /trial-expired takes over.
+ *
+ * The support address comes from `supportEmail` prop (resolved on the server by
+ * the app shell) rather than being read here: this is a client component, and
+ * `process.env` is not available to it at runtime.
+ */
+export function TrialBanner({ supportEmail }: { supportEmail: string }) {
   const { effectiveCommercialAccess, trialDaysRemaining } = useAuth();
   const uiDismissals = useStore((s) => s.uiDismissals);
   const dismissUi = useStore((s) => s.dismissUi);
@@ -39,7 +51,7 @@ export function TrialBanner() {
   if (
     !hydrated ||
     effectiveCommercialAccess !== "trial" ||
-    trialDaysRemaining > 3 ||
+    trialDaysRemaining > NEAR_EXPIRY_DAYS ||
     isUiDismissed(uiDismissals.trialBanner)
   ) return null;
 
@@ -47,14 +59,13 @@ export function TrialBanner() {
     <div className="flex flex-wrap items-start gap-3 bg-amber-500 px-4 py-3 text-sm text-white sm:items-center">
       <Rocket className="mt-0.5 size-4 shrink-0 sm:mt-0" />
       <p className="flex-1 leading-snug">
-        Trial i Kornizo Standard përfundon pas {trialDaysRemaining} ditësh. Për
-        të vazhduar pas skadimit, hapni{" "}
-        <button
-          onClick={() => setOverlay("help")}
+        {trialEndsIn(trialDaysRemaining)} Për të vazhduar më pas, na kontaktoni te{" "}
+        <a
+          href={`mailto:${supportEmail}`}
           className="font-semibold underline underline-offset-2"
         >
-          Qendrën e Ndihmës
-        </button>
+          {supportEmail}
+        </a>
         .
       </p>
       <div className="ml-auto flex shrink-0 items-center gap-1.5">

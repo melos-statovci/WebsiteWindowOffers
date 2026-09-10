@@ -14,6 +14,9 @@ import { STANDARD_FEATURES, STANDARD_PLAN_NAME, offerDesigns } from "@/lib/plan"
 import { eurAfter } from "@/lib/format";
 import { useApp } from "@/components/providers/providers";
 import { useAuth } from "@/components/providers/session-provider";
+import { useSupportEmail } from "@/components/providers/support-contact";
+import { accessLine, daysRemaining } from "@/lib/trial-copy";
+import { isoDay } from "@/lib/format";
 import { authClient } from "@/auth/client";
 import { updateOrganizationProfile } from "@/server/actions/organization-profile.action";
 import type { OrganizationProfileUpdate } from "@/domain/validation/organization-profile";
@@ -318,10 +321,11 @@ function PerdoruesitPanel() {
 
 function AbonimiPanel() {
   const { effectiveCommercialAccess, trialDaysRemaining, trialEndsAt } = useAuth();
+  const email = useSupportEmail();
   const accessText =
     effectiveCommercialAccess === "trial"
-      ? `Trial · ${trialDaysRemaining} ditë të mbetura`
-      : "Klient aktiv";
+      ? `Trial · ${daysRemaining(trialDaysRemaining)}`
+      : accessLine({ effectiveCommercialAccess, trialDaysRemaining }).text;
 
   return (
     <div className="space-y-5">
@@ -335,7 +339,7 @@ function AbonimiPanel() {
           <div className="text-right text-sm text-slate-500">
             <div className="font-semibold text-slate-900">{accessText}</div>
             {effectiveCommercialAccess === "trial" && (
-              <div>Skadon më {trialEndsAt ? trialEndsAt.toISOString().slice(0, 10) : "—"}</div>
+              <div>Skadon më {isoDay(trialEndsAt)}</div>
             )}
           </div>
         </div>
@@ -354,7 +358,13 @@ function AbonimiPanel() {
       </Card>
 
       <p className="text-xs text-slate-400">
-        Menaxhimi i pagesave dhe faturimi automatik nuk janë aktivizuar ende. Për vazhdim të trial, aktivizim klienti ose çdo pyetje për llogarinë, na shkruani te info@arios.systems.
+        Menaxhimi i pagesave dhe faturimi automatik nuk janë aktivizuar ende. Për
+        vazhdim të trial, aktivizim klienti ose çdo pyetje për llogarinë, na
+        shkruani te{" "}
+        <a className="font-medium text-slate-500 underline" href={`mailto:${email}`}>
+          {email}
+        </a>
+        .
       </p>
       <p className="text-xs text-slate-400">
         Kornizo po rritet. Plane shtesë dhe mjete të avancuara për madhësi e rrjedha të ndryshme kompanish do të prezantohen me kohë.

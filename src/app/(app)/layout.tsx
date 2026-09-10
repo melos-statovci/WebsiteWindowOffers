@@ -15,6 +15,7 @@ import { PaymentsHydrator } from "@/components/providers/payments-hydrator";
 import { CompanyHydrator } from "@/components/providers/company-hydrator";
 import { NotesHydrator } from "@/components/providers/notes-hydrator";
 import { AppShell } from "@/components/shell/app-shell";
+import { supportEmail } from "@/lib/support-contact";
 
 // Server-side authoritative gate for the whole app shell. requireAuthContext
 // redirects to /sign-in (no session) or /onboarding (no organization) and
@@ -49,7 +50,7 @@ export default async function AppGroupLayout({
       <PaymentsHydrator payments={payments} />
       <CompanyHydrator company={company} />
       <NotesHydrator notes={notes} />
-      <AppShell>{children}</AppShell>
+      <AppShell supportEmail={supportEmail()}>{children}</AppShell>
     </SessionProvider>
   );
 }

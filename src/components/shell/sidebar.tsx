@@ -7,16 +7,16 @@ import { cn } from "@/lib/utils";
 import { initials } from "@/lib/format";
 import { navGroups } from "@/lib/nav";
 import { STANDARD_PLAN_NAME } from "@/lib/plan";
+import { accessLine } from "@/lib/trial-copy";
 import { useApp } from "@/components/providers/providers";
 import { useAuth, useAuthActions } from "@/components/providers/session-provider";
 import type { OrgSummary } from "@/auth/types";
 
 function Logo({ collapsed }: { collapsed?: boolean }) {
   const { effectiveCommercialAccess, trialDaysRemaining } = useAuth();
-  const accessLine =
-    effectiveCommercialAccess === "trial"
-      ? `Trial · ${trialDaysRemaining} ditë`
-      : "Klient aktiv";
+  // Server-authoritative: trialDaysRemaining is derived from database now() vs
+  // trial_ends_at in getAccountState(); the client never computes it.
+  const access = accessLine({ effectiveCommercialAccess, trialDaysRemaining });
   return (
     <div className="flex items-center gap-3">
       <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-neutral-500 to-neutral-800 font-heading text-lg font-bold text-white">
@@ -30,8 +30,16 @@ function Logo({ collapsed }: { collapsed?: boolean }) {
           <div className="text-[11px] font-medium tracking-wide text-slate-400">
             {STANDARD_PLAN_NAME}
           </div>
-          <div className="text-[11px] font-medium text-slate-400">
-            {accessLine}
+          {/* Near expiry the same truthful line just gets warmer and bolder —
+              it never becomes a sales banner, and functionality is untouched
+              until the trial actually ends. */}
+          <div
+            className={cn(
+              "text-[11px] font-medium",
+              access.nearExpiry ? "font-semibold text-amber-500" : "text-slate-400",
+            )}
+          >
+            {access.text}
           </div>
         </div>
       )}
