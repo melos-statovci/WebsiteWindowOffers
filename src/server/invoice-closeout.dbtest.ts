@@ -23,7 +23,7 @@ const ownerPool = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION
 const cleanup = new TestCleanup(ownerPool);
 
 const suffix = testRunId();
-const PW = "password-12345";
+const PW = `test-pw-${suffix}`;
 const email = (who: string) => `p7co-${suffix}-${who}@example.test`;
 const H = (cookie: string) => new Headers({ cookie });
 

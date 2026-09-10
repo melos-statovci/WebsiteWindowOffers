@@ -15,7 +15,7 @@ const cleanup = new TestCleanup(ownerPool);
 const suffix = testRunId();
 const emailA = `p2-a-${suffix}@example.test`;
 const emailB = `p2-b-${suffix}@example.test`;
-const PW = "password-12345";
+const PW = `test-pw-${suffix}`;
 
 function cookieHeader(res: Response): string {
   return res.headers

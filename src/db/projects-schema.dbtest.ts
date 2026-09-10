@@ -34,7 +34,7 @@ const appDb = drizzle(appPool, { schema }) as unknown as AppDatabase;
 const cleanup = new TestCleanup(ownerPool);
 
 const suffix = testRunId();
-const PW = "password-12345";
+const PW = `test-pw-${suffix}`;
 const email = (who: string) => `p6a-${suffix}-${who}@example.test`;
 const H = (cookie: string) => new Headers({ cookie });
 

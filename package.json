@@ -37,6 +37,8 @@
     "db:migrate": "node --env-file=.env.local scripts/migrate.mjs",
     "db:setup-role": "node --env-file=.env.local scripts/setup-app-role.mjs",
     "db:seed": "node --env-file=.env.local scripts/seed.mjs",
+    "e2e:seed": "node --env-file=.env.local --env-file-if-exists=.env.e2e.local ./node_modules/.bin/tsx scripts/e2e-seed.ts",
+    "e2e:reset-applicant": "node --env-file=.env.local --env-file-if-exists=.env.e2e.local ./node_modules/.bin/tsx scripts/e2e-seed.ts --reset-applicant",
     "test:db": "node --env-file=.env.local ./node_modules/.bin/vitest run --config vitest.db.config.ts"
   },
   "dependencies": {

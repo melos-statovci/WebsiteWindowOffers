@@ -15,7 +15,7 @@ import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/
 const ownerPool = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL });
 const cleanup = new TestCleanup(ownerPool);
 const suffix = testRunId();
-const PW = "password-12345";
+const PW = `test-pw-${suffix}`;
 const H = (cookie: string) => new Headers({ cookie });
 const email = (who: string) => `acq-${suffix}-${who}@example.test`;
 
