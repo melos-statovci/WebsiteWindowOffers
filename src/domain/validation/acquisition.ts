@@ -19,8 +19,12 @@ export const trialApplicationSubmitSchema = z.object({
   phone: z.string().trim().min(6, "Shkruani telefonin.").max(40),
   country: z.string().trim().min(2, "Shkruani shtetin.").max(80),
   companySize: z.enum(COMPANY_SIZES),
+  // The key is genuinely optional: a server action drops `undefined` values, so
+  // this preprocess must treat a MISSING key the same as "" / null. Coercing an
+  // absent value with Number() yields NaN, which slipped past the optional inner
+  // schema and reached the integer column as "NaN".
   offersPerMonth: z.preprocess(
-    (value) => (value === "" || value === null ? undefined : Number(value)),
+    (value) => (value === "" || value === null || value === undefined ? undefined : Number(value)),
     z.number().int().min(0).max(100000).optional(),
   ),
   message: optionalText(1000),
@@ -45,6 +49,11 @@ export const reviewTrialApplicationSchema = z.object({
   internalReviewNote: z.string().trim().max(2000).optional().default(""),
 });
 export type ReviewTrialApplicationInput = z.infer<typeof reviewTrialApplicationSchema>;
+
+export const retryTrialApplicationProvisioningSchema = z.object({
+  id: z.string().regex(UUID_RE, "Kërkesë e pavlefshme."),
+});
+export type RetryTrialApplicationProvisioningInput = z.infer<typeof retryTrialApplicationProvisioningSchema>;
 
 export const setDemoRequestStatusSchema = z.object({
   id: z.string().regex(UUID_RE, "Demo e pavlefshme."),
