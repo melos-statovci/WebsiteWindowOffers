@@ -1,14 +1,23 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getTrialApplication } from "@/server/acquisition";
+import { getProvisionedOrganizationSummary } from "@/server/platform/provisioning";
+import { provisioningFailureText } from "@/lib/provisioning-slug";
 import { BackLink, PanelCard } from "@/app/platform/ui";
-import { TrialReviewControls } from "../../actions";
+import { TrialProvisioningRetry, TrialReviewControls } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
 function fmtDate(d: Date | null): string {
   return d ? d.toISOString().slice(0, 16).replace("T", " ") : "—";
 }
+
+const PROVISIONING_LABEL: Record<string, string> = {
+  not_started: "NUK KA FILLUAR",
+  in_progress: "NË PROCES",
+  provisioned: "I PROVIZIONUAR",
+  failed: "DËSHTOI",
+};
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -27,6 +36,7 @@ export default async function TrialApplicationDetailPage({
   const { id } = await params;
   const app = await getTrialApplication(id);
   if (!app) notFound();
+  const org = app.organizationId ? await getProvisionedOrganizationSummary(app.organizationId) : null;
 
   return (
     <div className="space-y-6">
@@ -75,9 +85,51 @@ export default async function TrialApplicationDetailPage({
         ) : null}
       </PanelCard>
 
+      {app.status === "approved" ? (
+        <PanelCard title="Provizionimi">
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <Row label="Statusi i provizionimit">{PROVISIONING_LABEL[app.provisioningStatus] ?? "—"}</Row>
+            <Row label="Provizionuar më">{fmtDate(app.provisionedAt)}</Row>
+            <Row label="Tentativa">{app.provisioningAttempts}</Row>
+            {app.provisioningStatus === "failed" ? (
+              <Row label="Arsyeja">{provisioningFailureText(app.provisioningErrorCode)}</Row>
+            ) : null}
+          </dl>
+
+          {org ? (
+            <div className="mt-5 border-t border-slate-200 pt-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Organizata e krijuar</p>
+              <Link
+                href={`/platform/organizations/${org.id}`}
+                className="mt-1 inline-block text-base font-bold text-violet-500 hover:text-violet-600"
+              >
+                {org.name}
+              </Link>
+              <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+                <Row label="Plani">{org.plan}</Row>
+                <Row label="Qasja komerciale">{org.effectiveCommercialAccess.toUpperCase()}</Row>
+                <Row label="Trial filloi">{fmtDate(org.trialStartedAt)}</Row>
+                <Row label="Trial mbaron">{fmtDate(org.trialEndsAt)}</Row>
+                <Row label="Ditë të mbetura">{org.trialDaysRemaining}</Row>
+                <Row label="Statusi operacional">{org.status.toUpperCase()}</Row>
+              </dl>
+            </div>
+          ) : null}
+
+          {app.provisioningStatus === "failed" || app.provisioningStatus === "in_progress" ? (
+            <div className="mt-5 border-t border-slate-200 pt-5">
+              <TrialProvisioningRetry id={app.id} />
+            </div>
+          ) : null}
+        </PanelCard>
+      ) : null}
+
       <p className="text-xs leading-5 text-slate-400">
-        Aprovimi këtu ndryshon vetëm statusin e aplikimit. Nuk krijon organizatë,
-        anëtarësi, llogari tenant, trial apo çmime.
+        {app.status === "pending"
+          ? "Aprovimi krijon një organizatë të re, e cakton aplikantin si pronar dhe nis provën 14-ditore. Nuk bashkëngjitet asnjë organizatë ekzistuese."
+          : app.provisioningStatus === "provisioned"
+            ? "Ky aplikim është evidencë historike. Organizata dhe prova janë krijuar tashmë dhe nuk mund të krijohen sërish."
+            : "Aprovimi është regjistruar. Prova fillon vetëm kur provizionimi përfundon me sukses."}
       </p>
     </div>
   );

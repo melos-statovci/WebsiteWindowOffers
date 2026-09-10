@@ -99,6 +99,8 @@ const ACTION_META: Record<PlatformAuditAction, { label: string; cls: string }> =
   TRIAL_APPLICATION_APPROVED: { label: "Trial i aprovuar", cls: "bg-emerald-50 text-emerald-500" },
   TRIAL_APPLICATION_REJECTED: { label: "Trial i refuzuar", cls: "bg-rose-50 text-rose-500" },
   DEMO_REQUEST_STATUS_CHANGED: { label: "Demo status", cls: "bg-violet-500/15 text-violet-500" },
+  TRIAL_APPLICATION_PROVISIONED: { label: "Trial i provizionuar", cls: "bg-emerald-50 text-emerald-500" },
+  TRIAL_APPLICATION_PROVISIONING_FAILED: { label: "Provizionimi dështoi", cls: "bg-rose-50 text-rose-500" },
 };
 
 export function ActionBadge({ action }: { action: PlatformAuditAction }) {

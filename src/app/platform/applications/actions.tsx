@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, X } from "lucide-react";
+import { Check, RefreshCw, X } from "lucide-react";
 import {
+  retryTrialApplicationProvisioning,
   reviewTrialApplication,
   setDemoRequestStatus,
 } from "@/server/platform/actions/applications.action";
@@ -23,6 +24,8 @@ export function TrialReviewControls({ id }: { id: string }) {
         setError(res.error.message);
         return;
       }
+      // The decision always persisted; provisioning may still have failed, and
+      // the refreshed page shows that state truthfully with a Retry control.
       router.refresh();
     });
   }
@@ -47,7 +50,7 @@ export function TrialReviewControls({ id }: { id: string }) {
           className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-50 px-4 text-sm font-bold text-emerald-600 hover:bg-emerald-100 disabled:pointer-events-none disabled:opacity-50"
         >
           <Check className="size-4" />
-          Aprovo
+          {pending ? "Duke provizionuar…" : "Aprovo & nis provën 14-ditore"}
         </button>
         <button
           type="button"
@@ -59,6 +62,47 @@ export function TrialReviewControls({ id }: { id: string }) {
           Refuzo
         </button>
       </div>
+      <p className="text-xs leading-5 text-slate-400">
+        Aprovimi krijon një organizatë të re Kornizo, e cakton aplikantin si
+        pronar dhe nis provën 14-ditore të Kornizo Standard.
+      </p>
+    </div>
+  );
+}
+
+/** Retry provisioning for an approved application whose provisioning failed. */
+export function TrialProvisioningRetry({ id }: { id: string }) {
+  const router = useRouter();
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  function retry() {
+    setError("");
+    startTransition(async () => {
+      const res = await retryTrialApplicationProvisioning({ id });
+      if (!res.ok) {
+        setError(res.error.message);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={retry}
+        disabled={pending}
+        className="inline-flex h-10 items-center gap-2 rounded-lg bg-violet-500/15 px-4 text-sm font-bold text-violet-600 hover:bg-violet-500/20 disabled:pointer-events-none disabled:opacity-50"
+      >
+        <RefreshCw className={`size-4 ${pending ? "animate-spin" : ""}`} />
+        {pending ? "Duke provuar përsëri…" : "Provo provizionimin përsëri"}
+      </button>
+      {error ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600">{error}</p> : null}
+      <p className="text-xs leading-5 text-slate-400">
+        Riprovimi është i sigurt: nuk mund të krijojë organizatë të dytë.
+      </p>
     </div>
   );
 }

@@ -30,7 +30,7 @@ export default async function EnglishRequestTrialPage() {
           </p>
           <div className="mt-6 grid gap-3 text-sm font-semibold text-slate-600">
             <span className="rounded-lg bg-slate-100 px-3 py-2">The application is saved as PENDING.</span>
-            <span className="rounded-lg bg-slate-100 px-3 py-2">If approved, access is prepared by the Kornizo team.</span>
+            <span className="rounded-lg bg-slate-100 px-3 py-2">Once approved, your company is created and the 14-day trial starts.</span>
             <span className="rounded-lg bg-slate-100 px-3 py-2">No payment details are required.</span>
           </div>
         </div>

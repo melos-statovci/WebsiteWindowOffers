@@ -5,6 +5,7 @@ import {
   type ApplicationSort,
   type DemoRequestStatus,
   type TrialApplicationStatus,
+  type TrialProvisioningStatus,
 } from "@/server/acquisition";
 import { PanelCard } from "../ui";
 import { DemoStatusControl } from "./actions";
@@ -26,6 +27,21 @@ function TrialBadge({ status }: { status: TrialApplicationStatus }) {
         ? "bg-rose-50 text-rose-600"
         : "bg-amber-50 text-amber-600";
   return <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-bold uppercase ${cls}`}>{status}</span>;
+}
+
+/**
+ * Provisioning state for an APPROVED application. Shown next to the decision
+ * badge so "approved but not actually provisioned" can never look like success.
+ */
+function ProvisioningBadge({ status }: { status: TrialProvisioningStatus }) {
+  const map: Record<TrialProvisioningStatus, { cls: string; label: string }> = {
+    provisioned: { cls: "bg-emerald-50 text-emerald-600", label: "trial aktiv" },
+    failed: { cls: "bg-rose-50 text-rose-600", label: "provizionimi dështoi" },
+    in_progress: { cls: "bg-amber-50 text-amber-600", label: "në proces" },
+    not_started: { cls: "bg-slate-200 text-slate-600", label: "pa provizionim" },
+  };
+  const { cls, label } = map[status];
+  return <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-bold uppercase ${cls}`}>{label}</span>;
 }
 
 function DemoBadge({ status }: { status: DemoRequestStatus }) {
@@ -149,7 +165,12 @@ export default async function ApplicationsPage({
                       </td>
                       <td className="py-3 pr-4 text-slate-600">{app.country}</td>
                       <td className="py-3 pr-4 text-slate-600">{app.companySize}</td>
-                      <td className="py-3 pr-4"><TrialBadge status={app.status} /></td>
+                      <td className="py-3 pr-4">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <TrialBadge status={app.status} />
+                          {app.status === "approved" ? <ProvisioningBadge status={app.provisioningStatus} /> : null}
+                        </div>
+                      </td>
                       <td className="py-3 pr-4 text-slate-400">{fmtDate(app.createdAt)}</td>
                     </tr>
                   ))}
