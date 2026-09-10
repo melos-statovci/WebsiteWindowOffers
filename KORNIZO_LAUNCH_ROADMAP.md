@@ -82,6 +82,23 @@ migrations, tests, and source code remain authoritative.
    - The full customer journey passes as one continuous test, and business data
      provably survives expiry, activation, suspension and re-login.
 
+5.5. **Pre-production Contact/Demo consolidation** — COMPLETE
+   - Request Free Trial remains the PRIMARY public CTA; Request a Demo remains
+     the SECONDARY one. Both were kept because they mean different things, and
+     Demo was NOT replaced by Contact.
+   - General Contact added at `/contact` and `/en/contact`, reachable from
+     navigation and the footer — never as a third hero CTA.
+   - `demo_requests` became one generic `contact_requests` table discriminated
+     by `intent` ('demo' | 'general'), preserving existing DEV rows and the
+     immutable audit history (migrations 0019-0021).
+   - Platform Applications' second tab is Contact Requests, with an intent
+     filter and a detail view that shows the visitor's message.
+   - `info@arios.systems` removed as Kornizo's public support identity. No
+     replacement address was invented; when `KORNIZO_SUPPORT_EMAIL` is unset,
+     `/contact` is the support channel.
+   - Kosovo remains the initial launch market as positioning only; nothing in
+     the architecture is hard-locked to it.
+
 6. **Production deployment** — NEXT
    - Production environment, migrations, secrets, and deployment validation.
 
@@ -109,5 +126,18 @@ migrations, tests, and source code remain authoritative.
   carry `{ withTimezone: true }`, or the read path produces an Invalid Date.
 - Public legal pages are pre-review DRAFTS, marked `robots: index: false`
   until a human legal review signs them off.
-- `KORNIZO_SUPPORT_EMAIL` is the single switch for the customer-facing contact;
-  it defaults to the address the application already shipped with.
+- `KORNIZO_SUPPORT_EMAIL` is the single switch for the customer-facing contact.
+  There is NO default address: unset means `/contact` is the channel. Never
+  invent a Kornizo address, and never present the vendor's own mailbox as
+  Kornizo support.
+- Request Free Trial is the primary public CTA and Request a Demo the
+  secondary one. Keep both; they mean different things. General Contact lives
+  in navigation and the footer.
+- One `contact_requests` table serves every inbound message, discriminated by
+  `intent`. Add a new intent only when a real contact reason needs one.
+- Never say "book a demo" while no scheduling system exists, and promise no
+  response time or meeting duration.
+- The initial commercial launch market is Kosovo. This is market positioning,
+  not a tenancy restriction.
+- No automatic deletion of any data. Account/data deletion remains a future
+  deliberate workflow.

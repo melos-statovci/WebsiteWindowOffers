@@ -1,6 +1,6 @@
 # Kornizo Launch Handoff
 
-Status: **Milestones 1-5 complete. Milestone 6 (production deployment) is next.**
+Status: **Milestones 1-5 and 5.5 complete. Milestone 6 (production deployment) is next.**
 
 ## Starting State
 
@@ -10,6 +10,7 @@ Status: **Milestones 1-5 complete. Milestone 6 (production deployment) is next.*
 - Milestone 2B public visual polish starting HEAD: `159d288c9bc1b66d45a4517f8b26302da8b8a8dc`
 - Milestone 4 starting HEAD: `ca10dcb9271c1e08759b74342f846b0af8262cff`
 - Milestone 5 starting HEAD: `fa799434be22c2a11edeecd2f7343b8e25d0b18a`
+- Milestone 5.5 starting HEAD: `9b21738d1b16e0c4a66755eb38440afd040088fa`
 - Tracking remote: `melos/clone/proferto`
 - Repository: `/Users/solution25/Website/WebsiteWindowOffers`
 - Milestone 2 final HEAD: see final report / `git rev-parse HEAD` after this
@@ -688,10 +689,15 @@ value is read at call time, not module load. Client components receive it
 through `SupportContactProvider`, fed by the server layout, rather than a
 `NEXT_PUBLIC_` variable frozen at build time.
 
-**REMAINING LAUNCH DECISION:** whether `info@arios.systems` is the final
-customer-facing support address, or Kornizo gets its own support mailbox on the
-production domain. This repository cannot decide it. Setting the environment
-variable is the whole switch.
+**REMAINING LAUNCH DECISION (as it stood at Milestone 5):** whether
+`info@arios.systems` is the final customer-facing support address, or Kornizo
+gets its own support mailbox on the production domain.
+
+> ⚠ SUPERSEDED BY MILESTONE 5.5. The Arios address was removed entirely and
+> there is no default any more: unset `KORNIZO_SUPPORT_EMAIL` now means
+> `/contact` is the support channel. See "Milestone 5.5 Pre-production
+> Contact/Demo Consolidation" below. This paragraph is kept only as the record
+> of what was decided when.
 
 Caveat verified against the build output: the public homepage and the four legal
 routes are statically prerendered, so for those pages the address is baked into
@@ -992,9 +998,16 @@ both blocked; and ACTIVE correctly ignores historical expired-trial timestamps.
 
 ### Remaining decisions / blockers before production deployment
 
-1. **Support address** — is `info@arios.systems` the final customer-facing
-   contact, or does Kornizo get its own mailbox on the production domain? Set
-   `KORNIZO_SUPPORT_EMAIL`. (No code change needed.)
+> Item 1 was SUPERSEDED by Milestone 5.5: `info@arios.systems` is no longer a
+> candidate and no longer appears on any Kornizo surface. The open question is
+> now only whether Kornizo gets its own support mailbox at all, since
+> `/contact` already works without one.
+
+1. **Support address (optional)** — does Kornizo want a support mailbox on the
+   production domain? If yes, set `KORNIZO_SUPPORT_EMAIL` and it appears
+   wherever a contact is offered. If no, `/contact` remains the channel and
+   nothing needs doing. No code change either way, and NO address may be
+   invented.
 2. **Legal review of `/privacy` and `/terms`** — required before the public site
    goes live, then flip `robots: index` to `true` in
    `src/components/public/metadata.ts`.
@@ -1021,6 +1034,340 @@ both blocked; and ACTIVE correctly ignores historical expired-trial timestamps.
    `PLATFORM_ADMIN_V15_HANDOFF.md` should be run by a person against production
    before launch.
 
+
+## Milestone 5.5 Pre-production Contact/Demo Consolidation
+
+A small pre-production cleanup, not an architecture milestone. Nothing about
+authentication, RLS, tenancy, the commercial lifecycle or audit integrity
+changed.
+
+### Locked product decision: BOTH CTAs stay
+
+`Request Free Trial` (primary) and `Request a Demo` (secondary) both remain
+public. They mean different things and neither replaces the other:
+
+| | intent | creates |
+|---|---|---|
+| Request Free Trial | use Kornizo yourself | account -> trial application -> approval -> 14-day Standard trial |
+| Request a Demo | be shown Kornizo first | nothing but a contact request |
+| Contact | general question / support | nothing but a contact request |
+
+Demo was **not** replaced by "Contact us". The hero still has exactly two
+actions — Trial as a filled primary with an arrow, Demo as an outline
+secondary — verified live in the browser (`rgb(255,255,255)` filled vs
+bordered dark). General Contact lives in navigation and the footer only; no
+third hero CTA was added.
+
+### Data model: demo_requests -> contact_requests
+
+One table for every inbound message that is not a trial application,
+discriminated by `intent` ('demo' | 'general'). Lower-case to match `status`
+on the same table.
+
+Nothing here creates tenancy: no Better Auth user, no organization, no
+membership, no `organization_accounts` row, no pricing, no trial. No RLS —
+control-plane data like `platform_admins`, readable only behind the
+platform-admin gate; the runtime role keeps SELECT/INSERT/UPDATE and no DELETE.
+
+### Migrations 0019-0021 (Neon DEVELOPMENT only)
+
+- **0019_contact_requests_rename** — `ALTER TABLE demo_requests RENAME TO
+  contact_requests`, plus indexes/status CHECK recreated under the new name and
+  the audit CHECK extended. A **rename, not a drop-and-recreate**: production
+  has never been migrated, but DEV held real demo rows and there was no reason
+  to destroy them. A Postgres rename also carries the table's GRANTs (they
+  follow the OID) — verified after applying that `kornizo_app` still has
+  exactly INSERT/SELECT/UPDATE and still no DELETE.
+- **0020_contact_request_intent** — adds `intent`, relaxes
+  `company_name`/`phone`/`country` to NULL, and adds two intent-conditional
+  CHECKs. `intent` is added `NOT NULL DEFAULT 'demo'` so the existing rows
+  backfill as the demo requests they actually are, then the **default is
+  dropped** so no future insert can be silently filed as a sales lead.
+- **0021_contact_requests_pkey_rename** — renames the leftover
+  `demo_requests_pkey`. `ALTER TABLE ... RENAME` does not touch the PK
+  constraint and Drizzle does not model its name, which is why drizzle-kit
+  never emitted it and why 0021's snapshot is intentionally identical to
+  0020's.
+
+**drizzle-kit could not generate this.** Given the renamed table it accepted
+the rename and then crashed with `TypeError: Cannot read properties of
+undefined (reading 'columns')` in `preparePgAlterColumns` — an internal bug
+diffing a renamed table that ALSO has column changes. Splitting the work into a
+rename-only diff (0019) and a plain ALTER on an existing table (0020) let the
+tool produce both the SQL and correct snapshots. The rename prompt needs a TTY;
+it was driven under `script -q /dev/null`.
+
+Constraints now on the table:
+
+- `contact_requests_status_chk` — new | contacted | closed
+- `contact_requests_intent_chk` — demo | general
+- `contact_requests_demo_shape_chk` — a DEMO must carry company, phone, country
+- `contact_requests_general_shape_chk` — a GENERAL must carry a message
+
+The two shape CHECKs are the point of keeping the columns nullable: the proven
+demo shape is still enforced **by the database**, not only by Zod.
+
+### Duplicate suppression — a deliberate behaviour change
+
+The old index was `UNIQUE(normalized_email)`: table-wide and permanent. Carried
+into a shared contact table that would have meant **asking for a demo
+permanently blocks you from ever sending a support question**, and **the
+contact form accepts exactly one message per person for all time**. That is a
+broken contact form, so it was not carried over.
+
+It is now a PARTIAL unique index:
+
+```
+UNIQUE (normalized_email, intent) WHERE status <> 'closed'
+```
+
+Scoping by intent fixes the first problem; excluding `closed` fixes the second
+using the lifecycle an operator already drives. **Demo behaviour is unchanged
+where it matters** — an OPEN demo request still suppresses a repeat submission,
+and suppression still reports success (`duplicate: true`) rather than leaking
+whether an address is on file. Three DB tests cover it: same-intent repeat
+suppressed, different intent allowed, and a closed conversation reopenable.
+
+### Domain / server terminology
+
+Active model is the CONTACT REQUEST; the customer-facing action is still
+"Request a demo".
+
+- `ContactRequestIntent`, `ContactRequestStatus`, `ContactRequestRow`
+- `createContactRequest()` — the single writer
+- `submitDemoContactRequestAction()` / `submitGeneralContactRequestAction()`
+- `listContactRequests({ q, status, intent, sort })`, `getContactRequest(id)`
+- `setContactRequestStatusAction`
+- `CONTACT_REQUEST_STATUSES`, `CONTACT_REQUEST_INTENTS`,
+  `demoContactRequestSchema`, `generalContactRequestSchema`,
+  `setContactRequestStatusSchema`
+
+`company_asc` sorting now falls back to the person's name, because
+`company_name` is nullable and NULLs would otherwise sort to the end.
+
+### Audit
+
+New events are `CONTACT_REQUEST_STATUS_CHANGED`, carrying `intent`,
+`contactRequestId`, old/new status and a `companyName` that falls back to the
+person's name. **The visitor's message is never logged**, exactly like a trial
+application's internal review note.
+
+`DEMO_REQUEST_STATUS_CHANGED` is **RETAINED** in the CHECK constraint, the
+`PlatformAuditAction` union and the Activity renderer (labelled "Demo status
+(arkiv)"). The trail is append-only and immutable even to the application;
+rewriting historical event names is neither possible nor honest. DEV's existing
+event survived all three migrations — verified before and after.
+
+`CONTACT_REQUEST_STATUS_CHANGED` was added to the Activity page's filter list.
+
+### Platform
+
+- Applications tab 2 is **Contact Requests**: a real table (contact / company /
+  intent / status / date / action) with an **intent filter** (all / demo /
+  general) independent of the status filter.
+- New detail page `/platform/applications/contact/[id]`, because a list cannot
+  usefully show a free-text message and the message is the whole point of a
+  general contact. Shows name, company, email, phone, country, submitted-at,
+  lifecycle (status / changed-at / changed-by), the status control and the
+  message. Visitor text is rendered as plain text with `whitespace-pre-line`
+  and `wrap-anywhere`, never as HTML.
+- Dashboard metric is now **"Kontakte të reja"** (all new contact requests),
+  with a demo/general split shown in a contextual panel that links to the
+  filtered lists rather than adding more tiles.
+- Nullable company renders as `—`, never blank or "undefined".
+
+No CRM, no pipeline, no analytics infrastructure.
+
+### Public routes
+
+Added `/contact`, `/en/contact`. Kept `/`, `/en`, `/request-trial`,
+`/en/request-trial`, `/request-demo`, `/en/request-demo`, `/privacy`,
+`/terms`, `/en/privacy`, `/en/terms`. Albanian remains default. No `/sq`. No
+browser-language redirect. Both contact routes are in the proxy allowlist —
+they must be reachable without a session, since `/contact` is also the support
+fallback.
+
+### Demo UX
+
+The old copy said the team "will use it for internal follow-up", which is not
+what a visitor asked for. It now says plainly: *"Dëshironi të shihni se si
+funksionon Kornizo për kompaninë tuaj? Dërgoni kërkesën dhe do t'ju kontaktojmë
+për të organizuar demonstrimin."* / *"Want to see how Kornizo works for your
+company? Send the request and we will contact you to arrange the
+demonstration."*
+
+Deliberately **NOT** "book a demo" / "rezervo një demo": there is no calendar
+or scheduling system, so nothing is booked. **No response time and no meeting
+duration are promised**, because neither has been decided. Both are enforced by
+tests. Each demo page also links to the trial and to general contact, so a
+visitor in the wrong funnel is one click away.
+
+### General contact UX
+
+Albanian *"Na kontaktoni"* / *"Keni pyetje për Kornizo? Shkruani dhe do t'ju
+kthejmë përgjigje."*; English *"Contact us"*. Fields: name, email and message
+required; company and phone optional. It states that sending a message creates
+no account and starts no trial, and it links to both acquisition actions with
+one line each explaining which is which.
+
+Security is the demo form's, unchanged: server-side Zod re-validation, length
+caps, honeypot plus minimum form-fill time, duplicate suppression, safe generic
+errors, no public read/list endpoint, and a guarded transition so a rejected
+action promise cannot fail silently. No CAPTCHA, no external anti-bot vendor,
+no IP collection.
+
+One inherited quirk is now asserted rather than assumed: the honeypot field is
+`z.string().max(0)`, so Zod rejects a filled one **before** `isLikelyBot()` is
+reached and the caller sees `VALIDATION` rather than the silent
+`ignored: true`. Nothing is persisted either way. Silently accepting would leak
+less to a bot; that is a deliberate non-change, since the milestone asked to
+reuse the proven controls rather than redesign them.
+
+### Support identity — Arios removed, nothing invented
+
+`info@arios.systems` was the DEFAULT support address. That is the vendor's own
+mailbox, not a Kornizo support identity, and Kornizo must not present it
+publicly as one. **It is gone from every rendered surface.**
+
+Nothing replaced it. Kornizo's domain has not been chosen, so inventing
+`support@kornizo.com` / `hello@kornizo.app` / anything similar would put an
+address we do not own in front of customers. The contract:
+
+```
+KORNIZO_SUPPORT_EMAIL set   -> use it
+KORNIZO_SUPPORT_EMAIL unset -> use /contact, which really works
+```
+
+- `configuredSupportEmail(): string | null` — so each surface decides whether
+  to render an address at all.
+- `supportContactHref(locale)` — always usable: `mailto:` or the contact path.
+- `contactPath(locale)`, `usesContactPageFallback()`.
+- A **malformed** variable is treated as unset, so a typo cannot produce
+  `mailto:not-an-email`.
+- Client components get `{ email: string | null; href: string }` through
+  `SupportContactProvider` (renamed hook: `useSupportContact`), fed by the
+  tenant layout.
+
+Surfaces that keep a working contact action either way: `/trial-expired`
+(email with the company pre-filled, else the "Kontakto Kornizo" button goes to
+`/contact`), `/suspended`, `/account-not-ready`, the rejected/stalled
+application, both legal pages, the tenant account panel and the near-expiry
+notice. **No surface can render "undefined", an empty mailto or a fake
+address** — 11 unit tests plus a live sweep of all 12 public routes.
+
+### Arios audit — every occurrence and its justification
+
+Repository-wide, case-insensitive, excluding `node_modules`, `.next`,
+`graphify-out` and `.git`. **Zero occurrences on any rendered surface** —
+homepage, footer, request-trial, request-demo, contact, application status,
+rejected application, trial-expired, suspended, account-not-ready, privacy,
+terms and the root error/404 pages all verified clean, both in source and in
+served HTML.
+
+Remaining occurrences, all deliberate:
+
+1. `src/lib/support-contact.ts` (1) — a COMMENT recording why the default was
+   removed. Rationale, not a rendered value; deleting it loses the reason.
+2. `KORNIZO_LAUNCH_HANDOFF.md` (Milestone 5 section) — historical narrative of
+   the decision as it stood then. History is not rewritten. The **live**
+   remaining-decisions checklist was corrected instead (see below).
+3. `docs/research/kornizo/PAGES.md` (1) — reverse-engineering notes capturing
+   what the ORIGINAL scraped site said, including its fake SOLO/BIZNES/FABRIKA
+   tiers and its contact address. Legitimate research input for the clone
+   project and not a Kornizo surface.
+
+### Legal operator, Privacy/Terms, retention
+
+- **Legal operator remains UNDECIDED.** No company name, SH.P.K., business or
+  VAT number, registration number, physical address or legal representative was
+  invented. Kornizo is a product name, not automatically a legal person.
+- `/privacy`, `/terms`, `/en/privacy`, `/en/terms` remain **DRAFTS** with their
+  visible draft notice and **`robots: index: false`** — asserted by tests and
+  re-verified in the served HTML of all 12 public routes (exactly the 4 legal
+  pages are noindex; contact, demo, trial and the homepage are indexable).
+- Only factual terminology changed: "demo request data" became "contact request
+  data ... covers both demo requests and general questions", and the usage
+  paragraph now separates trial-application data from contact-request data.
+- Initial market is **Kosovo**. The drafts may follow European SaaS principles
+  where sensible but claim no GDPR/ISO/SOC 2 certification. No public
+  positioning for Germany/Switzerland/Austria/EU-wide was added.
+- **No automatic deletion was implemented** and no cron added. Nothing deletes
+  expired-trial tenant data, clients, projects, offers, invoices, payments,
+  applications, contact requests or audit events. No invented retention
+  duration; a test blocks "after N days" wording.
+
+### Authorization
+
+Public may submit a DEMO or GENERAL contact request. Public may NOT list, fetch
+or re-status them — there is no public read endpoint, and Better Auth's
+catch-all is still the only API route. Platform admins list/inspect/filter and
+move new -> contacted -> closed. Tenant roles (owner, admin, sales, operator,
+accounting) get no platform access; the new status action is covered by
+FORBIDDEN and UNAUTHENTICATED tests.
+
+### Milestone 5.5 verification
+
+- `npm test` green: **171** unit tests (was 149).
+- `npm run test:db` green: **282** DB/integration tests (was 273).
+- `npm run lint`, `npm run typecheck`, `npm run build`, `npm run check` green.
+- `npx drizzle-kit check` green.
+- `npm run db:migrate` applied 0019/0020/0021 to Neon **DEVELOPMENT**. Live
+  verification after: 2 pre-existing rows preserved and backfilled as
+  `intent = 'demo'`, no `demo_request*` object left in the database, grants
+  intact, all four CHECKs present, the partial unique index with its WHERE
+  clause present, and the historical audit row intact.
+- Browser E2E on local dev + Neon DEV: Albanian `/request-demo` submitted
+  through the real UI -> success message -> `intent = 'demo'` in the database
+  with **zero** users/organizations/applications/accounts created; `/contact`
+  submitted -> `intent = 'general'` with company/phone/country NULL and the
+  message stored, again zero tenancy; Platform saw both under Contact Requests
+  with correct intent badges; the intent filter isolated the general one; the
+  detail page showed the message; a status change through the UI produced a
+  `CONTACT_REQUEST_STATUS_CHANGED` audit event with the intent, the actor and
+  **no message content**, while the historical `DEMO_REQUEST_STATUS_CHANGED`
+  row survived beside it. Dashboard showed "Kontakte të reja" with the
+  demo/general split. English `/en/contact` and `/en/request-demo` verified.
+- Support fallback verified BOTH ways in the browser: with
+  `KORNIZO_SUPPORT_EMAIL` temporarily set, `/contact`, the homepage footer and
+  `/privacy` all rendered `mailto:` links; with it unset, no mailto anywhere and
+  `/privacy` / `/en/terms` rendered the "formulari i kontaktit" / "the contact
+  form" link to `/contact` instead. `.env.local` was restored byte-identically.
+- Visual pass: `/`, `/en`, `/contact`, `/en/contact`, `/request-demo`,
+  `/en/request-demo`, `/request-trial`, `/privacy`, `/terms` and the English
+  equivalents — desktop and mobile, light and dark. **Zero horizontal overflow,
+  zero clipped visible text.** Dark-mode cards render on remapped slate tokens
+  (`rgb(23,23,23)` on `rgb(15,15,15)`), not hard white.
+- All E2E rows and audit events were removed afterwards; DEV is back to its
+  pre-run state (2 original contact rows, 15 organizations, historical audit
+  row intact). The standing `e2e:seed` fixtures were idempotent and created
+  nothing new.
+
+### Milestone 5.5 known issues / notes for the next session
+
+- The Browser pane's screenshot coordinate frame is NOT the CSS viewport when a
+  viewport is emulated or the pane is narrower than the page. Ref-based and
+  screenshot-derived clicks then land off-target and silently focus `BODY`.
+  Compute click coordinates as `rect * (800 / documentElement.clientWidth)`, or
+  clear emulation with `preset: "desktop"` first.
+- `form_input` writes the DOM value directly, which a React controlled input
+  does not see; the component's state stays empty. Drive React forms with
+  `computer` click + type. (`form_input` on a `<select>` does work.)
+- Measurements taken while the pane tab is not laid out return
+  `clientWidth: 0`, which makes `scrollWidth - clientWidth` look like real
+  overflow. Take a screenshot first to force layout, then measure.
+- `document.body.textContent` includes `<script>` contents, so Next.js's Flight
+  payload makes naive "does the page contain 'undefined'" checks fail. Walk
+  text nodes instead.
+- The pg SSL warning from previous phases remains unchanged.
+
+### Milestone 6 starting state (unchanged by 5.5 except the migration head)
+
+- Neon **DEVELOPMENT** is at migration **0021**. **Production has never been
+  migrated and does not exist**, so Milestone 6 applies 0000-0021 in order to a
+  fresh database — there is no rename or backfill to perform on production data.
+- Migrations 0013/0014 carry hand-appended grants and the append-only audit
+  grant; 0019-0021 are hand-written/hand-edited. Do **NOT**
+  `drizzle-kit generate` over any of them.
 
 ## Milestone 3 Replaced/Extended
 
@@ -1181,3 +1528,19 @@ Starter plan unless explicitly requested in the next milestone prompt.
 - Do not add a phone number, postal address, company registration number, SLA,
   certification claim or retention period to the legal pages without a human
   decision behind it.
+- Do not reintroduce `info@arios.systems`, or any other address, as a DEFAULT
+  support identity. Unset `KORNIZO_SUPPORT_EMAIL` means `/contact`.
+- Do not invent a Kornizo email address on a domain that has not been secured.
+- Do not replace "Request a Demo" with "Contact us", and do not demote the
+  Trial CTA. Both stay, Trial primary.
+- Do not add a third hero CTA.
+- Do not say "book a demo" or promise a response time / meeting duration while
+  no scheduling system or SLA exists.
+- Do not recreate a `demo_requests` table or any per-reason contact table; add
+  an `intent` value only when a real contact reason needs one.
+- Do not restore the table-wide `UNIQUE(normalized_email)` on contact requests —
+  it would make one message per person, forever, the only possibility.
+- Do not rewrite or delete historical `DEMO_REQUEST_STATUS_CHANGED` audit rows,
+  and do not remove that value from the audit CHECK.
+- Do not implement automatic deletion of any data, or add a deletion cron.
+- Do not hard-lock the architecture to Kosovo; it is market positioning only.
