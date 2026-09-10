@@ -21,13 +21,20 @@ export function StartUsingKornizo({ label, errorLabel }: { label: string; errorL
   function start() {
     setError("");
     startTransition(async () => {
-      const res = await activateProvisionedOrganization();
-      if (!res.ok) {
-        setError(res.error.message || errorLabel);
-        return;
+      // Guarded: this is the applicant's single door into the product. A
+      // rejected action (offline, transport failure) must show the retry
+      // message, not silently do nothing.
+      try {
+        const res = await activateProvisionedOrganization();
+        if (!res.ok) {
+          setError(res.error.message || errorLabel);
+          return;
+        }
+        router.replace("/dashboard");
+        router.refresh();
+      } catch {
+        setError(errorLabel);
       }
-      router.replace("/dashboard");
-      router.refresh();
     });
   }
 

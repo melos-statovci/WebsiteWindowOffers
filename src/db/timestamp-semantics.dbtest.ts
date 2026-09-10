@@ -277,13 +277,25 @@ describe("timestamp semantics: identical under a non-UTC process timezone", () =
   `;
 
   it("sees the same instant and the same business date in every timezone", () => {
-    const results = zones.map((tz) => {
+    interface ZoneProbe {
+      tz: string;
+      nowSec: number;
+      windowDays: number;
+      skewMin: number;
+      businessDate: string;
+    }
+
+    const results: ZoneProbe[] = zones.map((tz) => {
       const out = execFileSync(process.execPath, ["-e", script], {
         env: { ...process.env, TZ: tz },
         encoding: "utf8",
         timeout: 60_000,
       });
-      return { tz, ...(JSON.parse(out) as Record<string, unknown>) };
+      const probe = JSON.parse(out) as ZoneProbe;
+      // The child reports the zone it actually resolved; `tz` is what we asked
+      // for. Keeping the child's value is what makes the assertion below real.
+      expect(probe.tz).toBe(tz);
+      return probe;
     });
 
     // Every child must actually have run in the zone it was given, otherwise
@@ -295,11 +307,11 @@ describe("timestamp semantics: identical under a non-UTC process timezone", () =
 
     // The database instant, as the application sees it, must be the same moment
     // in every zone. Runs are sequential, so allow a small real-time spread.
-    const nowSecs = results.map((r) => r.nowSec as number);
+    const nowSecs = results.map((r) => r.nowSec);
     expect(Math.max(...nowSecs) - Math.min(...nowSecs)).toBeLessThan(60);
 
     // And it must match this process's own clock — no hour-sized offset.
-    for (const r of results) expect(Math.abs(r.skewMin as number)).toBeLessThan(5);
+    for (const r of results) expect(Math.abs(r.skewMin)).toBeLessThan(5);
 
     // current_date is a calendar date and must be byte-identical everywhere.
     const dates = new Set(results.map((r) => r.businessDate));

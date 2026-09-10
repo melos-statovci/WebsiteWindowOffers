@@ -19,14 +19,24 @@ export function TrialReviewControls({ id }: { id: string }) {
   function submit(decision: "approved" | "rejected") {
     setError("");
     startTransition(async () => {
-      const res = await reviewTrialApplication({ id, decision, internalReviewNote: note });
-      if (!res.ok) {
-        setError(res.error.message);
-        return;
+      // Guarded: a REJECTED action promise (offline, transport failure) would
+      // otherwise leave the operator with no feedback on the click that
+      // approves a customer — and an applicant waiting on a decision the
+      // operator believes they made.
+      try {
+        const res = await reviewTrialApplication({ id, decision, internalReviewNote: note });
+        if (!res.ok) {
+          setError(res.error.message);
+          return;
+        }
+        // The decision always persisted; provisioning may still have failed, and
+        // the refreshed page shows that state truthfully with a Retry control.
+        router.refresh();
+      } catch {
+        // Deliberately does NOT claim the decision failed: the action may have
+        // committed before the response was lost. Refreshing shows the truth.
+        setError("Përgjigja nuk u marr. Rifreskoni faqen për gjendjen aktuale.");
       }
-      // The decision always persisted; provisioning may still have failed, and
-      // the refreshed page shows that state truthfully with a Retry control.
-      router.refresh();
     });
   }
 
@@ -79,12 +89,16 @@ export function TrialProvisioningRetry({ id }: { id: string }) {
   function retry() {
     setError("");
     startTransition(async () => {
-      const res = await retryTrialApplicationProvisioning({ id });
-      if (!res.ok) {
-        setError(res.error.message);
-        return;
+      try {
+        const res = await retryTrialApplicationProvisioning({ id });
+        if (!res.ok) {
+          setError(res.error.message);
+          return;
+        }
+        router.refresh();
+      } catch {
+        setError("Përgjigja nuk u marr. Rifreskoni faqen për gjendjen aktuale.");
       }
-      router.refresh();
     });
   }
 
@@ -116,12 +130,16 @@ export function DemoStatusControl({ id, status }: { id: string; status: DemoRequ
   function submit() {
     setError("");
     startTransition(async () => {
-      const res = await setDemoRequestStatus({ id, status: value });
-      if (!res.ok) {
-        setError(res.error.message);
-        return;
+      try {
+        const res = await setDemoRequestStatus({ id, status: value });
+        if (!res.ok) {
+          setError(res.error.message);
+          return;
+        }
+        router.refresh();
+      } catch {
+        setError("Veprimi nuk u përfundua. Provoni përsëri.");
       }
-      router.refresh();
     });
   }
 

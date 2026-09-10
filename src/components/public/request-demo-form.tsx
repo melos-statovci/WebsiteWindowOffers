@@ -65,17 +65,25 @@ export function RequestDemoForm({ locale }: { locale: PublicLocale }) {
     setError("");
     setSuccess("");
     startTransition(async () => {
-      const res = await submitDemoRequest({
-        ...form,
-        message: form.message || undefined,
-        formStartedAt: startedAt,
-      });
-      if (!res.ok) {
-        setError(res.error.message || copy.generic);
-        return;
+      // Guarded for the same reason as the trial form: a server action can
+      // REJECT rather than return a typed error (offline, action transport
+      // failure, server restart), and an unhandled rejection inside the
+      // transition leaves the visitor with no feedback at all.
+      try {
+        const res = await submitDemoRequest({
+          ...form,
+          message: form.message || undefined,
+          formStartedAt: startedAt,
+        });
+        if (!res.ok) {
+          setError(res.error.message || copy.generic);
+          return;
+        }
+        setSuccess(res.data.duplicate ? copy.duplicate : copy.success);
+        setForm((current) => ({ ...current, message: "", website: "" }));
+      } catch {
+        setError(copy.generic);
       }
-      setSuccess(res.data.duplicate ? copy.duplicate : copy.success);
-      setForm((current) => ({ ...current, message: "", website: "" }));
     });
   }
 

@@ -36,9 +36,17 @@ function readEnv(name: string): string | null {
 /**
  * The support address to show customers.
  *
- * Read at call time rather than at module load: this module is imported by
- * Server Components, and a build-time snapshot would bake the build machine's
- * environment into the bundle.
+ * Read at call time rather than captured at module load, so a dynamically
+ * rendered page picks up the deployed environment on every request.
+ *
+ * CAVEAT, verified against the build output: the public homepage and the four
+ * legal routes are STATICALLY PRERENDERED, so for those pages "call time" IS
+ * build time and the address is baked into the prerendered HTML. That is
+ * acceptable — the variable is set in the deployment environment, and changing
+ * a deployment environment variable requires a redeploy anyway — but it does
+ * mean the value cannot be changed on a live deployment without rebuilding.
+ * Marking those pages dynamic purely to re-read one constant would cost every
+ * visitor a server render, which is the wrong trade for static legal text.
  */
 export function supportEmail(): string {
   return readEnv("KORNIZO_SUPPORT_EMAIL") ?? DEFAULT_SUPPORT_EMAIL;

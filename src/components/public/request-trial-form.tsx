@@ -155,37 +155,48 @@ export function RequestTrialForm({
     }
 
     startTransition(async () => {
-      if (!signedInUser) {
-        const signUp = await authClient.signUp.email({
-          name: account.name.trim(),
-          email: account.email.trim(),
-          password: account.password,
+      // The whole submission is wrapped: a server action can REJECT rather than
+      // return a typed error (browser offline, the action transport failing, the
+      // server restarting mid-submit). Without this the promise rejected inside
+      // the transition and the applicant saw nothing at all happen — the worst
+      // possible outcome on the form that starts the entire funnel.
+      try {
+        if (!signedInUser) {
+          const signUp = await authClient.signUp.email({
+            name: account.name.trim(),
+            email: account.email.trim(),
+            password: account.password,
+          });
+          if (signUp.error) {
+            setError(copy.signupFailed);
+            return;
+          }
+        }
+        const res = await submitTrialApplication({
+          companyName: company.companyName,
+          phone: company.phone,
+          country: company.country,
+          companySize: company.companySize as "1-5" | "6-15" | "16-50" | "51+",
+          offersPerMonth: company.offersPerMonth ? Number(company.offersPerMonth) : undefined,
+          message: company.message || undefined,
+          website: company.website,
+          formStartedAt: startedAt,
         });
-        if (signUp.error) {
-          setError(copy.signupFailed);
+        if (!res.ok) {
+          setError(res.error.message || copy.generic);
           return;
         }
+        if (res.data.ignored) {
+          setSuccess(copy.success);
+          return;
+        }
+        router.replace(statusHref);
+        router.refresh();
+      } catch {
+        // Never surface the thrown value: it can carry a Next.js digest or
+        // internal detail. The generic message is already localized.
+        setError(copy.generic);
       }
-      const res = await submitTrialApplication({
-        companyName: company.companyName,
-        phone: company.phone,
-        country: company.country,
-        companySize: company.companySize as "1-5" | "6-15" | "16-50" | "51+",
-        offersPerMonth: company.offersPerMonth ? Number(company.offersPerMonth) : undefined,
-        message: company.message || undefined,
-        website: company.website,
-        formStartedAt: startedAt,
-      });
-      if (!res.ok) {
-        setError(res.error.message || copy.generic);
-        return;
-      }
-      if (res.data.ignored) {
-        setSuccess(copy.success);
-        return;
-      }
-      router.replace(statusHref);
-      router.refresh();
     });
   }
 
