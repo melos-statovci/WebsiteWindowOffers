@@ -25,10 +25,18 @@ migrations, tests, and source code remain authoritative.
      feature cards, Standard plan panel, and responsive header behavior.
    - No fake pricing tiers.
 
-3. **Trial/demo applications** — NEXT
-   - Public trial request/application flow.
-   - No onboarding-token workflow unless a later technical review proves it is
-     necessary.
+3. **Trial/demo applications** — COMPLETE
+   - `/request-trial` and `/en/request-trial` are real localized trial
+     application flows.
+   - Trial requests require a Better Auth user account but do not create tenant
+     access.
+   - `/request-demo` and `/en/request-demo` collect accountless demo requests.
+   - `/application-status` and `/en/application-status` show only the signed-in
+     user's trial application state.
+   - Platform Admin has an Applications inbox, trial approval/rejection, demo
+     request lifecycle updates, and audit events.
+   - Approval only changes the application status; it does not provision an
+     organization, member, account, trial, pricing, profile, or tenant access.
 
 4. **Approval -> organization/trial provisioning**
    - Platform approval creates or attaches an organization to the existing user.
@@ -51,3 +59,7 @@ migrations, tests, and source code remain authoritative.
 - No cron is required for expiry correctness.
 - No Stripe, billing portal, payment method, subscription webhook, fake Starter
   plan, or fake higher plan is part of launch Milestone 1.
+- Public self-service organization creation is disabled.
+- A Better Auth user account alone is not tenant access.
+- Missing `organization_accounts` metadata fails closed with
+  `account_not_ready`.

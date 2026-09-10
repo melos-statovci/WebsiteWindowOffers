@@ -17,7 +17,7 @@ import { auth } from "@/auth";
 import * as schema from "@/db/schema";
 import { clients } from "@/db/schema/business";
 import { runWithOrg, type AppDatabase } from "@/db/tenant";
-import { TestCleanup, testRunId } from "@/db/testing/fixtures";
+import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
 import {
   createClientAction,
   updateClientAction,
@@ -74,12 +74,10 @@ let b1 = "";
 beforeAll(async () => {
   const ownerA = await signUp("ownera");
   ownerACookie = ownerA.cookie;
-  const oa = await auth.api.createOrganization({ headers: H(ownerACookie), body: { name: "Org A", slug: `p4a-${suffix}` } });
-  orgA = cleanup.org(oa!.id);
+  orgA = await createProvisionedTestOrganization(auth, cleanup, H(ownerACookie), "Org A", `p4a-${suffix}`);
 
   const ownerB = await signUp("ownerb");
-  const ob = await auth.api.createOrganization({ headers: H(ownerB.cookie), body: { name: "Org B", slug: `p4b-${suffix}` } });
-  orgB = cleanup.org(ob!.id);
+  orgB = await createProvisionedTestOrganization(auth, cleanup, H(ownerB.cookie), "Org B", `p4b-${suffix}`);
 
   const sales = await signUp("sales");
   salesUserId = sales.userId;

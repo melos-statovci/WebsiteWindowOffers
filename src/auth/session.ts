@@ -23,7 +23,7 @@ export type { AuthContext, OrgSummary };
 
 type Session = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
 
-export type ContextReason = "UNAUTHENTICATED" | "NO_ORGANIZATION" | "SUSPENDED" | "TRIAL_EXPIRED";
+export type ContextReason = "UNAUTHENTICATED" | "NO_ORGANIZATION" | "ACCOUNT_NOT_READY" | "SUSPENDED" | "TRIAL_EXPIRED";
 
 type Resolved =
   | { ok: true; session: Session; orgs: OrgSummary[]; activeId: string; role: string; account: AccountState }
@@ -61,11 +61,16 @@ async function resolveContext(reqHeaders: Headers): Promise<Resolved> {
 
   const role = await memberRole(activeId, session.user.id);
   // Platform account state (plan + commercial access + suspension) for the
-  // active org. Read from the control plane; a missing row degrades to active
-  // Standard. Suspension and trial expiry are enforced by the two entry points
-  // below (layout redirect + action FORBIDDEN).
+  // active org. Read from the control plane; a missing row fails closed via
+  // ACCOUNT_NOT_READY instead of granting tenant access.
   const account = await getAccountState(activeId);
   return { ok: true, session, orgs, activeId, role, account };
+}
+
+async function noOrganizationPath(userId: string, locale: "sq" | "en" = "sq"): Promise<string> {
+  const res = await db.execute(sql`select 1 from trial_applications where user_id = ${userId} limit 1`);
+  if (res.rows.length > 0) return locale === "en" ? "/en/application-status" : "/application-status";
+  return locale === "en" ? "/en/request-trial" : "/request-trial";
 }
 
 /** Minimal, authoritative context for server actions. */
@@ -93,6 +98,7 @@ export async function getAuthContext(reqHeaders: Headers): Promise<AuthContextRe
   // proceed. The action spine maps these non-UNAUTHENTICATED reasons to a safe
   // FORBIDDEN.
   if (r.account.status === "suspended") return { ok: false, reason: "SUSPENDED" };
+  if (!r.account.accountReady) return { ok: false, reason: "ACCOUNT_NOT_READY" };
   if (r.account.effectiveCommercialAccess === "trial_expired") return { ok: false, reason: "TRIAL_EXPIRED" };
   return {
     ok: true,
@@ -118,12 +124,15 @@ export async function getAuthContext(reqHeaders: Headers): Promise<AuthContextRe
 export async function requireAuthContext(): Promise<AuthContext> {
   const r = await resolveContext(await headers());
   if (!r.ok) {
-    redirect(r.reason === "UNAUTHENTICATED" ? "/sign-in" : "/onboarding");
+    if (r.reason === "UNAUTHENTICATED") redirect("/sign-in");
+    const session = await auth.api.getSession({ headers: await headers() });
+    redirect(session ? await noOrganizationPath(session.user.id) : "/request-trial");
   }
   // Suspension gate for the whole tenant app shell. A suspended org's members
   // are sent to /suspended instead of the app; no business data is touched, and
   // platform admins (who never pass through here) can still manage the org.
   if (r.account.status === "suspended") redirect("/suspended");
+  if (!r.account.accountReady) redirect("/account-not-ready");
   if (r.account.effectiveCommercialAccess === "trial_expired") redirect("/trial-expired");
   await ensureOrganizationProfile(r.activeId).catch(() => {});
   const active = r.orgs.find((o) => o.id === r.activeId)!;
@@ -151,9 +160,12 @@ export interface TrialExpiredContext {
 export async function requireTrialExpiredContext(): Promise<TrialExpiredContext> {
   const r = await resolveContext(await headers());
   if (!r.ok) {
-    redirect(r.reason === "UNAUTHENTICATED" ? "/sign-in" : "/onboarding");
+    if (r.reason === "UNAUTHENTICATED") redirect("/sign-in");
+    const session = await auth.api.getSession({ headers: await headers() });
+    redirect(session ? await noOrganizationPath(session.user.id) : "/request-trial");
   }
   if (r.account.status === "suspended") redirect("/suspended");
+  if (!r.account.accountReady) redirect("/account-not-ready");
   if (r.account.effectiveCommercialAccess !== "trial_expired") redirect("/dashboard");
   const active = r.orgs.find((o) => o.id === r.activeId)!;
   return {

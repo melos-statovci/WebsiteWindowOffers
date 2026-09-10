@@ -19,7 +19,7 @@ import { auth } from "@/auth";
 import * as schema from "@/db/schema";
 import { priceLists } from "@/db/schema/business";
 import { runWithOrg, type AppDatabase } from "@/db/tenant";
-import { TestCleanup, testRunId } from "@/db/testing/fixtures";
+import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
 import { ensureActivePriceList } from "@/server/pricing-init";
 import { savePricingAction } from "@/server/actions/pricing";
 import { defaultPricingCatalog } from "@/domain/pricing/defaults";
@@ -114,12 +114,10 @@ beforeAll(async () => {
   const owner = await signUp("owner");
   ownerCookie = owner.cookie;
   ownerUserId = owner.userId;
-  const oa = await auth.api.createOrganization({ headers: H(ownerCookie), body: { name: "Org A", slug: `p5a-${suffix}` } });
-  orgA = cleanup.org(oa!.id);
+  orgA = await createProvisionedTestOrganization(auth, cleanup, H(ownerCookie), "Org A", `p5a-${suffix}`);
 
   const ownerB = await signUp("ownerb");
-  const ob = await auth.api.createOrganization({ headers: H(ownerB.cookie), body: { name: "Org B", slug: `p5b-${suffix}` } });
-  orgB = cleanup.org(ob!.id);
+  orgB = await createProvisionedTestOrganization(auth, cleanup, H(ownerB.cookie), "Org B", `p5b-${suffix}`);
 
   const sales = await signUp("sales");
   salesCookie = sales.cookie;

@@ -18,7 +18,7 @@ import { auth } from "@/auth";
 import * as schema from "@/db/schema";
 import { notes } from "@/db/schema/business";
 import { runWithOrg, type AppDatabase } from "@/db/tenant";
-import { TestCleanup, testRunId } from "@/db/testing/fixtures";
+import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
 import { createNoteAction, deleteNoteAction } from "@/server/actions/note";
 
 const ownerPool = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL });
@@ -68,12 +68,10 @@ let noteB = "";
 beforeAll(async () => {
   const ownerA = await signUp("ownera", "Owner A");
   ownerACookie = ownerA.cookie;
-  const oa = await auth.api.createOrganization({ headers: H(ownerACookie), body: { name: "Org A", slug: `p8na-${suffix}` } });
-  orgA = cleanup.org(oa!.id);
+  orgA = await createProvisionedTestOrganization(auth, cleanup, H(ownerACookie), "Org A", `p8na-${suffix}`);
 
   const ownerB = await signUp("ownerb", "Owner B");
-  const ob = await auth.api.createOrganization({ headers: H(ownerB.cookie), body: { name: "Org B", slug: `p8nb-${suffix}` } });
-  orgB = cleanup.org(ob!.id);
+  orgB = await createProvisionedTestOrganization(auth, cleanup, H(ownerB.cookie), "Org B", `p8nb-${suffix}`);
 
   const sales = await signUp("sales", "Sales Person");
   salesCookie = sales.cookie;

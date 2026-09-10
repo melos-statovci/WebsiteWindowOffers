@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import pg from "pg";
 import { auth } from "@/auth";
-import { TestCleanup, testRunId } from "@/db/testing/fixtures";
+import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
 import { createProjectAction, setProjectStatusAction, addProjectItemAction } from "@/server/actions/project";
 import { createInvoiceFromProjectAction, createManualInvoiceAction, setInvoiceStatusAction, deleteInvoiceAction } from "@/server/actions/invoice";
 import { recordInvoicePaymentAction } from "@/server/actions/payment";
@@ -90,8 +90,7 @@ beforeAll(async () => {
   const owner = await signUp("owner");
   ownerCookie = owner.cookie;
   orgName = `P7CO Org ${suffix}`;
-  const oa = await auth.api.createOrganization({ headers: H(ownerCookie), body: { name: orgName, slug: `p7co-${suffix}` } });
-  orgA = cleanup.org(oa!.id);
+  orgA = await createProvisionedTestOrganization(auth, cleanup, H(ownerCookie), orgName, `p7co-${suffix}`);
   clientA = await createClient(orgA);
 }, 60000);
 

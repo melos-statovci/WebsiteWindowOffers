@@ -16,7 +16,7 @@
 // makes the platform reads simple and keeps the plan a one-way (platform-only)
 // write. See PLATFORM_ADMIN_HANDOFF.md / memory platform-admin-architecture.
 
-import { pgTable, uuid, text, timestamp, jsonb, index, check } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, jsonb, index, check, integer, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { user, organization } from "../auth-schema";
 
@@ -43,9 +43,8 @@ export const platformAdmins = pgTable("platform_admins", {
 // organization). plan is the CANONICAL product plan source. commercial_access
 // is the commercial lifecycle (trial/active). status is operational suspension.
 //
-// A missing row degrades to Standard + active access everywhere it is read, so
-// an org can never be locked out merely because its account row was not created
-// yet; suspension and trial expiry are explicit/derived states.
+// A missing row is treated as account_not_ready everywhere it is read. Better
+// Auth organization membership alone must never grant tenant app access.
 export const organizationAccounts = pgTable(
   "organization_accounts",
   {
@@ -122,10 +121,86 @@ export const platformAuditEvents = pgTable(
   (table) => [
     check(
       "platform_audit_events_action_chk",
-      sql`${table.action} in ('PLAN_CHANGED','ORGANIZATION_SUSPENDED','ORGANIZATION_REACTIVATED','INTERNAL_NOTE_UPDATED','CUSTOMER_ACTIVATED','TRIAL_EXTENDED')`,
+      sql`${table.action} in ('PLAN_CHANGED','ORGANIZATION_SUSPENDED','ORGANIZATION_REACTIVATED','INTERNAL_NOTE_UPDATED','CUSTOMER_ACTIVATED','TRIAL_EXTENDED','TRIAL_APPLICATION_APPROVED','TRIAL_APPLICATION_REJECTED','DEMO_REQUEST_STATUS_CHANGED')`,
     ),
     index("platform_audit_events_created_idx").on(table.createdAt),
     index("platform_audit_events_org_idx").on(table.organizationId),
     index("platform_audit_events_action_idx").on(table.action),
+  ],
+);
+
+// trial_applications — public acquisition applications for a future Kornizo
+// tenant. Linked to a Better Auth user, but deliberately NOT linked to an
+// organization because Milestone 3 stops before provisioning.
+export const trialApplications = pgTable(
+  "trial_applications",
+  {
+    id: uuid("id")
+      .default(sql`gen_random_uuid()`)
+      .primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    applicantName: text("applicant_name").notNull(),
+    email: text("email").notNull(),
+    normalizedEmail: text("normalized_email").notNull(),
+    companyName: text("company_name").notNull(),
+    phone: text("phone").notNull(),
+    country: text("country").notNull(),
+    companySize: text("company_size").notNull(),
+    offersPerMonth: integer("offers_per_month"),
+    message: text("message"),
+    status: text("status").notNull().default("pending"),
+    reviewedAt: timestamp("reviewed_at"),
+    reviewedByUserId: uuid("reviewed_by_user_id"),
+    reviewedByEmail: text("reviewed_by_email"),
+    internalReviewNote: text("internal_review_note"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("trial_applications_user_uidx").on(table.userId),
+    uniqueIndex("trial_applications_normalized_email_uidx").on(table.normalizedEmail),
+    index("trial_applications_status_idx").on(table.status),
+    index("trial_applications_created_idx").on(table.createdAt),
+    check("trial_applications_status_chk", sql`${table.status} in ('pending','approved','rejected')`),
+    check("trial_applications_company_size_chk", sql`${table.companySize} in ('1-5','6-15','16-50','51+')`),
+    check("trial_applications_offers_per_month_chk", sql`${table.offersPerMonth} is null or (${table.offersPerMonth} >= 0 and ${table.offersPerMonth} <= 100000)`),
+  ],
+);
+
+// demo_requests — lightweight public demo/contact requests. These never create
+// a Better Auth user and never grant tenant access.
+export const demoRequests = pgTable(
+  "demo_requests",
+  {
+    id: uuid("id")
+      .default(sql`gen_random_uuid()`)
+      .primaryKey(),
+    name: text("name").notNull(),
+    companyName: text("company_name").notNull(),
+    email: text("email").notNull(),
+    normalizedEmail: text("normalized_email").notNull(),
+    phone: text("phone").notNull(),
+    country: text("country").notNull(),
+    message: text("message"),
+    status: text("status").notNull().default("new"),
+    statusChangedAt: timestamp("status_changed_at"),
+    statusChangedByUserId: uuid("status_changed_by_user_id"),
+    statusChangedByEmail: text("status_changed_by_email"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("demo_requests_normalized_email_uidx").on(table.normalizedEmail),
+    index("demo_requests_status_idx").on(table.status),
+    index("demo_requests_created_idx").on(table.createdAt),
+    check("demo_requests_status_chk", sql`${table.status} in ('new','contacted','closed')`),
   ],
 );

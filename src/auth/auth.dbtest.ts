@@ -7,10 +7,12 @@ import { describe, it, expect, afterAll } from "vitest";
 import pg from "pg";
 import { auth } from "@/auth";
 import { ensureOrganizationProfile, isUuid } from "@/auth/organization";
+import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
 
 const ownerPool = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL });
+const cleanup = new TestCleanup(ownerPool);
 
-const suffix = Math.random().toString(36).slice(2, 8);
+const suffix = testRunId();
 const emailA = `p2-a-${suffix}@example.test`;
 const emailB = `p2-b-${suffix}@example.test`;
 const PW = "password-12345";
@@ -24,6 +26,7 @@ function cookieHeader(res: Response): string {
 const H = (cookie: string) => new Headers({ cookie });
 
 async function signUp(email: string, name: string): Promise<string> {
+  cleanup.userEmail(email);
   const res = await auth.api.signUpEmail({ body: { email, password: PW, name }, asResponse: true });
   return cookieHeader(res);
 }
@@ -41,13 +44,8 @@ let orgBId = "";
 
 afterAll(async () => {
   // Delete the organizations these tests created (cascades to member/invitation/
-  // organization_profiles) so no memberless test orgs are left behind, then the
-  // users. Scoped strictly to the ids/emails this run produced (Phase 5 hygiene).
-  const orgIds = [orgAId, orgBId].filter(isUuid);
-  if (orgIds.length > 0) {
-    await ownerPool.query(`delete from organization where id = any($1::uuid[])`, [orgIds]);
-  }
-  await ownerPool.query(`delete from "user" where email = any($1)`, [[emailA, emailB]]);
+  // organization_profiles) and the users. Scoped strictly to this run's fixtures.
+  await cleanup.run();
   await ownerPool.end();
 });
 
@@ -67,13 +65,27 @@ describe("sign-up creates identity + session", () => {
   });
 });
 
-describe("organization creation + ownership + profile", () => {
-  it("A creates an organization and becomes owner", async () => {
-    const org = await auth.api.createOrganization({
-      headers: H(cookieA),
-      body: { name: "Org A", slug: `org-a-${suffix}` },
-    });
-    orgAId = org!.id;
+describe("organization trust boundary + ownership + profile", () => {
+  it("A cannot create an organization through the public session API", async () => {
+    await expect(
+      auth.api.createOrganization({
+        headers: H(cookieA),
+        body: { name: "Blocked Org A", slug: `org-a-blocked-${suffix}` },
+      }),
+    ).rejects.toThrow();
+
+    const orgs = await auth.api.listOrganizations({ headers: H(cookieA) });
+    expect(orgs).toHaveLength(0);
+  });
+
+  it("trusted provisioning creates an organization and makes A owner", async () => {
+    orgAId = await createProvisionedTestOrganization(
+      auth,
+      cleanup,
+      H(cookieA),
+      "Org A",
+      `org-a-${suffix}`,
+    );
     expect(isUuid(orgAId)).toBe(true);
     const m = await ownerPool.query(`select role from member where organization_id=$1 and user_id=$2`, [orgAId, userAId]);
     expect(m.rows[0]?.role).toBe("owner");
@@ -107,12 +119,11 @@ describe("sign-out and sign-in again", () => {
 });
 
 describe("cross-organization membership is enforced", () => {
-  it("B signs up and creates Org B", async () => {
+  it("B signs up and is provisioned Org B through the trusted boundary", async () => {
     cookieB = await signUp(emailB, "User B");
     const sB = await auth.api.getSession({ headers: H(cookieB) });
     userBId = sB!.user.id;
-    const org = await auth.api.createOrganization({ headers: H(cookieB), body: { name: "Org B", slug: `org-b-${suffix}` } });
-    orgBId = org!.id;
+    orgBId = await createProvisionedTestOrganization(auth, cleanup, H(cookieB), "Org B", `org-b-${suffix}`);
     expect(isUuid(orgBId)).toBe(true);
   });
 

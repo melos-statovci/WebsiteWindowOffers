@@ -40,8 +40,8 @@ export function SignInForm() {
       footer={
         <>
           Nuk keni llogari?{" "}
-          <Link href="/sign-up" className="font-semibold text-slate-700 hover:text-slate-900">
-            Regjistrohu
+          <Link href="/request-trial" className="font-semibold text-slate-700 hover:text-slate-900">
+            Kërko provë falas
           </Link>
         </>
       }

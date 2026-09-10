@@ -72,6 +72,9 @@ export function CommercialAccessBadge({ access }: { access: EffectiveCommercialA
   if (access === "trial") {
     return <span className="inline-flex rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600">Trial</span>;
   }
+  if (access === "account_not_ready") {
+    return <span className="inline-flex rounded-md bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-600">Account Not Ready</span>;
+  }
   return <span className="inline-flex rounded-md bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-600">Trial Expired</span>;
 }
 
@@ -93,6 +96,9 @@ const ACTION_META: Record<PlatformAuditAction, { label: string; cls: string }> =
   INTERNAL_NOTE_UPDATED: { label: "Shënim i përditësuar", cls: "bg-violet-500/15 text-violet-500" },
   CUSTOMER_ACTIVATED: { label: "Klient aktiv", cls: "bg-emerald-50 text-emerald-500" },
   TRIAL_EXTENDED: { label: "Trial i zgjatur", cls: "bg-blue-50 text-blue-600" },
+  TRIAL_APPLICATION_APPROVED: { label: "Trial i aprovuar", cls: "bg-emerald-50 text-emerald-500" },
+  TRIAL_APPLICATION_REJECTED: { label: "Trial i refuzuar", cls: "bg-rose-50 text-rose-500" },
+  DEMO_REQUEST_STATUS_CHANGED: { label: "Demo status", cls: "bg-violet-500/15 text-violet-500" },
 };
 
 export function ActionBadge({ action }: { action: PlatformAuditAction }) {
@@ -116,6 +122,11 @@ export function auditSummary(event: AuditEventRow): string {
       return `${String(m.oldAccess ?? "")} → ${String(m.newAccess ?? "active")}`;
     case "TRIAL_EXTENDED":
       return `${String(m.oldTrialEndsAt ?? "—")} → ${String(m.newTrialEndsAt ?? "—")}`;
+    case "TRIAL_APPLICATION_APPROVED":
+    case "TRIAL_APPLICATION_REJECTED":
+      return `${String(m.oldStatus ?? "")} → ${String(m.newStatus ?? "")}`;
+    case "DEMO_REQUEST_STATUS_CHANGED":
+      return `${String(m.oldStatus ?? "")} → ${String(m.newStatus ?? "")}`;
     default:
       return "";
   }

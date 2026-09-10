@@ -4,6 +4,7 @@
 
 import Link from "next/link";
 import { getPlatformOverview } from "@/server/platform/organizations";
+import { getAcquisitionOverview } from "@/server/acquisition";
 import { PLAN_TIERS } from "@/lib/plan";
 import { CommercialAccessBadge, Metric, PanelCard, PlanBadge, StatusBadge } from "./ui";
 
@@ -14,7 +15,7 @@ function fmtDate(d: Date): string {
 }
 
 export default async function PlatformDashboardPage() {
-  const o = await getPlatformOverview();
+  const [o, acquisition] = await Promise.all([getPlatformOverview(), getAcquisitionOverview()]);
   return (
     <div className="space-y-6">
       <div>
@@ -31,6 +32,8 @@ export default async function PlatformDashboardPage() {
         <Metric label="Llogari aktive" value={o.activeAccounts} />
         <Metric label="Pezulluar" value={o.suspendedOrganizations} tone={o.suspendedOrganizations ? "amber" : "default"} />
         <Metric label="Përdorues" value={o.totalUsers} />
+        <Metric label="Trial aplikime" value={acquisition.pendingTrialApplications} tone={acquisition.pendingTrialApplications ? "amber" : "default"} />
+        <Metric label="Demo të reja" value={acquisition.newDemoRequests} tone={acquisition.newDemoRequests ? "amber" : "default"} />
       </div>
 
       <PanelCard

@@ -17,10 +17,39 @@
 // never touch normal development organizations or data. No broad/prefix DELETEs.
 
 import type pg from "pg";
+import { createTrustedProvisionedOrganization } from "@/server/provisioning";
+
+interface TestAuthApi {
+  getSession(input: { headers: Headers }): Promise<{ user: { id: string } } | null>;
+  setActiveOrganization(input: { headers: Headers; body: { organizationId: string } }): Promise<unknown>;
+}
+
+interface TestAuth {
+  api: TestAuthApi;
+}
 
 /** A short, collision-resistant token to namespace a single test run's fixtures. */
 export function testRunId(): string {
   return Math.random().toString(36).slice(2, 8);
+}
+
+export async function createProvisionedTestOrganization(
+  auth: TestAuth,
+  cleanup: TestCleanup,
+  headers: Headers,
+  name: string,
+  slug: string,
+): Promise<string> {
+  const session = await auth.api.getSession({ headers });
+  if (!session) throw new Error("createProvisionedTestOrganization: missing fixture session");
+  const organization = await createTrustedProvisionedOrganization({
+    userId: session.user.id,
+    name,
+    slug,
+  });
+  const id = cleanup.org((organization as { id: string }).id);
+  await auth.api.setActiveOrganization({ headers, body: { organizationId: id } });
+  return id;
 }
 
 /**

@@ -45,11 +45,11 @@ describe("public marketing launch constraints", () => {
     ]);
   });
 
-  it("keeps localized temporary trial and demo pages non-persisting", () => {
-    expect(publicMarketing.en.temporaryCtaPages.trial.description).toContain("application flow is not open yet");
-    expect(publicMarketing.en.temporaryCtaPages.demo.description).toContain("intentionally non-persisting");
-    expect(publicMarketing.sq.temporaryCtaPages.trial.noFormNotice).toContain("nuk mbledh ose ruan");
-    expect(publicMarketing.sq.temporaryCtaPages.demo.description).toContain("nuk ruan të dhëna");
+  it("keeps localized request pages truthful about review and demo boundaries", () => {
+    expect(publicMarketing.en.temporaryCtaPages.trial.description).toContain("Submit a company application");
+    expect(publicMarketing.en.temporaryCtaPages.demo.noFormNotice).toContain("does not create a Kornizo account");
+    expect(publicMarketing.sq.temporaryCtaPages.trial.noFormNotice).toContain("ruan një Trial Application");
+    expect(publicMarketing.sq.temporaryCtaPages.demo.description).toContain("ndjekje të brendshme");
   });
 
   it("maps language switch targets to equivalent public pages", () => {
@@ -57,5 +57,7 @@ describe("public marketing launch constraints", () => {
     expect(localizedPath("sq", "/en")).toBe("/");
     expect(localizedPath("en", "/request-trial")).toBe("/en/request-trial");
     expect(localizedPath("sq", "/en/request-demo")).toBe("/request-demo");
+    expect(localizedPath("en", "/application-status")).toBe("/en/application-status");
+    expect(localizedPath("sq", "/en/application-status")).toBe("/application-status");
   });
 });

@@ -11,7 +11,7 @@ import { auth } from "@/auth";
 import { db } from "@/db/client";
 import { runWithOrg } from "@/db/tenant";
 import { ensureOrganizationProfile } from "@/auth/organization";
-import { TestCleanup, testRunId } from "@/db/testing/fixtures";
+import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
 import { createAction, type ActionResult } from "@/server/action";
 import { updateOrganizationProfileAction } from "@/server/actions/organization-profile";
 
@@ -55,13 +55,11 @@ let roleUserId = "";
 beforeAll(async () => {
   const owner = await signUp("owner");
   ownerCookie = owner.cookie;
-  const oa = await auth.api.createOrganization({ headers: H(ownerCookie), body: { name: "Org A", slug: `p3a-${suffix}` } });
-  orgA = cleanup.org(oa!.id);
+  orgA = await createProvisionedTestOrganization(auth, cleanup, H(ownerCookie), "Org A", `p3a-${suffix}`);
   await ensureOrganizationProfile(orgA);
 
   const b = await signUp("ownerb");
-  const ob = await auth.api.createOrganization({ headers: H(b.cookie), body: { name: "Org B", slug: `p3b-${suffix}` } });
-  orgB = cleanup.org(ob!.id);
+  orgB = await createProvisionedTestOrganization(auth, cleanup, H(b.cookie), "Org B", `p3b-${suffix}`);
   await ensureOrganizationProfile(orgB);
 
   const admin = await signUp("admin");

@@ -23,6 +23,7 @@ import {
 export type { AccountStatus, CommercialAccess, EffectiveCommercialAccess };
 
 export interface AccountState {
+  accountReady: boolean;
   plan: PlanTier;
   status: AccountStatus;
   commercialAccess: CommercialAccess;
@@ -77,10 +78,11 @@ export async function getAccountState(orgId: string): Promise<AccountState> {
   const now = toDate(row?.server_now) ?? new Date();
   if (!row) {
     return {
+      accountReady: false,
       plan: "STANDARD",
       status: "active",
-      commercialAccess: "active",
-      effectiveCommercialAccess: "active",
+      commercialAccess: "trial",
+      effectiveCommercialAccess: "account_not_ready",
       trialStartedAt: null,
       trialEndsAt: null,
       activatedAt: null,
@@ -93,6 +95,7 @@ export async function getAccountState(orgId: string): Promise<AccountState> {
   const trialStartedAt = toDate(row.trial_started_at);
   const trialEndsAt = toDate(row.trial_ends_at);
   return {
+    accountReady: true,
     plan: asPlanTier(row.plan),
     status: row.status === "suspended" ? "suspended" : "active",
     commercialAccess,
@@ -108,9 +111,8 @@ export async function getAccountState(orgId: string): Promise<AccountState> {
 
 /**
  * Guarantee an organization_accounts row exists (default 14-day full Standard
- * trial). Idempotent and best-effort — a missing row is already handled by
- * getAccountState's active Standard default, so callers never need to await
- * success. Used by the org-creation hook.
+ * trial). Idempotent and best-effort for trusted provisioning paths; callers
+ * that need tenant access must still fail closed when this row is missing.
  */
 export async function ensureOrganizationAccount(orgId: string): Promise<void> {
   await db.execute(

@@ -20,7 +20,7 @@ export default function proxy(req: NextRequest) {
 
   const hasSession = Boolean(getSessionCookie(req));
   const isAuthPage = AUTH_PAGES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-  const isPublicPage = PUBLIC_PAGES.some((p) => pathname === p || (p !== "/" && pathname.startsWith(`${p}/`)));
+  const isPublicPage = PUBLIC_PAGES.some((p) => pathname === p || (p !== "/" && p !== "/en" && pathname.startsWith(`${p}/`)));
 
   // Security-critical redirect only: no session cookie -> can't load a protected
   // page. The inverse ("already signed in, skip the auth page") is handled in the

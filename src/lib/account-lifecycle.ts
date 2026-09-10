@@ -1,6 +1,6 @@
 export type AccountStatus = "active" | "suspended";
 export type CommercialAccess = "trial" | "active";
-export type EffectiveCommercialAccess = CommercialAccess | "trial_expired";
+export type EffectiveCommercialAccess = CommercialAccess | "trial_expired" | "account_not_ready";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -27,5 +27,7 @@ export function commercialAccessLabel(access: EffectiveCommercialAccess): string
       return "Trial";
     case "trial_expired":
       return "Trial Expired";
+    case "account_not_ready":
+      return "Account Not Ready";
   }
 }

@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Building2,
+  Inbox,
   ShieldCheck,
   ScrollText,
   ExternalLink,
@@ -30,6 +31,7 @@ import { authClient } from "@/auth/client";
 const NAV = [
   { href: "/platform", label: "Përmbledhje", icon: LayoutDashboard, exact: true },
   { href: "/platform/organizations", label: "Organizatat", icon: Building2, exact: false },
+  { href: "/platform/applications", label: "Applications", icon: Inbox, exact: false },
   { href: "/platform/admins", label: "Platform Admins", icon: ShieldCheck, exact: false },
   { href: "/platform/activity", label: "Aktiviteti", icon: ScrollText, exact: false },
 ];

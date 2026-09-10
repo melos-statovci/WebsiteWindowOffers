@@ -25,7 +25,7 @@ import { auth } from "@/auth";
 import * as schema from "@/db/schema";
 import { projects } from "@/db/schema/business";
 import { runWithOrg, type AppDatabase } from "@/db/tenant";
-import { TestCleanup, testRunId } from "@/db/testing/fixtures";
+import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
 import { ensureActivePriceList } from "@/server/pricing-init";
 
 const ownerPool = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL });
@@ -112,18 +112,10 @@ let plB = { id: "", version: 1 };
 
 beforeAll(async () => {
   const ownerA = await signUp("ownera");
-  const oa = await auth.api.createOrganization({
-    headers: H(ownerA.cookie),
-    body: { name: "P6A Org A", slug: `p6a-a-${suffix}` },
-  });
-  orgA = cleanup.org(oa!.id);
+  orgA = await createProvisionedTestOrganization(auth, cleanup, H(ownerA.cookie), "P6A Org A", `p6a-a-${suffix}`);
 
   const ownerB = await signUp("ownerb");
-  const ob = await auth.api.createOrganization({
-    headers: H(ownerB.cookie),
-    body: { name: "P6A Org B", slug: `p6a-b-${suffix}` },
-  });
-  orgB = cleanup.org(ob!.id);
+  orgB = await createProvisionedTestOrganization(auth, cleanup, H(ownerB.cookie), "P6A Org B", `p6a-b-${suffix}`);
 
   clientA = await createClient(orgA, "Client A");
   clientB = await createClient(orgB, "Client B");
@@ -243,11 +235,7 @@ describe("cascade + client-delete semantics", () => {
   it("a client with projects CANNOT be deleted (NO ACTION), but the org cascade removes both", async () => {
     // dedicated throwaway org so the cascade delete cannot disturb other tests.
     const ownerC = await signUp("ownerc");
-    const oc = await auth.api.createOrganization({
-      headers: H(ownerC.cookie),
-      body: { name: "P6A Org C", slug: `p6a-c-${suffix}` },
-    });
-    const orgC = oc!.id; // intentionally NOT tracked in cleanup: we delete it here
+    const orgC = await createProvisionedTestOrganization(auth, cleanup, H(ownerC.cookie), "P6A Org C", `p6a-c-${suffix}`);
     const clientC = await createClient(orgC, "Client C");
     const plC = await activePriceList(orgC);
     const pid = await insertProject(orgC, {

@@ -22,7 +22,7 @@ import { auth } from "@/auth";
 import * as schema from "@/db/schema";
 import { invoices } from "@/db/schema/business";
 import { runWithOrg, type AppDatabase } from "@/db/tenant";
-import { TestCleanup, testRunId } from "@/db/testing/fixtures";
+import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
 import { createProjectAction, setProjectStatusAction, addProjectItemAction, updateProjectItemAction } from "@/server/actions/project";
 import {
   createInvoiceFromProjectAction,
@@ -129,13 +129,11 @@ async function acceptedProjectWithItem(): Promise<{ projectId: string; unitPrice
 beforeAll(async () => {
   const owner = await signUp("owner");
   ownerCookie = owner.cookie;
-  const oa = await auth.api.createOrganization({ headers: H(ownerCookie), body: { name: "P7B A", slug: `p7b-a-${suffix}` } });
-  orgA = cleanup.org(oa!.id);
+  orgA = await createProvisionedTestOrganization(auth, cleanup, H(ownerCookie), "P7B A", `p7b-a-${suffix}`);
 
   const ownerB = await signUp("ownerb");
   ownerBCookie = ownerB.cookie;
-  const ob = await auth.api.createOrganization({ headers: H(ownerBCookie), body: { name: "P7B B", slug: `p7b-b-${suffix}` } });
-  orgB = cleanup.org(ob!.id);
+  orgB = await createProvisionedTestOrganization(auth, cleanup, H(ownerBCookie), "P7B B", `p7b-b-${suffix}`);
 
   const sales = await signUp("sales");
   salesCookie = sales.cookie;

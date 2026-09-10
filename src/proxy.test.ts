@@ -8,14 +8,14 @@ function request(pathname: string) {
 
 describe("public/protected route proxy", () => {
   it("allows public marketing routes without a session cookie", () => {
-    for (const pathname of ["/", "/en", "/request-trial", "/request-demo", "/en/request-trial", "/en/request-demo", "/sign-in"]) {
+    for (const pathname of ["/", "/en", "/request-trial", "/request-demo", "/en/request-trial", "/en/request-demo", "/sign-in", "/sign-up"]) {
       const response = proxy(request(pathname));
       expect(response.headers.get("location")).toBeNull();
     }
   });
 
   it("redirects protected tenant and platform routes without a session cookie", () => {
-    for (const pathname of ["/dashboard", "/projects", "/platform"]) {
+    for (const pathname of ["/dashboard", "/projects", "/platform", "/application-status", "/en/application-status"]) {
       const response = proxy(request(pathname));
       expect(response.headers.get("location")).toBe(`https://kornizo.test/sign-in`);
     }

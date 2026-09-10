@@ -21,7 +21,7 @@ export default async function SuspendedPage() {
   // suspended — an active user who lands here is bounced back to the app.
   const orgs = await auth.api.listOrganizations({ headers: h });
   const activeId = session.session.activeOrganizationId ?? orgs?.[0]?.id ?? null;
-  if (!activeId) redirect("/onboarding");
+  if (!activeId) redirect("/request-trial");
   const account = await getAccountState(activeId);
   if (account.status !== "suspended") redirect("/dashboard");
 

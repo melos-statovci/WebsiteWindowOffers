@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import pg from "pg";
 import { auth } from "@/auth";
-import { TestCleanup, testRunId } from "@/db/testing/fixtures";
+import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
 import {
   createProjectAction,
   updateProjectAction,
@@ -76,11 +76,7 @@ let clientA = "";
 beforeAll(async () => {
   const owner = await signUp("owner");
   ownerCookie = owner.cookie;
-  const oa = await auth.api.createOrganization({
-    headers: H(ownerCookie),
-    body: { name: "P7F A", slug: `p7f-a-${suffix}` },
-  });
-  orgA = cleanup.org(oa!.id);
+  orgA = await createProvisionedTestOrganization(auth, cleanup, H(ownerCookie), "P7F A", `p7f-a-${suffix}`);
   clientA = await createClient(orgA, "Client A");
 }, 60000);
 

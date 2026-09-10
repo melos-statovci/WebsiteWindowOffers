@@ -32,6 +32,7 @@ export const auth = betterAuth({
     organization({
       ac,
       roles,
+      allowUserToCreateOrganization: false,
       // New organizations get a business profile row. Best-effort here (the org
       // may not be visible to a separate tenant transaction yet); the app shell
       // re-ensures it authoritatively on first load.
@@ -39,8 +40,9 @@ export const auth = betterAuth({
         afterCreate: async ({ organization: org }: { organization: { id: string } }) => {
           try {
             await ensureOrganizationProfile(org.id);
-            // Control-plane account row (default 14-day Standard trial). Best-effort: reads
-            // degrade to the same default if it is missing, so this never blocks.
+            // Control-plane account row (default 14-day Standard trial).
+            // Best-effort here; trusted provisioning re-ensures it after the
+            // Better Auth organization transaction completes.
             await ensureOrganizationAccount(org.id);
             // Seed default pricing (version 1) so the new org can configure/price
             // immediately. Best-effort: the pricing read boundary re-ensures it

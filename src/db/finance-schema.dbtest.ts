@@ -28,7 +28,7 @@ import { auth } from "@/auth";
 import * as schema from "@/db/schema";
 import { invoices, payments } from "@/db/schema/business";
 import { runWithOrg, type AppDatabase } from "@/db/tenant";
-import { TestCleanup, testRunId } from "@/db/testing/fixtures";
+import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
 
 const ownerPool = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL });
 const appPool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 4 });
@@ -127,18 +127,10 @@ let projectA = "";
 
 beforeAll(async () => {
   const ownerA = await signUp("ownera");
-  const oa = await auth.api.createOrganization({
-    headers: H(ownerA.cookie),
-    body: { name: "P7A Org A", slug: `p7a-a-${suffix}` },
-  });
-  orgA = cleanup.org(oa!.id);
+  orgA = await createProvisionedTestOrganization(auth, cleanup, H(ownerA.cookie), "P7A Org A", `p7a-a-${suffix}`);
 
   const ownerB = await signUp("ownerb");
-  const ob = await auth.api.createOrganization({
-    headers: H(ownerB.cookie),
-    body: { name: "P7A Org B", slug: `p7a-b-${suffix}` },
-  });
-  orgB = cleanup.org(ob!.id);
+  orgB = await createProvisionedTestOrganization(auth, cleanup, H(ownerB.cookie), "P7A Org B", `p7a-b-${suffix}`);
 
   clientA = await createClient(orgA, "Client A");
   clientB = await createClient(orgB, "Client B");
@@ -268,11 +260,7 @@ describe("finance delete semantics (accounting history is protected)", () => {
 
   it("a client with invoices OR payments CANNOT be deleted (NO ACTION); org cascade removes all", async () => {
     const ownerC = await signUp("ownerc");
-    const oc = await auth.api.createOrganization({
-      headers: H(ownerC.cookie),
-      body: { name: "P7A Org C", slug: `p7a-c-${suffix}` },
-    });
-    const orgC = oc!.id; // intentionally NOT tracked: deleted here
+    const orgC = await createProvisionedTestOrganization(auth, cleanup, H(ownerC.cookie), "P7A Org C", `p7a-c-${suffix}`);
     const clientC = await createClient(orgC, "Client C");
     const invC = await insertInvoice(orgC, { orgId: orgC, clientId: clientC, number: `FAT-${suffix}-C1` });
     await insertLine(orgC, { orgId: orgC, invoiceId: invC });

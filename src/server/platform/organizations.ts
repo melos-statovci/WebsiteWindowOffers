@@ -93,11 +93,12 @@ export async function listPlatformOrganizations(filters: OrgListFilters = {}): P
         o.created_at as "createdAt",
         coalesce(a.plan, 'STANDARD') as plan,
         coalesce(a.status, 'active') as status,
-        coalesce(a.commercial_access, 'active') as "commercialAccess",
+        coalesce(a.commercial_access, 'trial') as "commercialAccess",
         a.trial_ends_at as "trialEndsAt",
         now() as "serverNow",
         case
-          when coalesce(a.commercial_access, 'active') = 'active' then 'active'
+          when a.organization_id is null then 'account_not_ready'
+          when a.commercial_access = 'active' then 'active'
           when a.trial_ends_at is not null and now() < a.trial_ends_at then 'trial'
           else 'trial_expired'
         end as "effectiveCommercialAccess",
@@ -116,8 +117,8 @@ export async function listPlatformOrganizations(filters: OrgListFilters = {}): P
       ) owner_u on true
       where
         (${q}::text is null or o.name ilike '%' || ${q} || '%' or o.slug ilike '%' || ${q} || '%')
-        and (${status}::text is null or coalesce(a.status, 'active') = ${status})
-        and (${plan}::text is null or coalesce(a.plan, 'STANDARD') = ${plan})
+        and (${status}::text is null or a.status = ${status})
+        and (${plan}::text is null or a.plan = ${plan})
     )
     select * from org_rows
     where (${commercialAccess}::text is null or "effectiveCommercialAccess" = ${commercialAccess})
@@ -207,9 +208,10 @@ export async function getPlatformOrganization(orgId: string): Promise<PlatformOr
   const base = await db.execute(sql`
     select
       o.id, o.name, o.slug, o.created_at as "createdAt",
+      (a.organization_id is not null) as "accountReady",
       coalesce(a.plan, 'STANDARD') as plan,
       coalesce(a.status, 'active') as status,
-      coalesce(a.commercial_access, 'active') as "commercialAccess",
+      coalesce(a.commercial_access, 'trial') as "commercialAccess",
       a.trial_started_at as "trialStartedAt",
       a.trial_ends_at as "trialEndsAt",
       a.activated_at as "activatedAt",
@@ -224,7 +226,7 @@ export async function getPlatformOrganization(orgId: string): Promise<PlatformOr
   `);
   const b = base.rows[0] as
     | {
-        id: string; name: string; slug: string; createdAt: string | Date;
+        id: string; name: string; slug: string; createdAt: string | Date; accountReady: boolean;
         plan: string; status: string; commercialAccess: string;
         trialStartedAt: string | Date | null; trialEndsAt: string | Date | null; activatedAt: string | Date | null;
         suspendedAt: string | Date | null; suspendedReason: string | null; internalNote: string | null;
@@ -311,7 +313,9 @@ export async function getPlatformOrganization(orgId: string): Promise<PlatformOr
     plan: asPlanTier(b.plan),
     status: b.status === "suspended" ? "suspended" : "active",
     commercialAccess,
-    effectiveCommercialAccess: effectiveCommercialAccess({ commercialAccess, trialEndsAt, now: serverNow }),
+    effectiveCommercialAccess: b.accountReady
+      ? effectiveCommercialAccess({ commercialAccess, trialEndsAt, now: serverNow })
+      : "account_not_ready",
     trialStartedAt,
     trialEndsAt,
     activatedAt: toDate(b.activatedAt),
@@ -363,25 +367,25 @@ export async function getPlatformOverview(): Promise<PlatformOverview> {
   const orgRes = await db.execute(sql`
     select
       count(*)::int as total,
-      count(*) filter (where coalesce(a.status,'active') = 'active')::int as active,
-      count(*) filter (where coalesce(a.status,'active') = 'suspended')::int as suspended,
-      count(*) filter (where coalesce(a.plan,'STANDARD') = 'STANDARD')::int as standard,
+      count(*) filter (where a.status = 'active')::int as active,
+      count(*) filter (where a.status = 'suspended')::int as suspended,
+      count(*) filter (where a.plan = 'STANDARD')::int as standard,
       count(*) filter (
-        where coalesce(a.commercial_access,'active') = 'trial'
+        where a.commercial_access = 'trial'
           and a.trial_ends_at is not null
           and now() < a.trial_ends_at
       )::int as "activeTrials",
       count(*) filter (
-        where coalesce(a.commercial_access,'active') = 'trial'
+        where a.commercial_access = 'trial'
           and a.trial_ends_at is not null
           and now() < a.trial_ends_at
           and a.trial_ends_at <= now() + interval '3 days'
       )::int as "trialsExpiringSoon",
       count(*) filter (
-        where coalesce(a.commercial_access,'active') = 'trial'
+        where a.commercial_access = 'trial'
           and (a.trial_ends_at is null or now() >= a.trial_ends_at)
       )::int as "trialExpired",
-      count(*) filter (where coalesce(a.commercial_access,'active') = 'active')::int as "activeCustomers"
+      count(*) filter (where a.commercial_access = 'active')::int as "activeCustomers"
     from organization o
     left join organization_accounts a on a.organization_id = o.id
   `);
@@ -398,7 +402,8 @@ export async function getPlatformOverview(): Promise<PlatformOverview> {
       coalesce(a.status,'active') as status,
       a.trial_ends_at as "trialEndsAt",
       case
-        when coalesce(a.commercial_access, 'active') = 'active' then 'active'
+        when a.organization_id is null then 'account_not_ready'
+        when a.commercial_access = 'active' then 'active'
         when a.trial_ends_at is not null and now() < a.trial_ends_at then 'trial'
         else 'trial_expired'
       end as "effectiveCommercialAccess",

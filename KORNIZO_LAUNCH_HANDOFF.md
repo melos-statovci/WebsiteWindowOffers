@@ -1,6 +1,6 @@
 # Kornizo Launch Handoff
 
-Status: **Milestone 1 complete. Milestone 2 complete, including bilingual public-site follow-up and final public visual polish. Milestone 3 is next.**
+Status: **Milestone 1 complete. Milestone 2 complete, including bilingual public-site follow-up and final public visual polish. Milestone 3 complete. Milestone 4 is next.**
 
 ## Starting State
 
@@ -12,14 +12,17 @@ Status: **Milestone 1 complete. Milestone 2 complete, including bilingual public
 - Repository: `/Users/solution25/Website/WebsiteWindowOffers`
 - Milestone 2 final HEAD: see final report / `git rev-parse HEAD` after this
   handoff update is committed and pushed.
+- Milestone 3 final HEAD: see final report / `git rev-parse HEAD` after this
+  handoff update is committed and pushed.
 
 ## Completed Milestones
 
 Milestone 1 established Kornizo Standard and the customer access lifecycle.
 Milestone 2 added the public Kornizo homepage, truthful temporary public CTA
 pages, the Albanian-default / English-secondary public language pass, and the
-final public visual polish pass. Do not redo Milestone 1 or Milestone 2 in the
-next session.
+final public visual polish pass. Milestone 3 replaced the temporary public CTA
+pages with real trial/demo application persistence and Platform Admin review
+flows, while preserving the hard stop before tenant provisioning.
 
 ## Milestone 2 Public Homepage
 
@@ -79,25 +82,35 @@ next session.
   Privacy/Terms placeholders were not added because legal pages are not part of
   this milestone.
 
-## Milestone 2 CTA Behavior
+## Milestone 3 Acquisition Behavior
 
-- `/request-trial` is the Albanian public static placeholder for trial
-  requests. It truthfully says trial requests are opening soon, links back home
-  and to sign-in, and states that no form is active and no contact data is
-  collected or stored.
-- `/request-demo` is the Albanian public static placeholder for demo requests
-  with the same non-persisting behavior.
-- `/en/request-trial` and `/en/request-demo` provide the same truthful
-  temporary pages in English.
-- No application tables, lead tables, public application API, organization
-  provisioning, Better Auth user creation, approval workflow or Platform
-  Applications page was started.
+- `/request-trial` and `/en/request-trial` are real localized trial
+  application flows. Signed-out applicants create a Better Auth user account
+  first; signed-in users submit company/application fields directly.
+- Trial applications are stored in `trial_applications` with
+  `pending|approved|rejected` status, normalized email uniqueness, user
+  ownership, reviewer metadata, and internal notes that are never shown to the
+  applicant.
+- `/application-status` and `/en/application-status` are signed-in status pages
+  for the current user's own trial application. Approved status explicitly says
+  access is being prepared and that the trial has not started yet.
+- `/request-demo` and `/en/request-demo` collect accountless demo requests in
+  `demo_requests`; demo submission does not create a Better Auth user or
+  tenant organization.
+- Duplicate trial/demo submissions are suppressed by user/email identity instead
+  of creating duplicate rows.
+- Honeypot and minimum-form-time checks mark likely bot submissions without
+  trusting client-provided status, user, reviewer, or lifecycle fields.
 
-## Milestone 2 Public/Auth Routing
+## Milestone 3 Public/Auth Routing
 
 - `src/proxy.ts` now allows logged-out access to `/`, `/en`, `/request-trial`,
   `/request-demo`, `/en/request-trial`, `/en/request-demo`, `/sign-in` and
   `/sign-up`.
+- `/sign-up` now redirects to `/request-trial`; public self-service
+  organization creation is disabled.
+- `/application-status` and `/en/application-status` remain protected, then show
+  only the signed-in user's application state.
 - Protected tenant and platform routes remain protected by the proxy for
   logged-out GET navigation, and still rely on their server-authoritative
   layout gates (`requireAuthContext`, `requirePlatformAdmin`) for real
@@ -206,16 +219,71 @@ next session.
   homepage is intentionally auth-independent, and protected-route behavior was
   verified logged out via HTTP and unit tests.
 
-## Milestone 3 Must Replace/Extend
+## Milestone 3 Files Added/Changed
 
-- Replace `/request-trial` and `/en/request-trial` with the real localized
+- `src/app/request-trial/page.tsx`, `src/app/en/request-trial/page.tsx`,
+  `src/components/public/request-trial-form.tsx` - localized trial application
+  flow.
+- `src/app/request-demo/page.tsx`, `src/app/en/request-demo/page.tsx`,
+  `src/components/public/request-demo-form.tsx` - localized accountless demo
+  request flow.
+- `src/app/application-status/page.tsx`,
+  `src/app/en/application-status/page.tsx`,
+  `src/components/public/application-status-page.tsx` - applicant status pages.
+- `src/app/platform/applications/page.tsx`,
+  `src/app/platform/applications/trial/[id]/page.tsx`, and platform
+  application action components - Platform Admin inbox and review controls.
+- `src/server/acquisition.ts`, `src/server/acquisition.action.ts`,
+  `src/domain/validation/acquisition.ts` - public acquisition persistence,
+  validation, duplicate suppression, and listing helpers.
+- `src/server/platform/actions/applications.ts` and `.action.ts` - platform
+  review/status actions with audit.
+- `src/server/provisioning.ts` - trusted server-side provisioning primitive for
+  Milestone 4 and tests; it is not exposed to public sign-up or application
+  approval.
+- `src/db/migrations/0016_nervous_quicksilver.sql` and Drizzle metadata -
+  trial/demo application tables and audit action expansion.
+- `src/app/account-not-ready/page.tsx`, `src/auth/session.ts`,
+  `src/server/platform/accounts.ts`, and platform organization views - missing
+  `organization_accounts` metadata now fails closed as `account_not_ready`.
+- Removed the obsolete `src/components/public/temporary-request-page.tsx`
+  placeholder component.
+
+## Milestone 3 Security Decisions
+
+- A Better Auth user account alone is not tenant access.
+- Public self-service organization creation is disabled in the Better Auth
+  organization plugin.
+- `/onboarding` no longer creates organizations. Users without tenant access
+  are routed to their application status or the trial request flow.
+- Platform trial approval/rejection only updates the application row and writes
+  audit. It does not create an organization, membership, profile, account,
+  pricing row, trial window, active organization, or tenant access.
+- Missing `organization_accounts` rows fail closed via `/account-not-ready`.
+- Existing DEV organizations were checked after migration 0016; zero
+  organizations were missing `organization_accounts` rows.
+
+## Milestone 4 Must Add
+
+- Convert approved trial applications into tenant access through a trusted
+  Platform Admin provisioning flow.
+- Decide whether provisioning creates a new organization only, can attach to an
+  existing organization, or supports both with explicit operator choice.
+- Start the 14-day Standard trial only during Milestone 4 provisioning.
+- Reuse the trusted provisioning primitive and keep public routes unable to
+  call it.
+
+## Milestone 3 Replaced/Extended
+
+- Replaced `/request-trial` and `/en/request-trial` with the real localized
   public trial request/application flow.
-- Replace `/request-demo` and `/en/request-demo` with the real localized public
+- Replaced `/request-demo` and `/en/request-demo` with the real localized public
   demo request flow if demo requests should be collected.
-- Add only the explicitly planned application persistence, review status,
+- Added only the explicitly planned application persistence, review status,
   Platform Applications page, approval/rejection audit and
-  approval -> organization/trial provisioning in Milestones 3/4.
-- Preserve Albanian as the default public locale, English as the `/en`
+  approval/status lifecycle. Organization/trial provisioning remains Milestone
+  4.
+- Preserved Albanian as the default public locale, English as the `/en`
   secondary locale, the equivalent-route language switcher, localized metadata,
   public homepage positioning, one-plan launch model and truthful
   no-fake-pricing stance unless the product/commercial decision changes through
@@ -237,14 +305,21 @@ next session.
 - Suspension remains `status='active'|'suspended'` plus
   `suspended_at/suspended_reason`.
 - Audit CHECK now includes `CUSTOMER_ACTIVATED` and `TRIAL_EXTENDED`.
+- Added migration `0016_nervous_quicksilver`.
+- `trial_applications` stores user-owned pending/approved/rejected trial
+  applications with normalized-email uniqueness and reviewer metadata.
+- `demo_requests` stores accountless new/contacted/closed demo requests with
+  normalized-email uniqueness.
+- Audit CHECK now also includes `TRIAL_APPLICATION_APPROVED`,
+  `TRIAL_APPLICATION_REJECTED`, and `DEMO_REQUEST_STATUS_CHANGED`.
 
 ## Runtime Design
 
 - `src/server/platform/accounts.ts` is the low-level control-plane resolver.
 - `getAccountState()` reads database `now()` and derives:
   `effectiveCommercialAccess` and `trialDaysRemaining`.
-- Missing `organization_accounts` rows degrade to active Standard to avoid a
-  lockout caused only by missing control-plane metadata.
+- Missing `organization_accounts` rows fail closed as `account_not_ready` and
+  route tenant users to `/account-not-ready`.
 - `ensureOrganizationAccount()` creates a 14-day full Standard trial for new
   organizations.
 - `src/auth/session.ts` remains the tenant enforcement chokepoint:
@@ -263,9 +338,15 @@ next session.
 - Activate Customer converts trial/expired trial to active commercial access.
 - Lifecycle mutations are platform-admin only, validated, transactional, and
   audited.
+- Platform Applications inbox lists trial applications and demo requests.
+  Pending trial applications can be approved or rejected; demo requests can move
+  through `new`, `contacted`, and `closed`.
+- Trial application approval/rejection is intentionally non-provisioning in
+  Milestone 3.
 - Platform Dashboard now includes active trials, trials expiring within 3 days,
   expired trials, active customers, active operational accounts, and suspended
-  organizations.
+  organizations, plus acquisition counts for pending trial applications and new
+  demo requests.
 - Activity page filters include lifecycle audit actions.
 
 ## Tenant UX
@@ -276,6 +357,8 @@ next session.
   remaining.
 - `/trial-expired` tells the customer the trial ended, data is safe, and Kornizo
   must be contacted to continue.
+- `/account-not-ready` handles the fail-closed case where membership exists but
+  required account metadata is missing.
 - Subscription settings no longer show simulated multi-plan pricing.
 - Offer design settings no longer show locked fake paid designs.
 - Unfinished modules now say they are coming later instead of advertising paid
@@ -283,17 +366,26 @@ next session.
 
 ## Verification
 
-- `npm test` green: 54 unit tests.
-- `npm run test:db` green: 197 DB/integration tests.
+- `npm test` green: 62 unit tests.
+- `npm run test:db` green: 211 DB/integration tests.
 - `npm run lint` green.
 - `npm run typecheck` green.
 - `npm run build` green.
 - `npm run check` green.
 - `npm run db:migrate` applied migration 0015 to Neon DEVELOPMENT and reran
   idempotently.
+- `npm run db:migrate` also applied migration 0016 to Neon DEVELOPMENT.
 - `npx drizzle-kit check` green.
+- `node --env-file=.env.local ...` DEV schema query confirmed zero
+  organizations missing `organization_accounts` rows.
 - Live DEV schema query confirmed Standard/default/check constraints and new
   audit actions.
+- Milestone 3 HTTP smoke confirmed `/request-demo`, `/request-trial`, and
+  `/en/request-trial` render while logged out; `/application-status` and
+  `/en/application-status` redirect to `/sign-in` while logged out; `/sign-up`
+  redirects to `/request-trial`.
+- Local headless Chrome screenshots covered the request-trial desktop page and
+  request-demo mobile page after the responsive header/form fixes.
 - Browser smoke through local dev + headless Chrome passed:
   Platform detail, tenant Trial dashboard, expired Trial redirect/page, Extend
   Trial, Activate Customer, Suspend, Reactivate, and Activity audit entries.
@@ -307,11 +399,10 @@ next session.
 
 ## Next Milestone
 
-Milestone 3: trial/demo applications.
+Milestone 4: approved application -> organization/trial provisioning.
 
-Do not start applications, approval/provisioning, Stripe, billing, onboarding
-tokens, fake higher plans, or a cheaper Starter plan unless explicitly requested
-in the next milestone prompt.
+Do not start Stripe, billing, onboarding tokens, fake higher plans, or a cheaper
+Starter plan unless explicitly requested in the next milestone prompt.
 
 ## Do Not Redo
 

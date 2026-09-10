@@ -39,7 +39,7 @@ export default async function OrganizationsListPage({
   const status: AccountStatus | "all" =
     sp.status === "active" || sp.status === "suspended" ? sp.status : "all";
   const access: OrgCommercialAccessFilter =
-    sp.access === "trial" || sp.access === "active" || sp.access === "trial_expired" ? sp.access : "all";
+    sp.access === "trial" || sp.access === "active" || sp.access === "trial_expired" || sp.access === "account_not_ready" ? sp.access : "all";
   const plan: PlanTier | "all" = sp.plan && (PLAN_TIERS as string[]).includes(sp.plan) ? asPlanTier(sp.plan) : "all";
   const sort: OrgSort = sp.sort && (SORT_VALUES as string[]).includes(sp.sort) ? (sp.sort as OrgSort) : "created_desc";
 
@@ -71,6 +71,7 @@ export default async function OrganizationsListPage({
             <option value="all">Të gjitha</option>
             <option value="trial">Trial</option>
             <option value="trial_expired">Trial skaduar</option>
+            <option value="account_not_ready">Account not ready</option>
             <option value="active">Klient aktiv</option>
           </select>
         </div>

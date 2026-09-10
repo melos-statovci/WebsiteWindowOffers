@@ -19,7 +19,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import pg from "pg";
 import { auth } from "@/auth";
-import { TestCleanup, testRunId } from "@/db/testing/fixtures";
+import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
 import { createManualInvoiceAction } from "@/server/actions/invoice";
 import {
   recordInvoicePaymentAction,
@@ -144,14 +144,12 @@ async function makeInvoice(total: number, cookie = ownerCookie, client = clientA
 beforeAll(async () => {
   const owner = await signUp("owner");
   ownerCookie = owner.cookie;
-  const oa = await auth.api.createOrganization({ headers: H(ownerCookie), body: { name: "P7C A", slug: `p7c-a-${suffix}` } });
-  orgA = cleanup.org(oa!.id);
+  orgA = await createProvisionedTestOrganization(auth, cleanup, H(ownerCookie), "P7C A", `p7c-a-${suffix}`);
 
   const ownerB = await signUp("ownerb");
   ownerBCookie = ownerB.cookie;
-  const ob = await auth.api.createOrganization({ headers: H(ownerBCookie), body: { name: "P7C B", slug: `p7c-b-${suffix}` } });
-  cleanup.org(ob!.id);
-  clientB = await createClient(ob!.id, "Client B");
+  const orgB = await createProvisionedTestOrganization(auth, cleanup, H(ownerBCookie), "P7C B", `p7c-b-${suffix}`);
+  clientB = await createClient(orgB, "Client B");
 
   const sales = await signUp("sales");
   salesCookie = sales.cookie;

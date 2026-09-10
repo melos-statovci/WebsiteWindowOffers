@@ -13,7 +13,7 @@ import { auth } from "@/auth";
 import * as schema from "@/db/schema";
 import { clients } from "@/db/schema/business";
 import { runWithOrg, type AppDatabase } from "@/db/tenant";
-import { TestCleanup, testRunId } from "@/db/testing/fixtures";
+import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
 import { getAuthContext } from "@/auth/session";
 import { getAccountState } from "@/server/platform/accounts";
 import { createClientAction } from "@/server/actions/client";
@@ -51,8 +51,7 @@ async function signUp(who: string): Promise<{ cookie: string; userId: string }> 
   return { cookie, userId: s!.user.id };
 }
 async function createOrg(cookie: string, name: string, slug: string): Promise<string> {
-  const oa = await auth.api.createOrganization({ headers: H(cookie), body: { name, slug } });
-  return cleanup.org((oa as { id: string }).id);
+  return createProvisionedTestOrganization(auth, cleanup, H(cookie), name, slug);
 }
 async function grantPlatformAdmin(userId: string, who: string) {
   await ownerPool.query(
