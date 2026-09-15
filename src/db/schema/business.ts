@@ -476,6 +476,41 @@ export const payments = pgTable(
   ],
 );
 
+// Durable idempotency receipts for NEW payment commands. The receipt and its
+// payment are inserted in the same tenant transaction. payment_id is deliberately
+// bare provenance rather than a FK: deleting/reversing a payment must not delete
+// or mutate the receipt, because a later retry of the old operation key must not
+// recreate money. No customer PII or raw request payload is retained.
+export const paymentOperations = pgTable(
+  "payment_operations",
+  {
+    id: uuid("id")
+      .default(sql`gen_random_uuid()`)
+      .primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    operationKey: uuid("operation_key").notNull(),
+    operationType: text("operation_type").notNull(),
+    requestHash: text("request_hash").notNull(),
+    paymentId: uuid("payment_id").notNull(),
+    // Minimal invoice replay metadata; advance receipts leave both NULL.
+    paidInFull: boolean("paid_in_full"),
+    credit: numeric("credit", { precision: 12, scale: 2 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("payment_operations_org_key_uidx").on(table.organizationId, table.operationKey),
+    check(
+      "payment_operations_type_check",
+      sql`${table.operationType} in ('INVOICE_PAYMENT', 'ADVANCE_PAYMENT')`,
+    ),
+    check("payment_operations_hash_check", sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`),
+    check("payment_operations_credit_check", sql`${table.credit} is null or ${table.credit} >= 0`),
+    index("payment_operations_org_idx").on(table.organizationId),
+  ],
+);
+
 // Notes — free-text notes attached to a Client, shared across the organization
 // (Phase 8; previously browser-local Zustand state). Directly org-owned
 // (organization_id is the RLS tenant key) AND tenant-linked to their Client by a

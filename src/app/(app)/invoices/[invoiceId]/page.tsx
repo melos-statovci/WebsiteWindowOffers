@@ -94,12 +94,33 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ invoic
 
   const submitPayment = async (d: PaymentDraft & { allowCredit?: boolean }) => {
     setBusy(true);
-    const res = await recordInvoicePayment({ invoiceId: inv.id, amount: d.amount, date: d.date, method: d.method, note: d.note || undefined, allowCredit: d.allowCredit });
-    setBusy(false);
-    if (!res.ok) { toast(res.error.message); return; }
-    setPayOpen(false);
-    toast(res.data.credit ? `Pagesa u regjistrua. Kredi klienti: ${res.data.credit.toFixed(2)} €.` : res.data.paidInFull ? "Fatura u shlye plotësisht." : "Pagesa u regjistrua.");
-    router.refresh();
+    try {
+      const res = await recordInvoicePayment({
+        operationKey: d.operationKey,
+        invoiceId: inv.id,
+        amount: d.amount,
+        date: d.date,
+        method: d.method,
+        note: d.note || undefined,
+        allowCredit: d.allowCredit,
+      });
+      if (!res.ok) { toast(res.error.message); return; }
+      setPayOpen(false);
+      if (res.data.outcome === "PAYMENT_REMOVED") {
+        toast("Kjo pagesë ishte hequr më parë; kërkesa e vjetër nuk u rikrijua.");
+      } else if (res.data.replayed) {
+        toast("Kjo kërkesë pagese ishte përpunuar më parë.");
+      } else {
+        toast(res.data.credit ? `Pagesa u regjistrua. Kredi klienti: ${res.data.credit.toFixed(2)} €.` : res.data.paidInFull ? "Fatura u shlye plotësisht." : "Pagesa u regjistrua.");
+      }
+      router.refresh();
+    } catch {
+      // An ambiguous network failure keeps the modal (and operation key) alive,
+      // so the user can retry the same logical command safely.
+      toast("Pagesa nuk u konfirmua. Provoni përsëri të njëjtën kërkesë.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const remove = async () => {

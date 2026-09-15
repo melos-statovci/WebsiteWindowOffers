@@ -11,6 +11,7 @@
 // Run via `npm run test:db`.
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { auth } from "@/auth";
 import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
@@ -149,7 +150,7 @@ describe("invoice deletion lifecycle", () => {
 
   it("an invoice WITH payments cannot be deleted — payments never silently become credit", async () => {
     const id = await manualInvoice("Dërguar");
-    const pay = await recordInvoicePaymentAction({ invoiceId: id, amount: 100, date: "2026-06-10", method: "Transfertë bankare" }, H(ownerCookie));
+    const pay = await recordInvoicePaymentAction({ operationKey: randomUUID(), invoiceId: id, amount: 100, date: "2026-06-10", method: "Transfertë bankare" }, H(ownerCookie));
     if (!pay.ok) throw new Error("setup payment");
     const payId = (await ownerPool.query(`select id from payments where invoice_id=$1`, [id])).rows[0].id as string;
 

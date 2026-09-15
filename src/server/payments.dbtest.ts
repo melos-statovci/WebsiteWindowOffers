@@ -17,14 +17,21 @@
 // Run via `npm run test:db`.
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
+import { db, pool as appPool } from "@/db/client";
+import { paymentOperations } from "@/db/schema/business";
+import { runWithOrg } from "@/db/tenant";
 import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
 import { createManualInvoiceAction } from "@/server/actions/invoice";
 import {
   recordInvoicePaymentAction,
+  recordInvoicePaymentInTx,
   markInvoicePaidAction,
   recordAdvancePaymentAction,
+  recordAdvancePaymentInTx,
   deletePaymentAction,
 } from "@/server/actions/payment";
 import { invoiceOutstanding, clientStats } from "@/domain/finance/selectors";
@@ -37,6 +44,7 @@ const suffix = testRunId();
 const PW = `test-pw-${suffix}`;
 const email = (who: string) => `p7c-${suffix}-${who}@example.test`;
 const H = (cookie: string) => new Headers({ cookie });
+const K = () => ({ operationKey: randomUUID() });
 
 async function signUp(who: string): Promise<{ cookie: string; userId: string }> {
   cleanup.userEmail(email(who));
@@ -121,6 +129,7 @@ let accountingCookie = "";
 let user2Cookie = "";
 let ownerBCookie = "";
 let orgA = "";
+let orgB = "";
 let clientA = "";
 let clientB = "";
 
@@ -148,7 +157,7 @@ beforeAll(async () => {
 
   const ownerB = await signUp("ownerb");
   ownerBCookie = ownerB.cookie;
-  const orgB = await createProvisionedTestOrganization(auth, cleanup, H(ownerBCookie), "P7C B", `p7c-b-${suffix}`);
+  orgB = await createProvisionedTestOrganization(auth, cleanup, H(ownerBCookie), "P7C B", `p7c-b-${suffix}`);
   clientB = await createClient(orgB, "Client B");
 
   const sales = await signUp("sales");
@@ -174,10 +183,10 @@ const D = { date: "2026-06-10", method: "Transfertë bankare" };
 describe("payment permissions", () => {
   it("sales cannot record a payment; accounting can", async () => {
     const inv = await makeInvoice(100);
-    const denied = await recordInvoicePaymentAction({ invoiceId: inv, amount: 10, ...D }, H(salesCookie));
+    const denied = await recordInvoicePaymentAction({ ...K(), invoiceId: inv, amount: 10, ...D }, H(salesCookie));
     expect(denied.ok).toBe(false);
     if (!denied.ok) expect(denied.error.code).toBe("FORBIDDEN");
-    const ok = await recordInvoicePaymentAction({ invoiceId: inv, amount: 10, ...D }, H(accountingCookie));
+    const ok = await recordInvoicePaymentAction({ ...K(), invoiceId: inv, amount: 10, ...D }, H(accountingCookie));
     expect(ok.ok).toBe(true);
   });
 });
@@ -185,18 +194,18 @@ describe("payment permissions", () => {
 describe("partial payment + settlement", () => {
   it("100: pay 40 -> outstanding 60; pay 60 -> 0 (Paguar); another -> rejected", async () => {
     const inv = await makeInvoice(100);
-    const p1 = await recordInvoicePaymentAction({ invoiceId: inv, amount: 40, ...D }, H(ownerCookie));
+    const p1 = await recordInvoicePaymentAction({ ...K(), invoiceId: inv, amount: 40, ...D }, H(ownerCookie));
     expect(p1.ok).toBe(true);
     if (p1.ok) expect(p1.data.paidInFull).toBe(false);
     expect(await outstandingOf(inv)).toBeCloseTo(60, 2);
 
-    const p2 = await recordInvoicePaymentAction({ invoiceId: inv, amount: 60, ...D }, H(ownerCookie));
+    const p2 = await recordInvoicePaymentAction({ ...K(), invoiceId: inv, amount: 60, ...D }, H(ownerCookie));
     expect(p2.ok).toBe(true);
     if (p2.ok) expect(p2.data.paidInFull).toBe(true);
     expect(await outstandingOf(inv)).toBeCloseTo(0, 2);
     expect(await invoiceStatusOf(inv)).toBe("Paguar");
 
-    const p3 = await recordInvoicePaymentAction({ invoiceId: inv, amount: 10, ...D }, H(ownerCookie));
+    const p3 = await recordInvoicePaymentAction({ ...K(), invoiceId: inv, amount: 10, ...D }, H(ownerCookie));
     expect(p3.ok).toBe(false);
     if (!p3.ok) expect(p3.error.code).toBe("RULE_VIOLATION");
   });
@@ -207,7 +216,7 @@ describe("partial payment + settlement", () => {
       H(ownerCookie),
     );
     if (!r.ok) throw new Error("setup");
-    await recordInvoicePaymentAction({ invoiceId: r.data.id, amount: 10, ...D }, H(ownerCookie));
+    await recordInvoicePaymentAction({ ...K(), invoiceId: r.data.id, amount: 10, ...D }, H(ownerCookie));
     expect(await invoiceStatusOf(r.data.id)).toBe("Dërguar");
   });
 });
@@ -218,10 +227,10 @@ describe("overpayment -> client credit", () => {
     // other tests' invoices on the shared clientA.
     const creditClient = await createClient(orgA, "Credit Client");
     const inv = await makeInvoice(100, ownerCookie, creditClient);
-    const rejected = await recordInvoicePaymentAction({ invoiceId: inv, amount: 150, ...D }, H(ownerCookie));
+    const rejected = await recordInvoicePaymentAction({ ...K(), invoiceId: inv, amount: 150, ...D }, H(ownerCookie));
     expect(rejected.ok).toBe(false);
 
-    const ok = await recordInvoicePaymentAction({ invoiceId: inv, amount: 150, ...D, allowCredit: true }, H(ownerCookie));
+    const ok = await recordInvoicePaymentAction({ ...K(), invoiceId: inv, amount: 150, ...D, allowCredit: true }, H(ownerCookie));
     expect(ok.ok).toBe(true);
     if (ok.ok) expect(ok.data.credit).toBeCloseTo(50, 2);
     expect(await outstandingOf(inv)).toBeCloseTo(0, 2);
@@ -274,13 +283,13 @@ describe("advance / unlinked payment", () => {
   it("records an unlinked advance as client credit; cross-org client rejected", async () => {
     const before = await loadClientFinance(clientA);
     const s0 = clientStats(clientA, [], before.invoices, before.payments);
-    const r = await recordAdvancePaymentAction({ clientId: clientA, amount: 200, ...D }, H(ownerCookie));
+    const r = await recordAdvancePaymentAction({ ...K(), clientId: clientA, amount: 200, ...D }, H(ownerCookie));
     expect(r.ok).toBe(true);
     const after = await loadClientFinance(clientA);
     const s1 = clientStats(clientA, [], after.invoices, after.payments);
     expect(s1.advancePaid - s0.advancePaid).toBeCloseTo(200, 2);
 
-    const cross = await recordAdvancePaymentAction({ clientId: clientB, amount: 50, ...D }, H(ownerCookie));
+    const cross = await recordAdvancePaymentAction({ ...K(), clientId: clientB, amount: 50, ...D }, H(ownerCookie));
     expect(cross.ok).toBe(false);
     if (!cross.ok) expect(cross.error.code).toBe("VALIDATION");
   });
@@ -289,7 +298,7 @@ describe("advance / unlinked payment", () => {
 describe("delete payment", () => {
   it("restores outstanding and reverts a stale Paguar to Dërguar", async () => {
     const inv = await makeInvoice(100);
-    const rec = await recordInvoicePaymentAction({ invoiceId: inv, amount: 100, ...D }, H(ownerCookie));
+    const rec = await recordInvoicePaymentAction({ ...K(), invoiceId: inv, amount: 100, ...D }, H(ownerCookie));
     if (!rec.ok) throw new Error("setup");
     expect(await invoiceStatusOf(inv)).toBe("Paguar");
     const payId = (await ownerPool.query(`select id from payments where invoice_id=$1`, [inv])).rows[0].id;
@@ -304,13 +313,13 @@ describe("delete payment", () => {
 describe("validation + tenancy", () => {
   it("negative/zero amount rejected; payment on another tenant's invoice rejected", async () => {
     const inv = await makeInvoice(100);
-    const neg = await recordInvoicePaymentAction({ invoiceId: inv, amount: -5, ...D }, H(ownerCookie));
+    const neg = await recordInvoicePaymentAction({ ...K(), invoiceId: inv, amount: -5, ...D }, H(ownerCookie));
     expect(neg.ok).toBe(false);
     if (!neg.ok) expect(neg.error.code).toBe("VALIDATION");
-    const zero = await recordInvoicePaymentAction({ invoiceId: inv, amount: 0, ...D }, H(ownerCookie));
+    const zero = await recordInvoicePaymentAction({ ...K(), invoiceId: inv, amount: 0, ...D }, H(ownerCookie));
     expect(zero.ok).toBe(false);
     // org B tries to pay org A's invoice -> RLS hides it -> NOT_FOUND
-    const cross = await recordInvoicePaymentAction({ invoiceId: inv, amount: 10, ...D }, H(ownerBCookie));
+    const cross = await recordInvoicePaymentAction({ ...K(), invoiceId: inv, amount: 10, ...D }, H(ownerBCookie));
     expect(cross.ok).toBe(false);
     if (!cross.ok) expect(cross.error.code).toBe("NOT_FOUND");
   });
@@ -319,9 +328,291 @@ describe("validation + tenancy", () => {
 describe("same-org sharing", () => {
   it("a payment one member records is visible to the org's finance state", async () => {
     const inv = await makeInvoice(80);
-    const r = await recordInvoicePaymentAction({ invoiceId: inv, amount: 80, ...D }, H(user2Cookie));
+    const r = await recordInvoicePaymentAction({ ...K(), invoiceId: inv, amount: 80, ...D }, H(user2Cookie));
     expect(r.ok).toBe(true);
     expect(await invoiceStatusOf(inv)).toBe("Paguar");
     expect(await outstandingOf(inv)).toBeCloseTo(0, 2);
+  });
+});
+
+describe("RC-12 invoice payment operation identity", () => {
+  it("replays the same key and payload sequentially without a second payment", async () => {
+    const inv = await makeInvoice(100);
+    const operationKey = randomUUID();
+    const input = { operationKey, invoiceId: inv, amount: 40, ...D };
+
+    const first = await recordInvoicePaymentAction(input, H(ownerCookie));
+    const retry = await recordInvoicePaymentAction(input, H(ownerCookie));
+
+    expect(first.ok && retry.ok).toBe(true);
+    if (first.ok && retry.ok) {
+      expect(first.data.replayed).toBe(false);
+      expect(retry.data.replayed).toBe(true);
+      expect(retry.data.id).toBe(first.data.id);
+    }
+    expect(await paymentCount(inv)).toBe(1);
+    expect(await outstandingOf(inv)).toBeCloseTo(60, 2);
+  });
+
+  it("converges parallel same-key retries to one payment", async () => {
+    const inv = await makeInvoice(100);
+    const operationKey = randomUUID();
+    const input = { operationKey, invoiceId: inv, amount: 40, ...D };
+
+    const [a, b] = await Promise.all([
+      recordInvoicePaymentAction(input, H(ownerCookie)),
+      recordInvoicePaymentAction(input, H(ownerCookie)),
+    ]);
+
+    expect(a.ok && b.ok).toBe(true);
+    if (a.ok && b.ok) {
+      expect(new Set([a.data.id, b.data.id]).size).toBe(1);
+      expect([a.data.replayed, b.data.replayed].sort()).toEqual([false, true]);
+    }
+    expect(await paymentCount(inv)).toBe(1);
+    expect(await outstandingOf(inv)).toBeCloseTo(60, 2);
+  });
+
+  it("rejects same-key changes to amount, date, method, and command type", async () => {
+    const inv = await makeInvoice(200);
+    const operationKey = randomUUID();
+    const original = { operationKey, invoiceId: inv, amount: 40, ...D };
+    expect((await recordInvoicePaymentAction(original, H(ownerCookie))).ok).toBe(true);
+
+    for (const changed of [
+      { ...original, amount: 50 },
+      { ...original, date: "2026-06-11" },
+      { ...original, method: "Kartelë" },
+    ]) {
+      const result = await recordInvoicePaymentAction(changed, H(ownerCookie));
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe("CONFLICT");
+    }
+
+    const crossCommand = await recordAdvancePaymentAction(
+      { operationKey, clientId: clientA, amount: 40, ...D },
+      H(ownerCookie),
+    );
+    expect(crossCommand.ok).toBe(false);
+    if (!crossCommand.ok) expect(crossCommand.error.code).toBe("CONFLICT");
+    expect(await paymentCount(inv)).toBe(1);
+  });
+
+  it("accepts two equal payments when their operation keys differ", async () => {
+    const inv = await makeInvoice(100);
+    const input = { invoiceId: inv, amount: 40, ...D };
+    const a = await recordInvoicePaymentAction({ operationKey: randomUUID(), ...input }, H(ownerCookie));
+    const b = await recordInvoicePaymentAction({ operationKey: randomUUID(), ...input }, H(ownerCookie));
+    expect(a.ok && b.ok).toBe(true);
+    expect(await paymentCount(inv)).toBe(2);
+    expect(await outstandingOf(inv)).toBeCloseTo(20, 2);
+  });
+
+  it("allows the same operation UUID independently in two tenants", async () => {
+    const operationKey = randomUUID();
+    const invA = await makeInvoice(50);
+    const invB = await makeInvoice(50, ownerBCookie, clientB);
+    const [a, b] = await Promise.all([
+      recordInvoicePaymentAction({ operationKey, invoiceId: invA, amount: 20, ...D }, H(ownerCookie)),
+      recordInvoicePaymentAction({ operationKey, invoiceId: invB, amount: 20, ...D }, H(ownerBCookie)),
+    ]);
+    expect(a.ok && b.ok).toBe(true);
+    expect(await paymentCount(invA)).toBe(1);
+    expect(await paymentCount(invB)).toBe(1);
+  });
+
+  it("returns a tombstoned success after deletion and never recreates the payment", async () => {
+    const inv = await makeInvoice(100);
+    const operationKey = randomUUID();
+    const input = { operationKey, invoiceId: inv, amount: 40, ...D };
+    const first = await recordInvoicePaymentAction(input, H(ownerCookie));
+    if (!first.ok) throw new Error("setup payment");
+    expect((await deletePaymentAction({ id: first.data.id }, H(ownerCookie))).ok).toBe(true);
+
+    const retry = await recordInvoicePaymentAction(input, H(ownerCookie));
+    expect(retry.ok).toBe(true);
+    if (retry.ok) {
+      expect(retry.data.outcome).toBe("PAYMENT_REMOVED");
+      expect(retry.data.paymentExists).toBe(false);
+      expect(retry.data.replayed).toBe(true);
+    }
+    expect(await paymentCount(inv)).toBe(0);
+    expect(await outstandingOf(inv)).toBeCloseTo(100, 2);
+    expect(
+      Number((await ownerPool.query(
+        `select count(*) c from payment_operations where organization_id=$1 and operation_key=$2`,
+        [orgA, operationKey],
+      )).rows[0].c),
+    ).toBe(1);
+  });
+
+  it("rolls back both payment and receipt when the surrounding transaction fails", async () => {
+    const inv = await makeInvoice(100);
+    const operationKey = randomUUID();
+    await expect(
+      runWithOrg(db, orgA, async (tx) => {
+        await recordInvoicePaymentInTx(tx, orgA, { operationKey, invoiceId: inv, amount: 40, ...D });
+        throw new Error("forced rollback after operation");
+      }),
+    ).rejects.toThrow("forced rollback after operation");
+
+    expect(await paymentCount(inv)).toBe(0);
+    expect(
+      Number((await ownerPool.query(
+        `select count(*) c from payment_operations where organization_id=$1 and operation_key=$2`,
+        [orgA, operationKey],
+      )).rows[0].c),
+    ).toBe(0);
+  });
+
+  it("preserves insufficient-outstanding rules and stores no failed receipt", async () => {
+    const inv = await makeInvoice(30);
+    const operationKey = randomUUID();
+    const result = await recordInvoicePaymentAction(
+      { operationKey, invoiceId: inv, amount: 40, ...D },
+      H(ownerCookie),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("RULE_VIOLATION");
+    expect(await paymentCount(inv)).toBe(0);
+    expect(
+      Number((await ownerPool.query(
+        `select count(*) c from payment_operations where organization_id=$1 and operation_key=$2`,
+        [orgA, operationKey],
+      )).rows[0].c),
+    ).toBe(0);
+  });
+});
+
+describe("RC-12 advance payment operation identity", () => {
+  it("deduplicates sequential and parallel retries", async () => {
+    const sequentialClient = await createClient(orgA, "Advance sequential");
+    const sequentialKey = randomUUID();
+    const sequentialInput = { operationKey: sequentialKey, clientId: sequentialClient, amount: 40, ...D };
+    const first = await recordAdvancePaymentAction(sequentialInput, H(ownerCookie));
+    const retry = await recordAdvancePaymentAction(sequentialInput, H(ownerCookie));
+    expect(first.ok && retry.ok).toBe(true);
+    if (first.ok && retry.ok) expect(retry.data.id).toBe(first.data.id);
+    expect(Number((await ownerPool.query(`select count(*) c from payments where client_id=$1`, [sequentialClient])).rows[0].c)).toBe(1);
+
+    const parallelClient = await createClient(orgA, "Advance parallel");
+    const parallelKey = randomUUID();
+    const parallelInput = { operationKey: parallelKey, clientId: parallelClient, amount: 40, ...D };
+    const [a, b] = await Promise.all([
+      recordAdvancePaymentAction(parallelInput, H(ownerCookie)),
+      recordAdvancePaymentAction(parallelInput, H(ownerCookie)),
+    ]);
+    expect(a.ok && b.ok).toBe(true);
+    if (a.ok && b.ok) expect(a.data.id).toBe(b.data.id);
+    expect(Number((await ownerPool.query(`select count(*) c from payments where client_id=$1`, [parallelClient])).rows[0].c)).toBe(1);
+  });
+
+  it("conflicts on changed business fields but accepts equal details under different keys", async () => {
+    const client = await createClient(orgA, "Advance conflict");
+    const operationKey = randomUUID();
+    const original = { operationKey, clientId: client, amount: 40, ...D };
+    expect((await recordAdvancePaymentAction(original, H(ownerCookie))).ok).toBe(true);
+    for (const changed of [
+      { ...original, amount: 50 },
+      { ...original, date: "2026-06-11" },
+      { ...original, method: "Kartelë" },
+    ]) {
+      const result = await recordAdvancePaymentAction(changed, H(ownerCookie));
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe("CONFLICT");
+    }
+    expect((await recordAdvancePaymentAction({ ...original, operationKey: randomUUID() }, H(ownerCookie))).ok).toBe(true);
+    expect(Number((await ownerPool.query(`select count(*) c from payments where client_id=$1`, [client])).rows[0].c)).toBe(2);
+  });
+
+  it("scopes an equal UUID independently by tenant", async () => {
+    const clientA2 = await createClient(orgA, "Advance tenant A");
+    const clientB2 = await createClient(orgB, "Advance tenant B");
+    const operationKey = randomUUID();
+    const [a, b] = await Promise.all([
+      recordAdvancePaymentAction({ operationKey, clientId: clientA2, amount: 25, ...D }, H(ownerCookie)),
+      recordAdvancePaymentAction({ operationKey, clientId: clientB2, amount: 25, ...D }, H(ownerBCookie)),
+    ]);
+    expect(a.ok && b.ok).toBe(true);
+    expect(Number((await ownerPool.query(`select count(*) c from payment_operations where operation_key=$1`, [operationKey])).rows[0].c)).toBe(2);
+  });
+
+  it("does not resurrect a deleted advance payment", async () => {
+    const client = await createClient(orgA, "Advance deleted");
+    const operationKey = randomUUID();
+    const input = { operationKey, clientId: client, amount: 30, ...D };
+    const first = await recordAdvancePaymentAction(input, H(ownerCookie));
+    if (!first.ok) throw new Error("setup advance");
+    expect((await deletePaymentAction({ id: first.data.id }, H(ownerCookie))).ok).toBe(true);
+    const retry = await recordAdvancePaymentAction(input, H(ownerCookie));
+    expect(retry.ok).toBe(true);
+    if (retry.ok) expect(retry.data.outcome).toBe("PAYMENT_REMOVED");
+    expect(Number((await ownerPool.query(`select count(*) c from payments where client_id=$1`, [client])).rows[0].c)).toBe(0);
+  });
+
+  it("rolls back payment and receipt together", async () => {
+    const client = await createClient(orgA, "Advance rollback");
+    const operationKey = randomUUID();
+    await expect(
+      runWithOrg(db, orgA, async (tx) => {
+        await recordAdvancePaymentInTx(tx, orgA, { operationKey, clientId: client, amount: 30, ...D });
+        throw new Error("forced advance rollback");
+      }),
+    ).rejects.toThrow("forced advance rollback");
+    expect(Number((await ownerPool.query(`select count(*) c from payments where client_id=$1`, [client])).rows[0].c)).toBe(0);
+    expect(Number((await ownerPool.query(`select count(*) c from payment_operations where operation_key=$1`, [operationKey])).rows[0].c)).toBe(0);
+  });
+});
+
+describe("RC-12 payment_operations RLS and grants", () => {
+  it("is FORCE RLS tenant data with SELECT/INSERT-only runtime grants", async () => {
+    const table = (await ownerPool.query(
+      `select relrowsecurity, relforcerowsecurity from pg_class where oid='payment_operations'::regclass`,
+    )).rows[0];
+    expect(table.relrowsecurity).toBe(true);
+    expect(table.relforcerowsecurity).toBe(true);
+
+    const role = (await appPool.query(
+      `select current_user, (select rolbypassrls from pg_roles where rolname=current_user) bypass,
+              has_table_privilege(current_user,'payment_operations','SELECT') can_select,
+              has_table_privilege(current_user,'payment_operations','INSERT') can_insert,
+              has_table_privilege(current_user,'payment_operations','UPDATE') can_update,
+              has_table_privilege(current_user,'payment_operations','DELETE') can_delete`,
+    )).rows[0];
+    expect(role.current_user).toBe("kornizo_app");
+    expect(role.bypass).toBe(false);
+    expect(role.can_select).toBe(true);
+    expect(role.can_insert).toBe(true);
+    expect(role.can_update).toBe(false);
+    expect(role.can_delete).toBe(false);
+  });
+
+  it("hides other tenants, rejects cross-tenant inserts, and fails closed without context", async () => {
+    const key = randomUUID();
+    const client = await createClient(orgB, "RLS receipt B");
+    expect((await recordAdvancePaymentAction({ operationKey: key, clientId: client, amount: 10, ...D }, H(ownerBCookie))).ok).toBe(true);
+
+    const seenByA = await runWithOrg(db, orgA, (tx) =>
+      tx.select({ id: paymentOperations.id }).from(paymentOperations).where(eq(paymentOperations.operationKey, key)),
+    );
+    expect(seenByA).toHaveLength(0);
+    await expect(
+      runWithOrg(db, orgA, (tx) => tx.insert(paymentOperations).values({
+        organizationId: orgB,
+        operationKey: randomUUID(),
+        operationType: "ADVANCE_PAYMENT",
+        requestHash: "a".repeat(64),
+        paymentId: randomUUID(),
+      })),
+    ).rejects.toThrow();
+
+    expect((await appPool.query(`select id from payment_operations`)).rows).toHaveLength(0);
+    await expect(
+      appPool.query(
+        `insert into payment_operations(organization_id,operation_key,operation_type,request_hash,payment_id)
+         values($1,$2,'ADVANCE_PAYMENT',$3,$4)`,
+        [orgA, randomUUID(), "b".repeat(64), randomUUID()],
+      ),
+    ).rejects.toThrow();
   });
 });

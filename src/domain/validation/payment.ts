@@ -14,9 +14,11 @@ import { isoDate, monetaryValue } from "./scalars";
 const amount = monetaryValue.refine((n) => n >= 0.01, "Shuma minimale është 0.01.");
 const method = z.string().trim().min(1, "Zgjidhni një metodë.").max(64);
 const note = z.string().trim().max(300).optional();
+const operationKey = z.string().uuid("Çelës operacioni i pavlefshëm.");
 
 // Record a payment against a specific invoice (may allow excess as client credit).
 export const recordInvoicePaymentSchema = z.object({
+  operationKey,
   invoiceId: z.string().uuid("Faturë e pavlefshme."),
   amount,
   date: isoDate,
@@ -37,6 +39,7 @@ export type MarkInvoicePaidInput = z.infer<typeof markInvoicePaidSchema>;
 
 // Record an unlinked advance/credit payment for a client (no invoice).
 export const advancePaymentSchema = z.object({
+  operationKey,
   clientId: z.string().uuid("Klient i pavlefshëm."),
   amount,
   date: isoDate,

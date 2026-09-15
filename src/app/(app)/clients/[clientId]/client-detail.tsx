@@ -100,13 +100,31 @@ export function ClientDetail({ client, clientId }: { client: Client | null; clie
   const submitPayment = async (d: PaymentDraft) => {
     if (busy) return;
     setBusy(true);
-    // An unlinked advance payment (no invoice) -> becomes client credit.
-    const res = await recordAdvancePayment({ clientId: client.id, amount: d.amount, date: d.date, method: d.method, note: d.note || undefined });
-    setBusy(false);
-    if (!res.ok) { toast(res.error.message); return; }
-    setPayOpen(false);
-    toast(`Pagesa prej ${eur(d.amount)} u regjistrua.`);
-    router.refresh();
+    try {
+      // An unlinked advance payment (no invoice) -> becomes client credit.
+      const res = await recordAdvancePayment({
+        operationKey: d.operationKey,
+        clientId: client.id,
+        amount: d.amount,
+        date: d.date,
+        method: d.method,
+        note: d.note || undefined,
+      });
+      if (!res.ok) { toast(res.error.message); return; }
+      setPayOpen(false);
+      if (res.data.outcome === "PAYMENT_REMOVED") {
+        toast("Kjo pagesë ishte hequr më parë; kërkesa e vjetër nuk u rikrijua.");
+      } else if (res.data.replayed) {
+        toast("Kjo kërkesë pagese ishte përpunuar më parë.");
+      } else {
+        toast(`Pagesa prej ${eur(d.amount)} u regjistrua.`);
+      }
+      router.refresh();
+    } catch {
+      toast("Pagesa nuk u konfirmua. Provoni përsëri të njëjtën kërkesë.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const remove = async () => {

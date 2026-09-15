@@ -27,6 +27,13 @@ import {
 import { invoiceTotal } from "@/domain/finance/selectors";
 import { createAction, fail } from "@/server/action";
 import type { TenantTx } from "@/db/tenant";
+import {
+  advancePaymentFingerprint,
+  executeIdempotentPaymentOperation,
+  invoicePaymentFingerprint,
+  type IdempotentPaymentResult,
+} from "@/server/payment-idempotency";
+import type { AdvancePaymentInput, RecordInvoicePaymentInput } from "@/domain/validation/payment";
 
 /** Half-a-cent tolerance, matching the domain selectors. */
 const EPS = 0.005;
@@ -89,48 +96,69 @@ async function setInvoiceStatus(tx: TenantTx, orgId: string, invoiceId: string, 
 // ---------------------------------------------------------------------------
 // Record a payment against a specific invoice
 // ---------------------------------------------------------------------------
+export async function recordInvoicePaymentInTx(
+  tx: TenantTx,
+  orgId: string,
+  input: RecordInvoicePaymentInput,
+): Promise<IdempotentPaymentResult> {
+  return executeIdempotentPaymentOperation({
+    tx,
+    organizationId: orgId,
+    operationKey: input.operationKey,
+    operationType: "INVOICE_PAYMENT",
+    requestHash: invoicePaymentFingerprint(input),
+    execute: async () => {
+      const inv = await lockInvoice(tx, orgId, input.invoiceId);
+      if (inv.status === "Anuluar") throw fail("RULE_VIOLATION", "Fatura është e anuluar.");
+
+      const amount = money(input.amount);
+      const total = await invoiceTotalOf(tx, inv.id, inv.vatRate);
+      const alreadyPaid = await paidSoFar(tx, inv.id);
+      const outstanding = Math.max(0, money(total - alreadyPaid));
+
+      if (outstanding <= EPS && !input.allowCredit) {
+        throw fail("RULE_VIOLATION", "Kjo faturë është tashmë e paguar plotësisht.");
+      }
+      if (amount > outstanding + EPS && !input.allowCredit) {
+        throw fail(
+          "RULE_VIOLATION",
+          `Shuma tejkalon mbetjen e faturës (${outstanding.toFixed(2)} €). Aktivizoni kredinë për ta lejuar.`,
+        );
+      }
+
+      const inserted = await tx
+        .insert(payments)
+        .values({
+          organizationId: orgId,
+          clientId: inv.clientId,
+          invoiceId: inv.id,
+          amount: amount.toFixed(2),
+          date: input.date,
+          method: input.method,
+          note: input.note,
+        })
+        .returning({ id: payments.id });
+
+      const paidInFull = alreadyPaid + amount + EPS >= total;
+      const credit = Math.max(0, money(amount - outstanding));
+      if (paidInFull) await setInvoiceStatus(tx, orgId, inv.id, "Paguar");
+      else if (inv.status === "Draft") await setInvoiceStatus(tx, orgId, inv.id, "Dërguar");
+
+      return {
+        paymentId: inserted[0].id,
+        paidInFull,
+        credit: credit > EPS ? credit : undefined,
+      };
+    },
+  });
+}
+
 export const recordInvoicePaymentAction = createAction({
   operation: "recordInvoicePaymentAction",
   input: recordInvoicePaymentSchema,
   permission: { payment: ["record"] },
   revalidate: ["/invoices", "/dashboard"],
-  handler: async ({ input, ctx, tx }) => {
-    const orgId = ctx.organizationId;
-    const inv = await lockInvoice(tx, orgId, input.invoiceId);
-    if (inv.status === "Anuluar") throw fail("RULE_VIOLATION", "Fatura është e anuluar.");
-
-    const amount = money(input.amount);
-    const total = await invoiceTotalOf(tx, inv.id, inv.vatRate);
-    const alreadyPaid = await paidSoFar(tx, inv.id);
-    const outstanding = Math.max(0, money(total - alreadyPaid));
-
-    if (outstanding <= EPS && !input.allowCredit) {
-      throw fail("RULE_VIOLATION", "Kjo faturë është tashmë e paguar plotësisht.");
-    }
-    if (amount > outstanding + EPS && !input.allowCredit) {
-      throw fail(
-        "RULE_VIOLATION",
-        `Shuma tejkalon mbetjen e faturës (${outstanding.toFixed(2)} €). Aktivizoni kredinë për ta lejuar.`,
-      );
-    }
-
-    await tx.insert(payments).values({
-      organizationId: orgId,
-      clientId: inv.clientId,
-      invoiceId: inv.id,
-      amount: amount.toFixed(2),
-      date: input.date,
-      method: input.method,
-      note: input.note,
-    });
-
-    const paidInFull = alreadyPaid + amount + EPS >= total;
-    const credit = Math.max(0, money(amount - outstanding));
-    if (paidInFull) await setInvoiceStatus(tx, orgId, inv.id, "Paguar");
-    else if (inv.status === "Draft") await setInvoiceStatus(tx, orgId, inv.id, "Dërguar");
-
-    return { paidInFull, credit: credit > EPS ? credit : undefined };
-  },
+  handler: ({ input, ctx, tx }) => recordInvoicePaymentInTx(tx, ctx.organizationId, input),
 });
 
 // ---------------------------------------------------------------------------
@@ -173,34 +201,48 @@ export const markInvoicePaidAction = createAction({
 // ---------------------------------------------------------------------------
 // Record an unlinked advance/credit payment for a client
 // ---------------------------------------------------------------------------
+export async function recordAdvancePaymentInTx(
+  tx: TenantTx,
+  orgId: string,
+  input: AdvancePaymentInput,
+): Promise<IdempotentPaymentResult> {
+  return executeIdempotentPaymentOperation({
+    tx,
+    organizationId: orgId,
+    operationKey: input.operationKey,
+    operationType: "ADVANCE_PAYMENT",
+    requestHash: advancePaymentFingerprint(input),
+    execute: async () => {
+      try {
+        const rows = await tx
+          .insert(payments)
+          .values({
+            organizationId: orgId,
+            clientId: input.clientId,
+            invoiceId: null,
+            amount: money(input.amount).toFixed(2),
+            date: input.date,
+            method: input.method,
+            note: input.note,
+          })
+          .returning({ id: payments.id });
+        return { paymentId: rows[0].id };
+      } catch (e) {
+        if (isConstraintViolation(e, "payments_org_client_fk")) {
+          throw fail("VALIDATION", "Klienti nuk i përket organizatës aktive.");
+        }
+        throw e;
+      }
+    },
+  });
+}
+
 export const recordAdvancePaymentAction = createAction({
   operation: "recordAdvancePaymentAction",
   input: advancePaymentSchema,
   permission: { payment: ["record"] },
   revalidate: ["/dashboard"],
-  handler: async ({ input, ctx, tx }) => {
-    const orgId = ctx.organizationId;
-    try {
-      const rows = await tx
-        .insert(payments)
-        .values({
-          organizationId: orgId,
-          clientId: input.clientId,
-          invoiceId: null,
-          amount: money(input.amount).toFixed(2),
-          date: input.date,
-          method: input.method,
-          note: input.note,
-        })
-        .returning({ id: payments.id });
-      return { id: rows[0].id };
-    } catch (e) {
-      if (isConstraintViolation(e, "payments_org_client_fk")) {
-        throw fail("VALIDATION", "Klienti nuk i përket organizatës aktive.");
-      }
-      throw e;
-    }
-  },
+  handler: ({ input, ctx, tx }) => recordAdvancePaymentInTx(tx, ctx.organizationId, input),
 });
 
 // ---------------------------------------------------------------------------

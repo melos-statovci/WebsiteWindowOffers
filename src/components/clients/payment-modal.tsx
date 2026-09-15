@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/ui/overlay";
 import { Button, Field, Input, Label } from "@/components/ui/kit";
 
 export interface PaymentDraft {
+  /** Stable for this modal interaction; retries reuse it. */
+  operationKey: string;
   amount: number;
   date: string;
   method: string;
@@ -39,18 +41,22 @@ export function PaymentModal({
   const [note, setNote] = useState("");
   const [allowCredit, setAllowCredit] = useState(false);
   const [error, setError] = useState("");
+  const operationKeyRef = useRef<string | null>(null);
+  const wasOpenRef = useRef(false);
 
   useEffect(() => {
-    if (open) {
-      /* eslint-disable react-hooks/set-state-in-effect */
+    if (open && !wasOpenRef.current) {
+      operationKeyRef.current = globalThis.crypto.randomUUID();
       setAmount(suggestedAmount ? suggestedAmount.toFixed(2) : "");
       setDate(new Date().toISOString().slice(0, 10));
       setMethod(methods[0]);
       setNote("");
       setAllowCredit(false);
       setError("");
-      /* eslint-enable react-hooks/set-state-in-effect */
+    } else if (!open && wasOpenRef.current) {
+      operationKeyRef.current = null;
     }
+    wasOpenRef.current = open;
   }, [open, suggestedAmount]);
 
   const submit = () => {
@@ -63,7 +69,10 @@ export function PaymentModal({
       setError(`Shuma tejkalon mbetjen e faturës (${maxAmount.toFixed(2)} €). Aktivizoni kredinë për ta lejuar.`);
       return;
     }
-    onSubmit({ amount: value, date, method, note, allowCredit });
+    // The effect normally creates this when the interaction opens. The fallback
+    // covers an unusually early submit and is retained in the ref for retries.
+    operationKeyRef.current ??= globalThis.crypto.randomUUID();
+    onSubmit({ operationKey: operationKeyRef.current, amount: value, date, method, note, allowCredit });
   };
 
   return (
