@@ -164,7 +164,7 @@ Authorized repository `/Users/solution25/Website/WebsiteWindowOffers`, branch `c
 | RC-09 | FIXED | Shared project row lock covers commercial edits, items, options, acceptance and invoice snapshot reads. Deterministic DB barriers and serialized accepted-edit rejection pass. |
 | RC-10 | FIXED | Initial accepted creation requires project:accept. Owner/sales/operator/accounting × Draft/accepted DB matrix tests actual permission outcomes. |
 | RC-11 | OPEN | Editable no-op pricing controls remain pending product choice. Inventory, values, current behavior, repository/history evidence and alternatives are in PASS1_DECISIONS.md. No formula guessed or calculation version changed. |
-| RC-12 | OPEN | Durable tenant-scoped payment operation receipt design awaits explicit approval after automatic review's financial-semantics stop. Partial/advance retry defect remains. |
+| RC-12 | FIXED | Migration 0023 adds tenant-scoped durable operation receipts. Server-normalized kind-specific fingerprints, transaction-local organization/key advisory locks and unique tenant/key identity make partial and advance retries converge without deduplicating legitimate equal payments. |
 | RC-13 | FIXED | Missing account returns ACCOUNT_NOT_READY instead of false success; DB absence and actual tenant unusability proved. No implicit ACTIVE repair. |
 | RC-14 | DEFERRED | Distributed public-write budget remains Pass 2 preparation work. |
 | RC-15 | FIXED | Fixture guard accepts same-endpoint direct/pooled variants and rejects different endpoints, ports or unexpected runtime roles. Pure regression tests. |
@@ -178,20 +178,26 @@ Authorized repository `/Users/solution25/Website/WebsiteWindowOffers`, branch `c
 | RC-23 | FIXED | Application fields prevalidated; successful signup/session retained for retry without reload or company-data loss. Browser injects real server rejection after successful signup, corrects field and verifies one account attempt/PENDING. |
 | RC-24 | FIXED | Server resolves fixed signin destination from fresh Platform authority; platform-only and dual-role → Platform, tenant-only → Dashboard. DB + actual browser signin tests. |
 
+### RC-12 payment-operation checkpoint
+
+Partial and advance payments now carry one browser-generated UUID per modal interaction. The key remains stable through repeated submits and ambiguous network failures; a deliberately new interaction gets a new key. The server hashes only an ordered, validated, kind-specific tuple of business fields. Same tenant/key/hash safely replays, a semantic mismatch returns `CONFLICT`, and different keys keep equal payments independent.
+
+Migration 0023 stores only operation kind/hash, bare payment ID, minimal invoice outcome fields and creation time. The receipt and payment share the existing `app.current_org` transaction; a transaction-local organization/key advisory lock serializes concurrency and unique `(organization_id,operation_key)` backs it durably. Receipts survive payment deletion, producing `PAYMENT_REMOVED` instead of resurrecting money. ENABLE/FORCE RLS, tenant SELECT/INSERT policies and SELECT/INSERT-only runtime grants were verified live on fingerprint-guarded Neon DEVELOPMENT. Production was untouched; no historical payment keys were invented. Existing full-settlement locking remains unchanged and green.
+
 ### Decision gates and recovery contract
 
-[Decisions and pricing evidence](docs/release/PASS1_DECISIONS.md): RC-06/07 immutable provisioning identity, ownership repair and the unique membership backstop are approved and implemented. RC-02 broader provider lifecycle hooks, RC-11 unsupported editors/formula semantics, and RC-12 durable idempotency receipts remain open and unapplied.
+[Decisions and pricing evidence](docs/release/PASS1_DECISIONS.md): RC-06/07 immutable provisioning identity and RC-12 durable payment-operation receipts are approved and implemented. RC-02 broader provider lifecycle hooks and RC-11 unsupported editors/formula semantics remain open and unapplied.
 
 [Password recovery implementation contract](docs/release/PASSWORD_RECOVERY_CONTRACT.md) records the installed Better Auth API, sender/domain inputs, token/session behavior, localized UI contract and required delivery-to-login proof. RC-05 remains OPEN.
 
 ### Verification and data handling
 
-- Unit suite: 195 passing tests. Full DB suite: 319 passing tests / 18 files, including 38 provisioning tests. Browser/HTTP suite remains 14 passing tests from the prior checkpoint. Detailed outcomes are in `docs/release/PASS1_RESULTS.md`.
-- `npm run check` covers lint, typecheck and production build; `npx drizzle-kit check` verifies migration 0022 and its snapshot/journal. Migration 0022 was applied only to guarded Neon DEVELOPMENT after duplicate/historical-state checks and manual SQL review. Production untouched.
+- Unit suite: 195 passing tests. Full DB suite: 334 passing tests / 18 files, including 25 payment tests and 38 provisioning tests. Browser/HTTP suite remains 14 passing tests from the prior checkpoint. Detailed outcomes are in `docs/release/PASS1_RESULTS.md`.
+- `npm run check` covers lint, typecheck and production build; `npx drizzle-kit check` verifies migrations through 0023 and the snapshot/journal. Migration 0023 was applied only to fingerprint-guarded Neon DEVELOPMENT after manual SQL review and verified live. Production untouched.
 - Permanent database tests use explicit synthetic IDs/emails and teardown; deterministic races wait for actual PostgreSQL blocked transactions. Existing RLS/FORCE RLS, restricted runtime role, Platform separation, provisioning and financial tests are retained.
 - `npm run test:browser` requires `.env.local` and the explicitly approved `.env.e2e.local` fingerprint/role guard, a local production build, and Chromium (`npx playwright install chromium`). It starts a local server, exercises real serialized actions and browser journeys, honors provider signup Retry-After, and removes only tracked synthetic records. No credentials, cookies, DB URLs, test passwords or trace artifacts are committed. Runtime role is still `kornizo_app`; owner connection is limited to approved DEV fixture setup/cleanup.
 - No existing dependency version upgraded. The only added packages are the Playwright test runner and its browser tooling. Existing RC-22 dependency risks remain.
 
 ### STILL OPEN BEFORE PRODUCTION
 
-RC-02 remaining lifecycle policy, RC-05 secure recovery delivery, RC-11 product decision, RC-12 payment idempotency, RC-14, RC-16, RC-17, RC-21 and RC-22; production domain and sender, legal operator/legal review, and retention policy. No production release approval is implied by passing tests or checkpoint push.
+RC-02 remaining lifecycle policy, RC-05 secure recovery delivery, RC-11 product decision, RC-14, RC-16, RC-17, RC-21 and RC-22; production domain and sender, legal operator/legal review, and retention policy. No production release approval is implied by passing tests or checkpoint push.
