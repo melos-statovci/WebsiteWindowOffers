@@ -1,6 +1,7 @@
 export type AccountStatus = "active" | "suspended";
 export type CommercialAccess = "trial" | "active";
 export type EffectiveCommercialAccess = CommercialAccess | "trial_expired" | "account_not_ready";
+export type AccountUnavailableReason = "SUSPENDED" | "ACCOUNT_NOT_READY" | "TRIAL_EXPIRED";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -17,6 +18,21 @@ export function effectiveCommercialAccess(input: {
 export function trialDaysRemaining(input: { trialEndsAt: Date | null; now: Date }): number {
   if (!input.trialEndsAt) return 0;
   return Math.max(0, Math.ceil((input.trialEndsAt.getTime() - input.now.getTime()) / MS_PER_DAY));
+}
+
+/**
+ * One canonical availability decision for tenant business access and raw
+ * organization mutations. Provider authorization is evaluated separately.
+ */
+export function accountUnavailableReason(input: {
+  accountReady: boolean;
+  status: AccountStatus;
+  effectiveCommercialAccess: EffectiveCommercialAccess;
+}): AccountUnavailableReason | null {
+  if (input.status === "suspended") return "SUSPENDED";
+  if (!input.accountReady) return "ACCOUNT_NOT_READY";
+  if (input.effectiveCommercialAccess === "trial_expired") return "TRIAL_EXPIRED";
+  return null;
 }
 
 export function commercialAccessLabel(access: EffectiveCommercialAccess): string {

@@ -17,6 +17,7 @@ import { ensureOrganizationProfile, isUuid } from "@/auth/organization";
 import { getAccountState, type AccountState } from "@/server/platform/accounts";
 import type { PlanTier } from "@/lib/plan";
 import type { CommercialAccess, EffectiveCommercialAccess } from "@/lib/account-lifecycle";
+import { accountUnavailableReason } from "@/lib/account-lifecycle";
 import type { AuthContext, OrgSummary } from "@/auth/types";
 
 export type { AuthContext, OrgSummary };
@@ -97,9 +98,8 @@ export async function getAuthContext(reqHeaders: Headers): Promise<AuthContextRe
   // Fail closed for a suspended/expired tenant: no business mutation may
   // proceed. The action spine maps these non-UNAUTHENTICATED reasons to a safe
   // FORBIDDEN.
-  if (r.account.status === "suspended") return { ok: false, reason: "SUSPENDED" };
-  if (!r.account.accountReady) return { ok: false, reason: "ACCOUNT_NOT_READY" };
-  if (r.account.effectiveCommercialAccess === "trial_expired") return { ok: false, reason: "TRIAL_EXPIRED" };
+  const unavailableReason = accountUnavailableReason(r.account);
+  if (unavailableReason) return { ok: false, reason: unavailableReason };
   return {
     ok: true,
     ctx: {
@@ -131,9 +131,10 @@ export async function requireAuthContext(): Promise<AuthContext> {
   // Suspension gate for the whole tenant app shell. A suspended org's members
   // are sent to /suspended instead of the app; no business data is touched, and
   // platform admins (who never pass through here) can still manage the org.
-  if (r.account.status === "suspended") redirect("/suspended");
-  if (!r.account.accountReady) redirect("/account-not-ready");
-  if (r.account.effectiveCommercialAccess === "trial_expired") redirect("/trial-expired");
+  const unavailableReason = accountUnavailableReason(r.account);
+  if (unavailableReason === "SUSPENDED") redirect("/suspended");
+  if (unavailableReason === "ACCOUNT_NOT_READY") redirect("/account-not-ready");
+  if (unavailableReason === "TRIAL_EXPIRED") redirect("/trial-expired");
   await ensureOrganizationProfile(r.activeId).catch(() => {});
   const active = r.orgs.find((o) => o.id === r.activeId)!;
   return {
@@ -164,9 +165,10 @@ export async function requireTrialExpiredContext(): Promise<TrialExpiredContext>
     const session = await auth.api.getSession({ headers: await headers() });
     redirect(session ? await noOrganizationPath(session.user.id) : "/request-trial");
   }
-  if (r.account.status === "suspended") redirect("/suspended");
-  if (!r.account.accountReady) redirect("/account-not-ready");
-  if (r.account.effectiveCommercialAccess !== "trial_expired") redirect("/dashboard");
+  const unavailableReason = accountUnavailableReason(r.account);
+  if (unavailableReason === "SUSPENDED") redirect("/suspended");
+  if (unavailableReason === "ACCOUNT_NOT_READY") redirect("/account-not-ready");
+  if (unavailableReason !== "TRIAL_EXPIRED") redirect("/dashboard");
   const active = r.orgs.find((o) => o.id === r.activeId)!;
   return {
     user: { id: r.session.user.id, name: r.session.user.name, email: r.session.user.email },

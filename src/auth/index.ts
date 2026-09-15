@@ -6,6 +6,7 @@
 // 2FA OFF, social/passkeys/SSO OFF. IDs are uuid (matches Phase 1 schema).
 
 import { betterAuth } from "better-auth";
+import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { logServerFailure } from "@/server/safe-log";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
@@ -17,6 +18,7 @@ import { getTrustedProvisioningIdentity } from "@/auth/provisioning-identity";
 import { ensureOrganizationProfile } from "@/auth/organization";
 import { ensureDefaultPricing } from "@/server/pricing-init";
 import { ensureOrganizationAccount } from "@/server/platform/accounts";
+import { requireUsableOrganizationAccount } from "@/auth/organization-lifecycle";
 
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
@@ -36,6 +38,22 @@ export const auth = betterAuth({
     database: {
       generateId: "uuid",
     },
+  },
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      // Better Auth 1.6.27 handles resend:true before beforeCreateInvitation,
+      // so this route-level gate is required to deny before every possible
+      // invitation write. Better Auth still performs membership/role checks.
+      if (ctx.path !== "/organization/invite-member") return;
+      const session = await getSessionFromCtx(ctx);
+      if (!session) return;
+      const body = ctx.body as { organizationId?: unknown } | undefined;
+      const organizationId =
+        typeof body?.organizationId === "string"
+          ? body.organizationId
+          : session.session.activeOrganizationId;
+      if (organizationId) await requireUsableOrganizationAccount(organizationId);
+    }),
   },
   plugins: [
     organization({
@@ -75,6 +93,18 @@ export const auth = betterAuth({
           // the immutable identity is present in the initial INSERT.
           org.provisioningApplicationId = identity.applicationId;
           org.provisioningOwnerId = identity.ownerUserId;
+        },
+        beforeUpdateOrganization: async ({ member }) => {
+          await requireUsableOrganizationAccount(member.organizationId);
+        },
+        beforeRemoveMember: async ({ member }) => {
+          await requireUsableOrganizationAccount(member.organizationId);
+        },
+        beforeUpdateMemberRole: async ({ member }) => {
+          await requireUsableOrganizationAccount(member.organizationId);
+        },
+        beforeAcceptInvitation: async ({ invitation }) => {
+          await requireUsableOrganizationAccount(invitation.organizationId);
         },
       },
       // New organizations get a business profile row. Best-effort here (the org

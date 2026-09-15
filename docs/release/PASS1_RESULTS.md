@@ -1,6 +1,6 @@
 # Release Audit Remediation Pass 1 — execution checkpoint
 
-Status: **NO-GO for production; Pass 1 remains open at the remaining architecture/product decisions.** RC-06/07, RC-11, and RC-12 are fixed. No Pass 2, Milestone 6, deployment or production data change was started.
+Status: **NO-GO for production; Pass 1 remains open at RC-05 password recovery.** RC-02, RC-06/07, RC-11, and RC-12 are fixed. No Pass 2, Milestone 6, deployment or production data change was started.
 
 Authoritative checkout: `/Users/solution25/Website/WebsiteWindowOffers`; branch `clone/proferto`; starting HEAD `19692f7033890d86738d92f387ceb2859fdcc208`. Application checkpoint commit: `36ad0a3bb79dd94bdc20fdb3147bc51f95a74834`. Final documentation commit/push identities are in the execution report; this document is committed with the checkpoint so it does not attempt to contain its own commit hash.
 
@@ -8,13 +8,16 @@ RC-12 remediation started from `9c33b73b56ff5008b5a4cd24cabe1365162f8335`, after
 
 RC-11 remediation started from clean `3a44a86bf7ceda12538d7d826e27ffa3ca6f104d`, after fetching and verifying it exactly matched `melos/clone/proferto`.
 
+RC-02 remediation started from clean `1a93515f860250338484c67ce33c86632ac49c97`, after fetching and verifying it exactly matched `melos/clone/proferto`.
+
 ## Executed gates
 
 | Gate | Result |
 |---|---|
-| `npm test` | PASS — 215 tests / 17 files |
+| `npm test` | PASS — 216 tests / 17 files |
+| targeted `src/auth/organization-lifecycle.dbtest.ts` | PASS — 7 tests covering five lifecycle states, provider authority and zero partial writes |
 | targeted `src/server/payments.dbtest.ts` | PASS — 25 tests, including all RC-12 concurrency/adversarial cases |
-| `npm run test:db` | PASS — 335 tests / 18 files |
+| `npm run test:db` | PASS — 342 tests / 19 files |
 | `npm run lint` | PASS |
 | `npm run typecheck` | PASS |
 | `npm run check` | PASS — lint, typecheck, production webpack build |
@@ -26,10 +29,12 @@ The RC-12 implementation changed only payment-operation identity, its tenant tab
 
 The RC-11 implementation changes only which existing catalog controls are actively editable and which submitted fields the pricing save action accepts. Unsupported legacy data is preserved in storage and ignored from bypass submissions. Existing calculation outputs, calculation version 1, historical pricing versions, accepted offers, project prices, and invoice snapshots are unchanged. No migration or dependency change was made.
 
+The RC-02 implementation changes only provider integration and the shared lifecycle classifier. It adds no organization capability, does not replace Better Auth authorization, and does not change tenant data, provisioning identity, pricing, finance, or schemas. No migration or dependency change was made.
+
 ## Adversarial and regression evidence
 
 - RC-01: actual Next Server Action HTTP replies for new/duplicate/concurrent Contact and Demo submissions equal `{ok:true,data:{accepted:true}}`; stored IDs and private markers are absent. The database still deduplicates each concurrent pair to one record.
-- RC-02: actual HTTP `/api/auth/organization/delete` refuses deletion; complete organization/member/invitation row snapshots are unchanged. Broader raw-provider lifecycle policy remains OPEN pending approval.
+- RC-02: real Better Auth HTTP/session tests cover every configured organization mutation across ACTIVE, TRIAL, TRIAL_EXPIRED, SUSPENDED and ACCOUNT_NOT_READY. Update organization, member role, administrative removal, invitation creation/resend and acceptance are denied before writes for unavailable tenants; reject, provider-authorized cancel, leave and set-active remain usable. Setting an unavailable organization active still fails the canonical tenant context. Deletion remains disabled with complete organization/member/invitation snapshots unchanged, and public creation remains disabled while trusted provisioning passes.
 - RC-03: generated offer/invoice HTML is parsed in Chromium with script/closing-tag/event-handler/entity payloads. No payload executes or becomes active markup, title/body preserve inert text, and opener is null. A stored hostile client/reference/line is also retrieved through the real invoice UI and printed in a real popup. Fixed warranty and 50/50 commitments are absent.
 - RC-04: private review-note/reviewer markers and property names are absent from duplicate applicant actions and both applicant-page serialized HTTP responses.
 - RC-06: deleting only the synthetic intended owner's canonical Better Auth membership and retrying repairs exactly that owner on the same organization. Parallel repairs converge to one `(organization_id,user_id)` row; incompatible roles or unrelated owners fail explicitly without promotion or transfer.
@@ -57,9 +62,11 @@ The RC-06/07 run used the same tracked `.test` cleanup discipline. Its final gua
 
 The RC-12 suite registered only disposable `.test` users and exact organization IDs; organization teardown cascaded its clients, invoices, payments and operation receipts. Final inspection found two older, pre-0023 interrupted `p7c-*` fixture sets; the repository's scoped cleanup helper removed only their four resolved organization IDs and ten exact `.test` emails. Readback then showed zero `p7c-*` users, organizations or receipts. No operation key, request hash, cookie, password or database URL was logged or committed.
 
+The RC-02 suite used four disposable `.test` identities and five exact organization IDs. Scoped teardown removed those organizations and users; final readback found zero `rc02-*` users, organizations or invitations. Cookies, passwords and database URLs remained in process memory and were not printed or committed.
+
 ## Remaining decision gates
 
-See [PASS1_DECISIONS.md](PASS1_DECISIONS.md): RC-06/07 immutable provisioning identity, RC-11 truthful active pricing controls, and RC-12 durable payment-operation receipts are approved and implemented. RC-02 additional provider lifecycle hooks remains an open decision.
+See [PASS1_DECISIONS.md](PASS1_DECISIONS.md): RC-02's installed-provider mutation matrix, RC-06/07 immutable provisioning identity, RC-11 truthful active pricing controls, and RC-12 durable payment-operation receipts are approved and implemented.
 
 See [PASSWORD_RECOVERY_CONTRACT.md](PASSWORD_RECOVERY_CONTRACT.md): RC-05 remains OPEN until real selected-domain/sender delivery and reset/session tests work.
 

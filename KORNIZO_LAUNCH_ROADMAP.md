@@ -154,7 +154,7 @@ Authorized repository `/Users/solution25/Website/WebsiteWindowOffers`, branch `c
 | Finding | Status | Implementation / evidence |
 |---|---|---|
 | RC-01 | FIXED | Contact/Demo create, duplicate and unique-race responses are the same minimal acknowledgement; real serialized HTTP probes preserve deduplication and expose no stored row. |
-| RC-02 | OPEN | Hard deletion disabled with the provider option; HTTP regression proves organization, members and invitations unchanged. Broader raw-provider lifecycle hooks await explicit approval after automatic review rejected them under the auth stop rule. |
+| RC-02 | FIXED | Better Auth permissions remain authoritative; canonical Kornizo lifecycle checks gate organization update, member role/update removal, invitation create/resend and acceptance before writes. Reject, authorized cancel, leave and set-active remain available; set-active grants no unavailable-tenant access. Hard deletion and public creation remain disabled. |
 | RC-03 | FIXED | Every print text boundary escapes hostile stored values; opener disconnected. Browser parser probes and stored-invoice popup prove no script/event execution. Unapproved fixed warranties and 50/50 terms removed. |
 | RC-04 | FIXED | Explicit applicant DTO excludes review fields; duplicate action, Request Trial and Application Status serialized HTTP responses tested with private markers. |
 | RC-05 | OPEN | No selected production sender/domain or working delivery. Exact installed-provider integration and release proof documented in PASSWORD_RECOVERY_CONTRACT.md. |
@@ -190,18 +190,18 @@ Migration 0023 stores only operation kind/hash, bare payment ID, minimal invoice
 
 ### Decision gates and recovery contract
 
-[Decisions and pricing evidence](docs/release/PASS1_DECISIONS.md): RC-06/07 immutable provisioning identity, RC-11 truthful active pricing controls, and RC-12 durable payment-operation receipts are approved and implemented. RC-02 broader provider lifecycle hooks remain open and unapplied.
+[Decisions and pricing evidence](docs/release/PASS1_DECISIONS.md): RC-02's installed-provider mutation matrix, RC-06/07 immutable provisioning identity, RC-11 truthful active pricing controls, and RC-12 durable payment-operation receipts are approved and implemented.
 
 [Password recovery implementation contract](docs/release/PASSWORD_RECOVERY_CONTRACT.md) records the installed Better Auth API, sender/domain inputs, token/session behavior, localized UI contract and required delivery-to-login proof. RC-05 remains OPEN.
 
 ### Verification and data handling
 
-- Unit suite: 195 passing tests. Full DB suite: 334 passing tests / 18 files, including 25 payment tests and 38 provisioning tests. Browser/HTTP suite remains 14 passing tests from the prior checkpoint. Detailed outcomes are in `docs/release/PASS1_RESULTS.md`.
-- `npm test` passes 215 tests / 17 files; `npm run test:db` passes 335 / 18 files; `npm run test:browser` passes 15 real Chromium/HTTP tests including RC-11 desktop/mobile light/dark pricing validation. `npm run check` covers lint, typecheck and production build; `npx drizzle-kit check` verifies migrations through 0023 and the snapshot/journal. Migration 0023 was applied only to fingerprint-guarded Neon DEVELOPMENT after manual SQL review and verified live. Production untouched.
+- Focused RC-02 HTTP tests pass 7/7 across ACTIVE, TRIAL, TRIAL_EXPIRED, SUSPENDED and ACCOUNT_NOT_READY; the 38-test RC-06/07 provisioning suite and existing auth regression also pass. Detailed outcomes are in `docs/release/PASS1_RESULTS.md`.
+- `npm test` passes 216 tests / 17 files; `npm run test:db` passes 342 / 19 files; `npm run test:browser` passes 15 real Chromium/HTTP tests including organization-delete preservation and RC-11 desktop/mobile light/dark pricing validation. `npm run check` covers lint, typecheck and production build; `npx drizzle-kit check` verifies migrations through 0023 and the snapshot/journal. Migration 0023 was applied only to fingerprint-guarded Neon DEVELOPMENT after manual SQL review and verified live. Production untouched.
 - Permanent database tests use explicit synthetic IDs/emails and teardown; deterministic races wait for actual PostgreSQL blocked transactions. Existing RLS/FORCE RLS, restricted runtime role, Platform separation, provisioning and financial tests are retained.
 - `npm run test:browser` requires `.env.local` and the explicitly approved `.env.e2e.local` fingerprint/role guard, a local production build, and Chromium (`npx playwright install chromium`). It starts a local server, exercises real serialized actions and browser journeys, honors provider signup Retry-After, and removes only tracked synthetic records. No credentials, cookies, DB URLs, test passwords or trace artifacts are committed. Runtime role is still `kornizo_app`; owner connection is limited to approved DEV fixture setup/cleanup.
 - No existing dependency version upgraded. The only added packages are the Playwright test runner and its browser tooling. Existing RC-22 dependency risks remain.
 
 ### STILL OPEN BEFORE PRODUCTION
 
-RC-02 remaining lifecycle policy, RC-05 secure recovery delivery, RC-14, RC-16, RC-17, RC-21 and RC-22; production domain and sender, legal operator/legal review, and retention policy. No production release approval is implied by passing tests or checkpoint push.
+RC-05 secure recovery delivery, RC-14, RC-16, RC-17, RC-21 and RC-22; production domain and sender, legal operator/legal review, and retention policy. No production release approval is implied by passing tests or checkpoint push.

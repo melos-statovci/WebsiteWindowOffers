@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { effectiveCommercialAccess, trialDaysRemaining } from "./account-lifecycle";
+import {
+  accountUnavailableReason,
+  effectiveCommercialAccess,
+  trialDaysRemaining,
+} from "./account-lifecycle";
 
 describe("account lifecycle derivation", () => {
   const now = new Date("2026-09-08T12:00:00.000Z");
@@ -17,5 +21,43 @@ describe("account lifecycle derivation", () => {
 
   it("active commercial access ignores old trial dates", () => {
     expect(effectiveCommercialAccess({ commercialAccess: "active", trialEndsAt: new Date("2026-01-01T00:00:00.000Z"), now })).toBe("active");
+  });
+
+  it("uses one fail-closed availability classification for tenant access and provider mutations", () => {
+    expect(
+      accountUnavailableReason({
+        accountReady: true,
+        status: "active",
+        effectiveCommercialAccess: "trial",
+      }),
+    ).toBeNull();
+    expect(
+      accountUnavailableReason({
+        accountReady: true,
+        status: "active",
+        effectiveCommercialAccess: "active",
+      }),
+    ).toBeNull();
+    expect(
+      accountUnavailableReason({
+        accountReady: true,
+        status: "active",
+        effectiveCommercialAccess: "trial_expired",
+      }),
+    ).toBe("TRIAL_EXPIRED");
+    expect(
+      accountUnavailableReason({
+        accountReady: true,
+        status: "suspended",
+        effectiveCommercialAccess: "active",
+      }),
+    ).toBe("SUSPENDED");
+    expect(
+      accountUnavailableReason({
+        accountReady: false,
+        status: "active",
+        effectiveCommercialAccess: "account_not_ready",
+      }),
+    ).toBe("ACCOUNT_NOT_READY");
   });
 });
