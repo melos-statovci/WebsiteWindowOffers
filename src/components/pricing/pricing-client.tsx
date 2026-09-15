@@ -2,45 +2,32 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Search, FileSpreadsheet, ImageIcon, Trash2, RotateCcw } from "lucide-react";
-import { PageHeader, Button, Card, Badge, Field, Input, Label, Toggle } from "@/components/ui/kit";
+import { Plus, Search, ImageIcon, Trash2, RotateCcw } from "lucide-react";
+import { PageHeader, Button, Card, Badge, Field, Input, Label } from "@/components/ui/kit";
 import { useApp } from "@/components/providers/providers";
 import { useStore, uid } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { eurAfter } from "@/lib/format";
 import { savePricing } from "@/server/actions/pricing.action";
 import type { CatalogRow, PricingSystem } from "@/domain/types";
 import type { PricingCatalog } from "@/domain/pricing/types";
+import {
+  ACTIVE_PRICING_TABS,
+  EDITABLE_ACCESSORY_KEYS,
+  activeArmingRow,
+  activeProfileRows,
+} from "@/domain/pricing/editable";
 
 type Pricing = PricingCatalog;
 
-const TABS = [
-  { value: "", label: "Sistemet" },
-  { value: "metals", label: "Metalet" },
-  { value: "mechanisms", label: "Mekanizmat" },
-  { value: "glass", label: "Xhamat" },
-  { value: "door-panels", label: "Panelet" },
-  { value: "expansion-profiles", label: "Shtesat" },
-  { value: "accessories", label: "Aksesorët" },
-  { value: "production", label: "Parametrat" },
-  { value: "roleta", label: "Roletat" },
-  { value: "doors", label: "Dyer të Hyrjes" },
-] as const;
-
 const TAB_DESC: Record<string, string> = {
-  "": "Regjistri i sistemeve të profileve — dritare, dyer dhe rrëshqitëse, PVC ose alumin.",
-  metals: "Çmimet e metaleve të armimit (vetëm sistemet PVC armohen).",
-  mechanisms: "Matricat e mekanizmave hapje/kip sipas përmasave dhe hardueri i rrëshqitëses.",
+  "": "Sistemet e zgjedhshme dhe çmimet aktive Ram, Krah dhe T-Shtyllë sipas ngjyrës.",
+  arming: "Çmimi aktiv i armimit të ramit për sistemet PVC.",
   glass: "Çmimet e xhamit për m². Për: dritare, derë banjo/ballkoni dhe rrëshqitëse.",
-  "door-panels": "Çmimet e paneleve të dyerve për m².",
-  "expansion-profiles": "Çmimet e profileve zgjeruese (shtesave) për metër.",
-  accessories: "Aksesorët e përbashkët dhe aksesorët e derës banjo/ballkoni.",
-  production: "Cilësimet e prodhimit: humbja e saldimit dhe parametrat teknikë.",
-  roleta: "Llojet dhe çmimet e roletave.",
-  doors: "Modelet e dyerve të hyrjes dhe çmimi i tyre: Fiks ose sipas Tabelës.",
+  accessories: "Çmimet aktive të llajsnës së xhamit sipas ngjyrës së profilit.",
+  roleta: "Çmimi aktiv për m² i roletës në llogaritjen aktuale.",
 };
 
-const VALID = new Set<string>(TABS.map((t) => t.value));
+const VALID = new Set<string>(ACTIVE_PRICING_TABS.map((t) => t.value));
 
 interface PricingClientProps {
   /** Active organization pricing loaded server-side (the editor baseline). */
@@ -107,12 +94,12 @@ export function PricingClient({ initialCatalog, initialVersion, canEdit }: Prici
     <div>
       <PageHeader
         title="Çmimet & Sistemet"
-        subtitle="Sistemet e profileve, materialet, produktet dhe parametrat — një vend i vetëm për çdo çmim."
+        subtitle="Vetëm çmimet dhe zgjedhjet që përdoren nga llogaritja aktuale."
       />
 
       <div className="mb-5 flex items-center gap-3 border-b border-slate-200">
         <div className="no-scrollbar -mb-px flex flex-1 gap-1 overflow-x-auto">
-          {TABS.map((t) => (
+          {ACTIVE_PRICING_TABS.map((t) => (
             <button key={t.value} onClick={() => setTab(t.value)}
               className={cn("shrink-0 border-b-2 px-3 py-3 text-sm font-semibold whitespace-nowrap transition-colors",
                 tab === t.value ? "border-neutral-500 text-slate-900" : "border-transparent text-slate-400 hover:text-slate-700")}>
@@ -142,15 +129,10 @@ export function PricingClient({ initialCatalog, initialVersion, canEdit }: Prici
           gate, this just prevents pointless local edits. */}
       <fieldset disabled={!canEdit} className="contents">
         {tab === "" && <SystemsTab draft={draft} update={update} />}
-        {tab === "metals" && <MetalsTab draft={draft} update={update} />}
-        {tab === "mechanisms" && <MechanismsTab draft={draft} update={update} />}
-        {tab === "glass" && <PhotoTab draft={draft} update={update} coll="glass" title="Llojet e xhamave" addLabel="Shto Xham" showDesc importExcel />}
-        {tab === "door-panels" && <PhotoTab draft={draft} update={update} coll="panels" title="Panelet e dyerve" addLabel="Shto Panel" />}
-        {tab === "expansion-profiles" && <ExpansionsTab draft={draft} update={update} />}
-        {tab === "accessories" && <ParamsTab draft={draft} update={update} which="accessoryParams" heading="Aksesorët" />}
-        {tab === "production" && <ParamsTab draft={draft} update={update} which="productionParams" heading="Parametrat e prodhimit" />}
+        {tab === "arming" && <ArmingTab draft={draft} update={update} />}
+        {tab === "glass" && <GlassTab draft={draft} update={update} />}
+        {tab === "accessories" && <BeadsTab draft={draft} update={update} />}
         {tab === "roleta" && <RoletaTab draft={draft} update={update} />}
-        {tab === "doors" && <DoorsTab draft={draft} update={update} />}
       </fieldset>
     </div>
   );
@@ -162,11 +144,6 @@ function num(v: string): number {
   const n = parseFloat(v.replace(",", "."));
   return Number.isFinite(n) ? Math.max(0, n) : 0;
 }
-function positiveInt(v: string, fallback = 0): number {
-  const n = parseInt(v, 10);
-  return Number.isFinite(n) ? Math.max(0, n) : fallback;
-}
-
 // --- Sistemet -------------------------------------------------------------
 function SystemsTab({ draft, update }: TabProps) {
   const [selected, setSelected] = useState(draft.systems[0]?.id ?? "");
@@ -247,13 +224,13 @@ function SystemsTab({ draft, update }: TabProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {draft.profilePriceRows.map((r) => (
+                  {activeProfileRows(draft).map((r) => (
                     <tr key={r.id} className="border-t border-slate-200">
                       <td className="py-2 pr-3 font-semibold text-slate-700">{r.profile}</td>
                       <td className="py-2 pr-3 text-slate-400">{r.code}</td>
                       {(["white", "whiteColor", "colorColor"] as const).map((k, i) => (
                         <td key={k} className={cn("py-2", i < 2 && "pr-3")}>
-                          <input value={String(r[k])} onChange={(e) => update((d) => ({ ...d, profilePriceRows: d.profilePriceRows.map((x) => (x.id === r.id ? { ...x, [k]: num(e.target.value) } : x)) }))}
+                          <input aria-label={`${r.profile} ${["Bardhë", "Bardhë-Color", "Color-Color"][i]} €/m`} value={String(r[k])} onChange={(e) => update((d) => ({ ...d, profilePriceRows: d.profilePriceRows.map((x) => (x.id === r.id ? { ...x, [k]: num(e.target.value) } : x)) }))}
                             className="h-8 w-20 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-neutral-500" inputMode="decimal" />
                         </td>
                       ))}
@@ -269,111 +246,78 @@ function SystemsTab({ draft, update }: TabProps) {
   );
 }
 
-// --- Metalet --------------------------------------------------------------
-function MetalsTab({ draft, update }: TabProps) {
-  const [selected, setSelected] = useState(draft.metals[0]?.id ?? "");
-  const addMetal = () => { const m: CatalogRow = { id: uid(), name: "Metal i ri", brand: "Metal Standard", price: 0 }; update((d) => ({ ...d, metals: [...d.metals, m] })); setSelected(m.id); };
+// --- Armimi ---------------------------------------------------------------
+function ArmingTab({ draft, update }: TabProps) {
+  const row = activeArmingRow(draft);
   return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
-      <div>
-        <Card className="divide-y divide-slate-200 overflow-hidden">
-          {draft.metals.map((m) => (
-            <div key={m.id} className={cn("flex items-center border-l-2 px-4 py-3", selected === m.id ? "border-neutral-500 bg-slate-200/80" : "border-transparent")}>
-              <button onClick={() => setSelected(m.id)} className="flex-1 text-left">
-                <span className="block text-sm font-semibold text-slate-900">{m.name}</span>
-                <span className="block text-xs text-slate-400">{m.brand}</span>
-              </button>
-              <button onClick={() => update((d) => ({ ...d, metals: d.metals.filter((x) => x.id !== m.id) }))} className="text-slate-400 hover:text-rose-400" aria-label="Fshi"><Trash2 className="size-4" /></button>
-            </div>
-          ))}
-        </Card>
-        <Button variant="outline" className="mt-3 w-full" onClick={addMetal}><Plus className="size-4" /> Shto Metal</Button>
-      </div>
-      <Card className="p-5">
-        <Label>Çmimet e armimit (€/m)</Label>
-        <div className="mt-3 space-y-2">
-          {draft.armingRows.map((r) => (
-            <div key={r.id} className="flex items-center justify-between gap-3">
-              <span className="text-sm font-semibold text-slate-700">{r.component} <span className="text-xs text-slate-400">· {r.code}</span></span>
-              <input value={String(r.price)} onChange={(e) => update((d) => ({ ...d, armingRows: d.armingRows.map((x) => (x.id === r.id ? { ...x, price: num(e.target.value) } : x)) }))}
-                className="h-9 w-24 rounded-lg border border-slate-200 bg-slate-50 px-3 text-right text-sm text-slate-900 outline-none focus:border-neutral-500" inputMode="decimal" />
-            </div>
-          ))}
+    <Card className="max-w-xl p-5">
+      <Label>Armimi aktiv për ram (€/m)</Label>
+      {row ? (
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <span className="text-sm font-semibold text-slate-700">{row.component} <span className="text-xs text-slate-400">· {row.code}</span></span>
+          <input aria-label={`${row.component} €/m`} value={String(row.price)} onChange={(e) => update((d) => ({ ...d, armingRows: d.armingRows.map((item) => (item.id === row.id ? { ...item, price: num(e.target.value) } : item)) }))}
+            className="h-9 w-24 rounded-lg border border-slate-200 bg-slate-50 px-3 text-right text-sm text-slate-900 outline-none focus:border-neutral-500" inputMode="decimal" />
         </div>
-      </Card>
-    </div>
+      ) : (
+        <p className="mt-3 text-sm text-slate-400">Nuk ka rresht aktiv të armimit të ramit.</p>
+      )}
+    </Card>
   );
 }
+// --- Xhamat ---------------------------------------------------------------
+function GlassTab({ draft, update }: TabProps) {
+  const add = () => update((d) => ({
+    ...d,
+    glass: [...d.glass, { id: uid(), name: "I ri", brand: "Brand", price: 0, photo: true, extra: "" } as CatalogRow],
+  }));
 
-// --- Mekanizmat (matrices — display + editable global hardware) -----------
-function MechanismsTab({ draft, update }: TabProps) {
-  const heights = [60, 80, 100, 140, 180, 200, 230];
-  const widths = [40, 60, 80, 105, 130];
-  return (
-    <div className="space-y-5">
-      <Card className="p-5">
-        <Label>Matrica single — lartësi × gjerësi (cm) → €</Label>
-        <div className="mt-3 overflow-x-auto">
-          <table className="min-w-[480px] text-sm">
-            <thead><tr><th className="p-2 text-left text-xs text-slate-400">H \ W</th>{widths.map((w) => <th key={w} className="p-2 text-right text-xs text-slate-400">{w}</th>)}</tr></thead>
-            <tbody>
-              {heights.map((h, ri) => (
-                <tr key={h} className="border-t border-slate-200">
-                  <td className="p-2 font-semibold text-slate-700">{h}</td>
-                  {widths.map((w, ci) => <td key={w} className="p-2 text-right text-slate-500">{(24 + ri * 6 + ci * 4).toFixed(0)}</td>)}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-3 text-xs text-slate-400">Matricat janë demonstrim lokal (vetëm-shikim). Hardueri global është i editueshëm më poshtë.</p>
-      </Card>
-      <Card className="p-5">
-        <Label>Hardueri i rrëshqitëses (global)</Label>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {["Set rrëshqitës (për krah lëvizës) €", "Shina lart/poshtë (€/m, 2 × gjerësia)"].map((k, i) => (
-            <Field key={k} label={k}>
-              <Input value={draft.accessoryParams["_hw" + i] ?? (i === 0 ? "85" : "9")}
-                onChange={(e) => update((d) => ({ ...d, accessoryParams: { ...d.accessoryParams, ["_hw" + i]: e.target.value } }))} inputMode="decimal" />
-            </Field>
-          ))}
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-// --- Xhamat / Panelet (photo tables, editable + add/delete) ---------------
-function PhotoTab({ draft, update, coll, title, addLabel, showDesc, importExcel }: TabProps & { coll: "glass" | "panels"; title: string; addLabel: string; showDesc?: boolean; importExcel?: boolean }) {
-  const { toast } = useApp();
-  const rows = draft[coll];
-  const add = () => update((d) => ({ ...d, [coll]: [...d[coll], { id: uid(), name: "I ri", brand: "Brand", price: 0, photo: true, extra: "" } as CatalogRow] }));
   return (
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-4">
-        <span className="text-sm font-semibold tracking-wide text-slate-400 uppercase">{title} ({rows.length})</span>
-        <div className="flex gap-2">
-          {importExcel && <Button size="sm" variant="outline" onClick={() => toast("Importo Excel — jo në demon lokale.")}><FileSpreadsheet className="size-4" /> Importo Excel</Button>}
-          <Button size="sm" onClick={add}><Plus className="size-4" /> {addLabel}</Button>
-        </div>
+        <span className="text-sm font-semibold tracking-wide text-slate-400 uppercase">Llojet e xhamave ({draft.glass.length})</span>
+        <Button size="sm" onClick={add}><Plus className="size-4" /> Shto Xham</Button>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[520px] text-sm">
+        <table className="w-full min-w-[620px] text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs font-semibold tracking-wide text-slate-400 uppercase">
-              <th className="px-4 py-3">Foto</th><th className="px-4 py-3">Emri</th><th className="px-4 py-3">Brendi</th>
-              {showDesc && <th className="px-4 py-3">Përshkrimi</th>}<th className="px-4 py-3 text-right">€/m²</th><th />
+              <th className="px-4 py-3">Foto</th>
+              <th className="px-4 py-3">Emri</th>
+              <th className="px-4 py-3">Brendi</th>
+              <th className="px-4 py-3">Përshkrimi</th>
+              <th className="px-4 py-3 text-right">€/m²</th>
+              <th />
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-b border-slate-200 last:border-0">
-                <td className="px-4 py-3"><span className="grid size-10 place-items-center rounded-lg bg-slate-200/70 text-slate-400"><ImageIcon className="size-4" /></span></td>
-                <td className="px-4 py-3"><input value={r.name} onChange={(e) => update((d) => ({ ...d, [coll]: d[coll].map((x) => (x.id === r.id ? { ...x, name: e.target.value } : x)) }))} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500" /></td>
-                <td className="px-4 py-3"><input value={r.brand} onChange={(e) => update((d) => ({ ...d, [coll]: d[coll].map((x) => (x.id === r.id ? { ...x, brand: e.target.value } : x)) }))} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm text-slate-900 outline-none focus:border-neutral-500" /></td>
-                {showDesc && <td className="px-4 py-3"><input value={r.extra ?? ""} onChange={(e) => update((d) => ({ ...d, [coll]: d[coll].map((x) => (x.id === r.id ? { ...x, extra: e.target.value } : x)) }))} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm text-slate-500 outline-none focus:border-neutral-500" /></td>}
-                <td className="px-4 py-3 text-right"><input value={String(r.price)} onChange={(e) => update((d) => ({ ...d, [coll]: d[coll].map((x) => (x.id === r.id ? { ...x, price: num(e.target.value) } : x)) }))} className="h-8 w-20 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-neutral-500" inputMode="decimal" /></td>
-                <td className="px-4 py-3 text-right"><button onClick={() => update((d) => ({ ...d, [coll]: d[coll].filter((x) => x.id !== r.id) }))} className="text-slate-400 hover:text-rose-400" aria-label="Fshi"><Trash2 className="size-4" /></button></td>
+            {draft.glass.map((row) => (
+              <tr key={row.id} className="border-b border-slate-200 last:border-0">
+                <td className="px-4 py-3">
+                  <span className="grid size-10 place-items-center rounded-lg bg-slate-200/70 text-slate-400">
+                    <ImageIcon className="size-4" />
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <input aria-label={`Emri i xhamit ${row.name}`} value={row.name} onChange={(event) => update((d) => ({ ...d, glass: d.glass.map((item) => (item.id === row.id ? { ...item, name: event.target.value } : item)) }))}
+                    className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500" />
+                </td>
+                <td className="px-4 py-3">
+                  <input aria-label={`Brendi i xhamit ${row.name}`} value={row.brand} onChange={(event) => update((d) => ({ ...d, glass: d.glass.map((item) => (item.id === row.id ? { ...item, brand: event.target.value } : item)) }))}
+                    className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm text-slate-900 outline-none focus:border-neutral-500" />
+                </td>
+                <td className="px-4 py-3">
+                  <input aria-label={`Përshkrimi i xhamit ${row.name}`} value={row.extra ?? ""} onChange={(event) => update((d) => ({ ...d, glass: d.glass.map((item) => (item.id === row.id ? { ...item, extra: event.target.value } : item)) }))}
+                    className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm text-slate-500 outline-none focus:border-neutral-500" />
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <input aria-label={`${row.name} €/m²`} value={String(row.price)} onChange={(event) => update((d) => ({ ...d, glass: d.glass.map((item) => (item.id === row.id ? { ...item, price: num(event.target.value) } : item)) }))}
+                    className="h-8 w-20 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-neutral-500" inputMode="decimal" />
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <button onClick={() => update((d) => ({ ...d, glass: d.glass.filter((item) => item.id !== row.id) }))} className="text-slate-400 hover:text-rose-400" aria-label={`Fshi ${row.name}`}>
+                    <Trash2 className="size-4" />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -383,45 +327,18 @@ function PhotoTab({ draft, update, coll, title, addLabel, showDesc, importExcel 
   );
 }
 
-// --- Shtesat --------------------------------------------------------------
-function ExpansionsTab({ draft, update }: TabProps) {
-  const add = () => update((d) => ({ ...d, expansions: [...d.expansions, { id: uid(), name: "Shtesë e re", brand: "Expansion Brand A", widthMm: 20, price: 0 }] }));
+// --- Llajsnet -------------------------------------------------------------
+function BeadsTab({ draft, update }: TabProps) {
   return (
-    <Card className="overflow-hidden">
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <span className="text-sm font-semibold tracking-wide text-slate-400 uppercase">Profilet zgjeruese / shtesat ({draft.expansions.length})</span>
-        <Button size="sm" onClick={add}><Plus className="size-4" /> Shto Shtesë</Button>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[480px] text-sm">
-          <thead><tr className="border-b border-slate-200 text-left text-xs font-semibold tracking-wide text-slate-400 uppercase"><th className="px-4 py-3">Emri</th><th className="px-4 py-3">Brendi</th><th className="px-4 py-3 text-right">Gjerësia (mm)</th><th className="px-4 py-3 text-right">€/m</th><th /></tr></thead>
-          <tbody>
-            {draft.expansions.map((e) => (
-              <tr key={e.id} className="border-b border-slate-200 last:border-0">
-                <td className="px-4 py-3"><input value={e.name} onChange={(ev) => update((d) => ({ ...d, expansions: d.expansions.map((x) => (x.id === e.id ? { ...x, name: ev.target.value } : x)) }))} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500" /></td>
-                <td className="px-4 py-3 text-slate-500">{e.brand}</td>
-                <td className="px-4 py-3 text-right"><input value={String(e.widthMm)} onChange={(ev) => update((d) => ({ ...d, expansions: d.expansions.map((x) => (x.id === e.id ? { ...x, widthMm: positiveInt(ev.target.value) } : x)) }))} className="h-8 w-16 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-neutral-500" inputMode="numeric" min={0} /></td>
-                <td className="px-4 py-3 text-right"><input value={String(e.price)} onChange={(ev) => update((d) => ({ ...d, expansions: d.expansions.map((x) => (x.id === e.id ? { ...x, price: num(ev.target.value) } : x)) }))} className="h-8 w-20 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm text-slate-900 outline-none focus:border-neutral-500" inputMode="decimal" /></td>
-                <td className="px-4 py-3 text-right"><button onClick={() => update((d) => ({ ...d, expansions: d.expansions.filter((x) => x.id !== e.id) }))} className="text-slate-400 hover:text-rose-400" aria-label="Fshi"><Trash2 className="size-4" /></button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  );
-}
-
-// --- Aksesorët / Parametrat (param maps) ----------------------------------
-function ParamsTab({ draft, update, which, heading }: TabProps & { which: "accessoryParams" | "productionParams"; heading: string }) {
-  const entries = Object.entries(draft[which]).filter(([k]) => !k.startsWith("_"));
-  return (
-    <Card className="p-5">
-      <Label>{heading}</Label>
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {entries.map(([k, v]) => (
-          <Field key={k} label={k}>
-            <Input value={v} onChange={(e) => update((d) => ({ ...d, [which]: { ...d[which], [k]: e.target.value } }))} inputMode="decimal" />
+    <Card className="max-w-2xl p-5">
+      <Label>Çmimet aktive të llajsnës</Label>
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {EDITABLE_ACCESSORY_KEYS.map((key) => (
+          <Field key={key} label={key}>
+            <Input value={draft.accessoryParams[key] ?? ""} onChange={(event) => update((d) => ({
+              ...d,
+              accessoryParams: { ...d.accessoryParams, [key]: event.target.value },
+            }))} inputMode="decimal" />
           </Field>
         ))}
       </div>
@@ -431,59 +348,25 @@ function ParamsTab({ draft, update, which, heading }: TabProps & { which: "acces
 
 // --- Roletat --------------------------------------------------------------
 function RoletaTab({ draft, update }: TabProps) {
-  return (
-    <div className="space-y-5">
-      <Card className="p-5">
-        <Label>Versionet e roletës</Label>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {draft.roletaVersions.map((r) => (
-            <Field key={r.id} label={`${r.name} — çmimi për m²`}>
-              <Input value={String(r.pricePerM2)} onChange={(e) => update((d) => ({ ...d, roletaVersions: d.roletaVersions.map((x) => (x.id === r.id ? { ...x, pricePerM2: num(e.target.value) } : x)) }))} inputMode="decimal" />
-            </Field>
-          ))}
-        </div>
-      </Card>
-    </div>
-  );
-}
+  const row = draft.roletaVersions[0];
 
-// --- Dyer të Hyrjes -------------------------------------------------------
-function DoorsTab({ draft, update }: TabProps) {
-  const [showPhoto, setShowPhoto] = useState(false);
-  const add = () => update((d) => ({ ...d, doorModels: [...d.doorModels, { id: uid(), name: "Model i ri", mode: "FIKS", basePrice: 0 }] }));
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold tracking-wide text-slate-400 uppercase">Modelet e dyerve të hyrjes</span>
-        <Button size="sm" onClick={add}><Plus className="size-4" /> Shto Model</Button>
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {draft.doorModels.map((m) => (
-          <Card key={m.id} className="p-4">
-            <div className="mb-3 grid h-28 place-items-center rounded-xl bg-slate-200/60 text-slate-400"><ImageIcon className="size-6" /></div>
-            <input value={m.name} onChange={(e) => update((d) => ({ ...d, doorModels: d.doorModels.map((x) => (x.id === m.id ? { ...x, name: e.target.value } : x)) }))} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900 outline-none focus:border-neutral-500" />
-            <div className="mt-2 flex gap-2">
-              {(["FIKS", "TABELË"] as const).map((mode) => (
-                <button key={mode} onClick={() => update((d) => ({ ...d, doorModels: d.doorModels.map((x) => (x.id === m.id ? { ...x, mode } : x)) }))}
-                  className={cn("rounded-md px-2 py-0.5 text-xs font-semibold", m.mode === mode ? "bg-slate-200 text-slate-900" : "bg-slate-200 text-slate-500")}>{mode}</button>
-              ))}
-            </div>
-            <div className="mt-3">
-              <Label>Çmimi bazë</Label>
-              <input value={String(m.basePrice)} onChange={(e) => update((d) => ({ ...d, doorModels: d.doorModels.map((x) => (x.id === m.id ? { ...x, basePrice: num(e.target.value) } : x)) }))} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-neutral-500" inputMode="decimal" />
-              <div className="mt-1 text-xs text-slate-400">{eurAfter(m.basePrice)}</div>
-            </div>
-            <div className="mt-2 text-right"><button onClick={() => update((d) => ({ ...d, doorModels: d.doorModels.filter((x) => x.id !== m.id) }))} className="text-xs font-semibold text-rose-400 hover:underline">Fshi modelin</button></div>
-          </Card>
-        ))}
-      </div>
-      <Card className="flex items-center justify-between p-5">
-        <div>
-          <div className="text-sm font-semibold text-slate-900">Shfaq foton e modelit në ofertë</div>
-          <div className="text-xs text-slate-400">Te oferta finale shfaqet fotoja e modelit në vend të skicës teknike.</div>
+    <Card className="max-w-xl p-5">
+      <Label>Çmimi aktiv i roletës</Label>
+      {row ? (
+        <div className="mt-4">
+          <Field label={`${row.name} — çmimi për m²`}>
+            <Input value={String(row.pricePerM2)} onChange={(event) => update((d) => ({
+              ...d,
+              roletaVersions: d.roletaVersions.map((item) => (
+                item.id === row.id ? { ...item, pricePerM2: num(event.target.value) } : item
+              )),
+            }))} inputMode="decimal" />
+          </Field>
         </div>
-        <Toggle checked={showPhoto} onChange={setShowPhoto} label="Shfaq foton" />
-      </Card>
-    </div>
+      ) : (
+        <p className="mt-3 text-sm text-slate-400">Nuk ka rresht aktiv të roletës.</p>
+      )}
+    </Card>
   );
 }

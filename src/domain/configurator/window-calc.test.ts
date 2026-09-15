@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { computeMaterials, computeLayout, computePrice, effectiveDims, validateConfig } from "./window-calc";
 import * as seed from "@/lib/mock/data";
-import type { WindowConfig, ProductType } from "@/domain/types";
+import { defaultPricingCatalog } from "@/domain/pricing/defaults";
+import type { WindowConfig, ProductType, ProfileColor } from "@/domain/types";
 
 const pricing = {
   systems: seed.pricingSystems,
@@ -125,6 +126,101 @@ describe("window layout + price", () => {
   it("supports every product type without throwing", () => {
     const types: ProductType[] = ["Dritare", "Derë Hyrje", "Derë", "Rreshqitëse", "Roletë"];
     for (const t of types) expect(computePrice(cfg({ productType: t }), pricing)).toBeGreaterThan(0);
+  });
+});
+
+describe("RC-11 supported pricing sensitivity", () => {
+  it("selected system material changes PVC armoring on an applicable window", () => {
+    const catalog = defaultPricingCatalog();
+    const baseline = computePrice(cfg({ systemId: "s1" }), catalog);
+    catalog.systems.find((system) => system.id === "s1")!.material = "ALU";
+    const changed = computePrice(cfg({ systemId: "s1" }), catalog);
+    expect({ baseline, changed }).toEqual({ baseline: 100.15, changed: 86.07 });
+  });
+
+  it.each([
+    ["white", "white"],
+    ["white_color", "whiteColor"],
+    ["color_color", "colorColor"],
+  ] as const)("Ram %s price changes a fixed window", (color, key) => {
+    const catalog = defaultPricingCatalog();
+    const config = cfg({ color: color as ProfileColor });
+    const baseline = computePrice(config, catalog);
+    catalog.profilePriceRows[0][key] += 10;
+    const changed = computePrice(config, catalog);
+    expect(changed - baseline).toBeCloseTo(44, 2);
+  });
+
+  it.each([
+    ["white", "white"],
+    ["white_color", "whiteColor"],
+    ["color_color", "colorColor"],
+  ] as const)("Krah %s price changes a window with an opening sash", (color, key) => {
+    const catalog = defaultPricingCatalog();
+    const config = cfg({ color: color as ProfileColor, openings: { 0: "majtas" } });
+    const baseline = computePrice(config, catalog);
+    catalog.profilePriceRows[1][key] += 10;
+    const changed = computePrice(config, catalog);
+    expect(changed).toBeGreaterThan(baseline);
+    expect(changed - baseline).toBeCloseTo(computeMaterials(config).krahM * 10, 2);
+  });
+
+  it.each([
+    ["white", "white"],
+    ["white_color", "whiteColor"],
+    ["color_color", "colorColor"],
+  ] as const)("T-Shtyllë %s price changes a divided window", (color, key) => {
+    const catalog = defaultPricingCatalog();
+    const config = cfg({ color: color as ProfileColor, modelType: "dyshe-v" });
+    const baseline = computePrice(config, catalog);
+    catalog.profilePriceRows[2][key] += 10;
+    const changed = computePrice(config, catalog);
+    expect(changed).toBeGreaterThan(baseline);
+    expect(changed - baseline).toBeCloseTo(computeMaterials(config).tShtylleM * 10, 2);
+  });
+
+  it("Armim Ram price changes a selected PVC window", () => {
+    const catalog = defaultPricingCatalog();
+    const config = cfg({ systemId: "s1" });
+    const baseline = computePrice(config, catalog);
+    catalog.armingRows[0].price += 10;
+    const changed = computePrice(config, catalog);
+    expect({ baseline, changed }).toEqual({ baseline: 100.15, changed: 144.15 });
+  });
+
+  it.each(defaultPricingCatalog().glass.map((row) => [row.id, row.name] as const))(
+    "selected glass %s (%s) price changes a glazed window",
+    (glassId) => {
+      const catalog = defaultPricingCatalog();
+      const config = cfg({ glassId });
+      const baseline = computePrice(config, catalog);
+      catalog.glass.find((row) => row.id === glassId)!.price += 10;
+      const changed = computePrice(config, catalog);
+      expect(changed).toBeGreaterThan(baseline);
+      expect(changed - baseline).toBeCloseTo(computeMaterials(config).glassM2 * 10, 2);
+    },
+  );
+
+  it.each([
+    ["white", "Llajsne bardhë (€/m)"],
+    ["color_color", "Llajsne color (€/m)"],
+  ] as const)("%s bead price changes a glazed window", (color, key) => {
+    const catalog = defaultPricingCatalog();
+    const config = cfg({ color: color as ProfileColor });
+    const baseline = computePrice(config, catalog);
+    catalog.accessoryParams[key] = String(Number(catalog.accessoryParams[key]) + 10);
+    const changed = computePrice(config, catalog);
+    expect(changed).toBeGreaterThan(baseline);
+    expect(changed - baseline).toBeCloseTo(computeMaterials(config).llajsneM * 10, 2);
+  });
+
+  it("first roller-shutter rate changes an applicable standalone shutter", () => {
+    const catalog = defaultPricingCatalog();
+    const config = cfg({ productType: "Roletë" });
+    const baseline = computePrice(config, catalog);
+    catalog.roletaVersions[0].pricePerM2 += 10;
+    const changed = computePrice(config, catalog);
+    expect({ baseline, changed }).toEqual({ baseline: 133, changed: 145 });
   });
 });
 

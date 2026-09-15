@@ -167,6 +167,67 @@ for (const [who, path] of [["platform", "/platform"], ["owner", "/dashboard"], [
   });
 }
 
+test("RC-11 tenant pricing exposes only effective editors and a saved glass price changes a new calculation", async ({ page, context }) => {
+  const client = await action(users.owner.api, "createClient", "/clients", { name: "RC-11 pricing probe", type: "Privat" });
+  const project = await action(users.owner.api, "createProject", "/projects", { clientId: client.value.data.id, title: "RC-11 pricing sensitivity", vatRate: 0.18 });
+  expect(project.value.ok).toBe(true);
+  const config = {
+    productType: "Dritare",
+    modelType: "njeshe",
+    widthMm: 1000,
+    heightMm: 1200,
+    systemId: "s1",
+    color: "white",
+    mechanismId: "Roto NX",
+    glassId: "g1",
+    roleta: false,
+    shtesa: [],
+    openings: {},
+  };
+  const baseline = await action(users.owner.api, "addProjectItem", `/projects/${project.value.data.id}/configure`, {
+    projectId: project.value.data.id,
+    config,
+    qty: 1,
+  });
+  expect(baseline.value.ok).toBe(true);
+
+  await context.addCookies((await users.owner.api.storageState()).cookies);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/pricing?tab=glass");
+  await expect(page.locator("html")).toHaveClass(/dark/);
+
+  for (const label of ["Sistemet", "Armimi", "Xhamat", "Llajsnet", "Roletat"]) {
+    await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible();
+  }
+  for (const label of ["Mekanizmat", "Panelet", "Shtesat", "Parametrat", "Dyer të Hyrjes"]) {
+    await expect(page.getByRole("button", { name: label, exact: true })).toHaveCount(0);
+  }
+
+  const glassPrice = page.getByRole("textbox", { name: /Dopjo Low-E 4-16-4 €\/m²/ });
+  const originalGlassPrice = Number(await glassPrice.inputValue());
+  await glassPrice.fill(String(originalGlassPrice + 10));
+  await page.getByRole("button", { name: /Ruaj Ndryshimet/ }).click();
+  await expect(page.getByText("Ndryshimet u ruajtën.", { exact: true })).toBeVisible();
+
+  const changed = await action(context.request, "addProjectItem", `/projects/${project.value.data.id}/configure`, {
+    projectId: project.value.data.id,
+    config,
+    qty: 1,
+  });
+  expect(changed.value.ok).toBe(true);
+  expect(changed.value.data.unitPrice - baseline.value.data.unitPrice).toBeCloseTo(9.7, 2);
+
+  await page.getByRole("button", { name: "Kalo në ditë", exact: true }).click();
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/pricing");
+  await expect(page.getByRole("button", { name: "Sistemet", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Roletat", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  await page.getByRole("button", { name: "Kalo në natë", exact: true }).click();
+  await expect(page.locator("html")).toHaveClass(/dark/);
+});
+
 
 test("RC-03 stored invoice content prints safely through the real popup UI", async ({ page, context }) => {
   const hostile = `<img src=x onerror="globalThis.__storedPrintProbe=1">'" &`;

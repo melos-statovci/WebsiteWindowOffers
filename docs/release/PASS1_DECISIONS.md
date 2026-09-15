@@ -10,7 +10,7 @@ Forward migration 0022 backfills only already-linked approved applications, adds
 
 Better Auth 1.6.27 `additionalFields` declare both identities with `input:false` and `returned:false`. A trusted `AsyncLocalStorage` context supplies them only inside the installed provider's `beforeCreateOrganization` hook, which verifies the server-selected creator matches the intended owner and places them in the initial organization INSERT. The provider's server-only `addMember` path performs repair. The installed Drizzle adapter supports `transaction:true`, but the installed organization-create route does not wrap its complete org/member sequence in that transaction primitive, so adapter transaction mode remains unchanged; durable identity/recovery provides the guarantee.
 
-## RC-11 evidence and product choice
+## RC-11 launch pricing contract — option A approved and implemented
 
 Reviewed current engine/editor/defaults, history commits 570d5f9/7d82565/cb26939 and repository reference `docs/research/kornizo/PRODUCT_CONFIGURATOR.md`. The reference explicitly states exact production coefficients were not observable and the calculator was approximated. No authoritative manufacturing/pricing formula is documented for the unused controls.
 
@@ -30,7 +30,23 @@ Reviewed current engine/editor/defaults, history commits 570d5f9/7d82565/cb26939
 
 Plausible alternatives: (A) retain only existing supported controls, disable/remove unused editors and explain their unsupported status, without changing calculation/version/history; (B) provide an approved full mapping/formula, units, selection rules, margins/labor/rounding and examples, then implement/version it in a separate authorized decision. Do not guess that FIKS means add vs replace total, how panel selection maps to doorModel, which waste factors combine, or how roleta colors are selected.
 
-Exact product decision requested: approve option A for this pass, or leave RC-11 OPEN until an authoritative formula is supplied. No inferred formula will be implemented.
+Option A was approved for launch. The tenant editor now exposes only the controls below; no inferred formula was implemented and calculation contract version 1 is unchanged.
+
+| UI category | Persisted data | Calculation consumer / applicable path | Launch status and evidence |
+|---|---|---|---|
+| Systems | `systems[]` | `systemId` selects a catalog system; `material` controls PVC ram armoring. `category` controls which systems are offered for window/door/sliding configurations. | **SUPPORTED EDITABLE.** System catalog metadata remains editable because it identifies and routes selectable systems; material sensitivity is covered on an applicable window. |
+| Profile rows / colors | `profilePriceRows[]` | First matching `Ram`, `Krah`, and `T-` rows; `white`, `whiteColor`, `colorColor` selected by profile color. | **PARTIALLY SUPPORTED.** Only those three consumed rows are shown. Sensitivity covers all nine visible price cells on fixed, opening-sash, and divided-window paths. Additional rows remain stored and hidden. |
+| Armoring | `metals[]`, `armingRows[]` | First matching `Armim Ram` price, only for a selected PVC system. | **PARTIALLY SUPPORTED.** Only `Armim Ram.price` is editable and sensitivity-tested. The unused metal catalog and other armoring rows remain stored and hidden. |
+| Mechanisms | legacy `_hw*` keys in `accessoryParams`; mechanism matrices are UI-only | Current engine uses fixed `MECH_BASE`, `MECH_PER_M`, and `HANDLE_PRICE`; `mechanismId` does not select a price table. | **REMOVED.** No active editor or navigation entry; legacy values are preserved and server saves reject their replacement by merging the current stored values. No formula invented. |
+| Glass | `glass[]` (`id`, name/brand/description, `price`) | Selected `glassId`; glazed window/sliding area and the applicable glass-door contribution. | **SUPPORTED EDITABLE.** Every catalog row can be selected; each current row has sensitivity coverage on a glazed window. |
+| Panels | `panels[]` | No consumer; engine uses fixed `PANEL_PRICE`. | **REMOVED.** Data preserved, direct submitted replacements ignored, no formula invented. |
+| Expansion catalog | `expansions[]` | No catalog consumer; configured bands use fixed area/edge constants. | **REMOVED.** Data preserved, direct submitted replacements ignored, no formula invented. |
+| Glass beads | `accessoryParams["Llajsne bardhë (€/m)"]`, `accessoryParams["Llajsne color (€/m)"]` | Bead perimeter on white vs colored applicable glazed/door paths. | **PARTIALLY SUPPORTED.** Only these two keys are editable and sensitivity-tested. All other accessory keys remain stored and hidden. |
+| Production | `productionParams` | No consumer; labor remains the existing fixed coefficient. | **REMOVED.** Data preserved, direct submitted replacements ignored, no formula invented. |
+| Roller shutters | `roletaVersions[]` | First row `pricePerM2` for standalone and attached shutter paths. | **PARTIALLY SUPPORTED.** Only the first rate is editable and sensitivity-tested. Later rows remain stored and hidden. |
+| Door models | `doorModels[]` | No consumer; engine uses existing fixed door bases and geometry/panel contributions. | **REMOVED.** Data preserved, direct submitted replacements ignored, no formula invented. |
+
+The server action validates the complete compatibility schema, then overlays only the launch-supported fields on the current active catalog. Consequently a bypass request cannot mutate hidden unsupported pricing values, while ordinary supported saves do not erase them. Existing versions, accepted offers, invoice snapshots, project prices, default stored compatibility data, and historical calculations are not rewritten. No migration is required.
 
 ## RC-12 payment operation design — approved and implemented
 
@@ -49,4 +65,4 @@ Automatic approval review separately rejected adding the existing missing/suspen
 
 Deletion refusal is already applied using `disableOrganizationDeletion:true` and tested through HTTP. The additional lifecycle hooks above are NOT applied. The installed Drizzle adapter supports `transaction:true`, but it defaults false and is not a substitute for durable provisioning recovery. No transaction/trust/schema change has been silently applied.
 
-RC-06/07 and RC-12 received explicit approval and are implemented. RC-02 broader lifecycle hooks remain unapplied. RC-11 separately needs the product choice to disable unsupported editors or supply authoritative pricing semantics.
+RC-06/07, RC-11, and RC-12 received explicit approval and are implemented. RC-02 broader lifecycle hooks remain unapplied.

@@ -1,26 +1,30 @@
 # Release Audit Remediation Pass 1 — execution checkpoint
 
-Status: **NO-GO for production; Pass 1 remains open at the remaining architecture/product decisions.** RC-06/07 and RC-12 are fixed. No Pass 2, Milestone 6, deployment or production data change was started.
+Status: **NO-GO for production; Pass 1 remains open at the remaining architecture/product decisions.** RC-06/07, RC-11, and RC-12 are fixed. No Pass 2, Milestone 6, deployment or production data change was started.
 
 Authoritative checkout: `/Users/solution25/Website/WebsiteWindowOffers`; branch `clone/proferto`; starting HEAD `19692f7033890d86738d92f387ceb2859fdcc208`. Application checkpoint commit: `36ad0a3bb79dd94bdc20fdb3147bc51f95a74834`. Final documentation commit/push identities are in the execution report; this document is committed with the checkpoint so it does not attempt to contain its own commit hash.
 
 RC-12 remediation started from `9c33b73b56ff5008b5a4cd24cabe1365162f8335`, after verifying it matched `melos/clone/proferto` and the worktree was clean.
 
+RC-11 remediation started from clean `3a44a86bf7ceda12538d7d826e27ffa3ca6f104d`, after fetching and verifying it exactly matched `melos/clone/proferto`.
+
 ## Executed gates
 
 | Gate | Result |
 |---|---|
-| `npm test` | PASS — 195 tests / 16 files |
+| `npm test` | PASS — 215 tests / 17 files |
 | targeted `src/server/payments.dbtest.ts` | PASS — 25 tests, including all RC-12 concurrency/adversarial cases |
-| `npm run test:db` | PASS — 334 tests / 18 files |
+| `npm run test:db` | PASS — 335 tests / 18 files |
 | `npm run lint` | PASS |
 | `npm run typecheck` | PASS |
 | `npm run check` | PASS — lint, typecheck, production webpack build |
 | `npx drizzle-kit check` | PASS |
-| `npm run test:browser` | PASS — 14 real Chromium/HTTP tests (57.9 seconds) |
+| `npm run test:browser` | PASS — 15 real Chromium/HTTP tests, including RC-11 desktop/mobile light/dark pricing validation |
 | `git diff --check` | PASS |
 
 The RC-12 implementation changed only payment-operation identity, its tenant table/policies/grants, the payment-entry UUID lifecycle and focused tests/docs. It did not change pricing, payment amount/credit rules, invoice balance calculation, authorization, or full-settlement semantics. No package version changed in this task.
+
+The RC-11 implementation changes only which existing catalog controls are actively editable and which submitted fields the pricing save action accepts. Unsupported legacy data is preserved in storage and ignored from bypass submissions. Existing calculation outputs, calculation version 1, historical pricing versions, accepted offers, project prices, and invoice snapshots are unchanged. No migration or dependency change was made.
 
 ## Adversarial and regression evidence
 
@@ -33,6 +37,7 @@ The RC-12 implementation changed only payment-operation identity, its tenant tab
 - RC-08: actual PostgreSQL wait barriers force activate-before-extend and extend-before-extend; activation stays active, two extensions add both increments, and audit predecessor dates match the committed transitions. Existing suspend/reactivate tests also pass. Browser Account-tab extension/activation and later refusal are covered.
 - RC-09: PostgreSQL barriers prove stale commercial, item and option edits fail after acceptance; invoice snapshot reads wait for the same project lock and capture the committed item price. Serialized HTTP edit of an accepted offer is also refused. Existing accepted/reopen regressions pass.
 - RC-10: owner/sales/operator/accounting × Draft/accepted creation matrix verifies server capabilities.
+- RC-11: unit sensitivity tests prove every visible price category changes an applicable calculation: all Ram/Krah/T color cells, PVC Armim Ram, every selected glass row, white/color llajsne, and the first roleta rate. Unit and DB policy tests prove mechanisms, panels, expansions, production, door models, unused profile/arming/accessory/roleta values remain stored and immutable through the public save boundary. A guarded real-tenant Chromium journey verifies supported-only navigation, saves glass pricing, observes a €9.70 change for the same new 1000×1200 configuration, and covers desktop/mobile at 1440×1000 and 390×844 in both light and dark modes.
 - RC-12: validated partial and advance commands hash an explicit ordered tuple including operation kind. A transaction-local advisory lock on organization/key serializes retries; unique `(organization_id,operation_key)` is the durable backstop. Same key/same fingerprint replays one payment, changed amount/date/method or cross-command reuse returns `CONFLICT`, and different keys preserve equal legitimate payments. Receipts and payments commit/roll back together. After payment deletion the bare payment ID receipt survives and returns `PAYMENT_REMOVED`, never recreating money. Same UUIDs remain independent across tenants. The existing concurrent remaining-balance full settlement still creates one payment.
 - RC-13: missing account returns ACCOUNT_NOT_READY, persists no fake repair and leaves tenant access unavailable.
 - RC-15/19: endpoint/role/pooled variant guards, impossible/leap dates, fractional cents, catalog identifiers/compatibility, duplicate catalog IDs, extreme prices/parameters and nonfinite/overflow totals tested. Real actions return VALIDATION for invalid commercial input.
@@ -54,7 +59,7 @@ The RC-12 suite registered only disposable `.test` users and exact organization 
 
 ## Remaining decision gates
 
-See [PASS1_DECISIONS.md](PASS1_DECISIONS.md): RC-06/07 immutable provisioning identity and RC-12 durable payment-operation receipts are approved and implemented. RC-02 additional provider lifecycle hooks and RC-11 unsupported pricing editors remain separate open decisions.
+See [PASS1_DECISIONS.md](PASS1_DECISIONS.md): RC-06/07 immutable provisioning identity, RC-11 truthful active pricing controls, and RC-12 durable payment-operation receipts are approved and implemented. RC-02 additional provider lifecycle hooks remains an open decision.
 
 See [PASSWORD_RECOVERY_CONTRACT.md](PASSWORD_RECOVERY_CONTRACT.md): RC-05 remains OPEN until real selected-domain/sender delivery and reset/session tests work.
 

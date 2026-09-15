@@ -6,6 +6,7 @@
 
 import type { ModelType, ProductType, WindowConfig } from "@/domain/types";
 import type { PricingCatalog } from "@/domain/pricing/types";
+import { calculationProfileRows } from "@/domain/pricing/editable";
 
 type Pricing = PricingCatalog;
 
@@ -313,9 +314,7 @@ export function computePrice(config: WindowConfig, pricing: Pricing): number {
 
   const m = computeMaterials(config);
   const key = colorKey(config.color);
-  const ramRow = pricing.profilePriceRows.find((r) => r.profile.startsWith("Ram")) ?? pricing.profilePriceRows[0];
-  const krahRow = pricing.profilePriceRows.find((r) => r.profile.startsWith("Krah")) ?? ramRow;
-  const tRow = pricing.profilePriceRows.find((r) => r.profile.startsWith("T-")) ?? ramRow;
+  const { ram: ramRow, krah: krahRow, tShtylle: tRow } = calculationProfileRows(pricing);
   const ramPrice = ramRow?.[key] ?? 6.2;
   const krahPrice = krahRow?.[key] ?? 7.0;
   const tPrice = tRow?.[key] ?? 7.6;

@@ -18,8 +18,9 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { priceLists } from "@/db/schema/business";
-import { pricingCatalogSchema } from "@/domain/validation/pricing";
+import { parsePricingCatalog, pricingCatalogSchema } from "@/domain/validation/pricing";
 import { PRICING_CALCULATION_VERSION } from "@/domain/configurator/window-calc";
+import { mergeEditablePricingCatalog } from "@/domain/pricing/editable";
 import { ensureActivePriceList } from "@/server/pricing-init";
 import { createAction, fail } from "@/server/action";
 
@@ -50,12 +51,15 @@ export const savePricingAction = createAction({
     // pricing yet), then read the current active version under the lock.
     await ensureActivePriceList(tx, orgId, ctx.userId);
     const activeRows = await tx
-      .select({ version: priceLists.version })
+      .select({ version: priceLists.version, catalog: priceLists.catalog })
       .from(priceLists)
       .where(and(eq(priceLists.organizationId, orgId), eq(priceLists.isActive, true)))
       .orderBy(desc(priceLists.version))
       .limit(1);
-    const currentVersion = activeRows[0]?.version ?? 0;
+    const active = activeRows[0];
+    if (!active) throw fail("INTERNAL", "Nuk u gjet çmimorja aktive.");
+    const currentVersion = active.version;
+    const currentCatalog = parsePricingCatalog(active.catalog);
 
     // Optimistic concurrency: reject a stale edit rather than overwrite a newer
     // one. Omitting baseVersion opts out (last-write-wins).
@@ -67,6 +71,10 @@ export const savePricingAction = createAction({
     }
 
     const nextVersion = currentVersion + 1;
+    // RC-11 launch contract: accept only fields exposed by the truthful active
+    // editor. Unsupported legacy values remain in every new snapshot exactly as
+    // they were, even if a caller bypasses the browser and submits replacements.
+    const nextCatalog = mergeEditablePricingCatalog(currentCatalog, input.catalog);
 
     // 1) Archive the currently-active version. Must happen BEFORE the insert, or
     //    the new active row would collide with the partial-unique active index.
@@ -83,7 +91,7 @@ export const savePricingAction = createAction({
         organizationId: orgId,
         version: nextVersion,
         isActive: true,
-        catalog: input.catalog,
+        catalog: nextCatalog,
         calculationVersion: PRICING_CALCULATION_VERSION,
         createdByUserId: ctx.userId,
       })

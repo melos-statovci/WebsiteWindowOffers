@@ -278,6 +278,51 @@ describe("same-org sharing + cross-org isolation", () => {
   });
 });
 
+describe("RC-11 server-side active-field policy", () => {
+  it("applies supported edits but preserves unsupported legacy values from a direct submitted catalog", async () => {
+    const before = await activeVersion(orgA);
+    const submitted = structuredClone(before.catalog);
+    const baselinePrice = computePrice(cfg, before.catalog);
+
+    submitted.glass[0].price = before.catalog.glass[0].price + 10;
+    submitted.profilePriceRows[3].white = 999_999;
+    submitted.metals[0].price = 999_999;
+    submitted.armingRows[1].price = 999_999;
+    submitted.panels[0].price = 999_999;
+    submitted.expansions[0].price = 999_999;
+    submitted.accessoryParams._hw0 = "999999";
+    submitted.accessoryParams["Dorezë (copë) — vetëm dritare"] = "999999";
+    submitted.productionParams["Tarifa e punës (€/h)"] = "999999";
+    submitted.roletaVersions[1].pricePerM2 = 999_999;
+    submitted.doorModels[0].basePrice = 999_999;
+
+    const saved = await savePricingAction({ catalog: submitted, baseVersion: before.version }, H(ownerCookie));
+    expect(saved.ok).toBe(true);
+
+    const after = await activeVersion(orgA);
+    expect(after.catalog.glass[0].price).toBe(before.catalog.glass[0].price + 10);
+    expect(computePrice(cfg, after.catalog)).toBeGreaterThan(baselinePrice);
+    expect(after.catalog.profilePriceRows[3]).toEqual(before.catalog.profilePriceRows[3]);
+    expect(after.catalog.metals).toEqual(before.catalog.metals);
+    expect(after.catalog.armingRows[1]).toEqual(before.catalog.armingRows[1]);
+    expect(after.catalog.panels).toEqual(before.catalog.panels);
+    expect(after.catalog.expansions).toEqual(before.catalog.expansions);
+    expect(after.catalog.accessoryParams._hw0).toBe(before.catalog.accessoryParams._hw0);
+    expect(after.catalog.accessoryParams["Dorezë (copë) — vetëm dritare"]).toBe(before.catalog.accessoryParams["Dorezë (copë) — vetëm dritare"]);
+    expect(after.catalog.productionParams).toEqual(before.catalog.productionParams);
+    expect(after.catalog.roletaVersions[1]).toEqual(before.catalog.roletaVersions[1]);
+    expect(after.catalog.doorModels).toEqual(before.catalog.doorModels);
+
+    const preservedHistory = (await history(orgA)).find((row) => row.version === before.version)!;
+    expect(preservedHistory.catalog).toEqual(before.catalog);
+    const calcVersion = await ownerPool.query(
+      "select calculation_version from price_lists where organization_id=$1 and version=$2",
+      [orgA, after.version],
+    );
+    expect(calcVersion.rows[0].calculation_version).toBe(1);
+  });
+});
+
 describe("optimistic concurrency (baseVersion) + concurrent saves", () => {
   it("a stale baseVersion is rejected as CONFLICT", async () => {
     const v = (await activeVersion(orgA)).version;

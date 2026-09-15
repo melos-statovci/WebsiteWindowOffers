@@ -113,7 +113,7 @@ function seedData(): DataSlice {
       productionParams: { ...seed.productionParams },
     },
     selectedDesignId: "klasik",
-    // all 12 steps complete by default (matches original 12/12)
+    // all active guide steps complete by default
     guideDone: Object.fromEntries(guideStepKeys.map((k) => [k, true])),
     uiDismissals: {},
   };

@@ -63,7 +63,7 @@ export const offerDesigns = [
 ];
 
 // Config guide steps. Each step links to a local route so "open the relevant
-// page" works. 12 steps total → matches the original 12/12.
+// page" works. Only active launch pricing controls are linked.
 export interface GuideStep {
   group: string;
   label: string;
@@ -84,11 +84,8 @@ export const guideGroups: { label: string; steps: { label: string; href: string 
     steps: [
       { label: "Brendet e profileve", href: "/pricing" },
       { label: "Sistemet e profileve", href: "/pricing" },
-      { label: "Çmimet e profileve dhe armimi", href: "/pricing?tab=metals" },
-      { label: "Mekanizmat dhe hardueri", href: "/pricing?tab=mechanisms" },
-      { label: "Xhamat, panelet dhe dyert e hyrjes", href: "/pricing?tab=glass" },
-      { label: "Shtesat, aksesorët dhe roletat", href: "/pricing?tab=accessories" },
-      { label: "Parametrat e prodhimit", href: "/pricing?tab=production" },
+      { label: "Çmimet e profileve dhe armimi", href: "/pricing?tab=arming" },
+      { label: "Xhamat, llajsnet dhe roletat", href: "/pricing?tab=glass" },
     ],
   },
   {

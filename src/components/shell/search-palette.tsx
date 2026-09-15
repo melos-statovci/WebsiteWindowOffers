@@ -21,9 +21,7 @@ interface Result {
 }
 
 const pricingTabs = [
-  ["Metalet", "metals"], ["Mekanizmat", "mechanisms"], ["Xhamat", "glass"],
-  ["Panelet", "door-panels"], ["Shtesat", "expansion-profiles"], ["Aksesorët", "accessories"],
-  ["Parametrat", "production"], ["Roletat", "roleta"], ["Dyer të Hyrjes", "doors"],
+  ["Armimi", "arming"], ["Xhamat", "glass"], ["Llajsnet", "accessories"], ["Roletat", "roleta"],
 ] as const;
 
 export function SearchPalette() {

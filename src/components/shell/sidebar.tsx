@@ -98,7 +98,7 @@ function NavContent({
             <>
               <span className="flex-1">Udhëzuesi</span>
               <span className="rounded-md bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-violet-400">
-                12/12
+                9/9
               </span>
             </>
           )}

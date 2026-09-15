@@ -50,7 +50,7 @@ export interface DoorModel {
   basePrice: number;
 }
 
-/** The full editable pricing catalog held by the store and read by window-calc. */
+/** Full persisted pricing catalog, including launch-hidden compatibility data. */
 export interface PricingCatalog {
   systems: PricingSystem[];
   profilePriceRows: ProfilePriceRow[];
