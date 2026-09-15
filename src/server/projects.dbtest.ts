@@ -15,8 +15,12 @@
 //
 // Run via `npm run test:db`.
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import pg from "pg";
+import { z } from "zod";
+import { createAction } from "@/server/action";
+import { waitForBlocked } from "@/db/testing/lock-barrier";
+import { createInvoiceFromProjectAction, createManualInvoiceAction } from "@/server/actions/invoice";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { auth } from "@/auth";
 import * as schema from "@/db/schema";
@@ -29,6 +33,7 @@ import { savePricingAction } from "@/server/actions/pricing";
 import {
   createProjectAction,
   updateProjectAction,
+  setProjectOptionAction,
   setProjectStatusAction,
   deleteProjectAction,
   addProjectItemAction,
@@ -381,4 +386,104 @@ describe("derived totals + item lifecycle", () => {
     const items = await ownerPool.query(`select id from project_items where id=$1`, [a.data.id]);
     expect(items.rows).toHaveLength(0);
   });
+});
+
+
+describe("release authorization, locking and semantic validation", () => {
+  it.each([
+    ["owner", "Draft", true], ["owner", "Pranuar", true],
+    ["sales", "Draft", true], ["sales", "Pranuar", true],
+    ["operator", "Draft", true], ["operator", "Pranuar", false],
+    ["accounting", "Draft", false], ["accounting", "Pranuar", false],
+  ] as const)("RC-10 %s initial %s permitted=%s", async (role, status, permitted) => {
+    const cookies = { owner: ownerCookie, sales: salesCookie, operator: operatorCookie, accounting: accountingCookie };
+    const result = await createProjectAction({ clientId: clientA, title: "Initial status", vatRate: 0.18, status }, H(cookies[role]));
+    expect(result.ok).toBe(permitted);
+    if (!result.ok) expect(result.error.code).toBe("FORBIDDEN");
+  });
+
+  it.each(["commercial", "item", "options"])("RC-09 acceptance wins against stale %s mutation", async (kind) => {
+    const project = await createProjectAction({ clientId: clientA, title: "Freeze barrier", vatRate: 0.18 }, H(ownerCookie));
+    if (!project.ok) throw new Error("setup");
+    const id = project.data.id;
+    const barrier = await ownerPool.connect();
+    let pending: ReturnType<typeof updateProjectAction> | undefined;
+    try {
+      await barrier.query("begin");
+      const pid = (await barrier.query("select pg_backend_pid() pid")).rows[0].pid as number;
+      await barrier.query("update projects set status='Pranuar' where id=$1", [id]);
+      pending = kind === "commercial"
+        ? updateProjectAction({ id, title: "Stale edit", vatRate: 0.2 }, H(ownerCookie))
+        : kind === "item"
+          ? addProjectItemAction({ projectId: id, config: cfg, qty: 1 }, H(ownerCookie))
+          : setProjectOptionAction({ id, key: "TVSH", value: true }, H(ownerCookie));
+      await waitForBlocked(ownerPool, pid);
+      await barrier.query("commit");
+      expect(await pending).toMatchObject({ ok: false, error: { code: "RULE_VIOLATION" } });
+      expect((await ownerPool.query("select title, status from projects where id=$1", [id])).rows[0])
+        .toMatchObject({ title: "Freeze barrier", status: "Pranuar" });
+      expect((await ownerPool.query("select id from project_items where project_id=$1", [id])).rows).toHaveLength(0);
+    } finally { await barrier.query("rollback"); barrier.release(); await pending; }
+  });
+
+  it("RC-09 invoice snapshot waits for the project commercial lock", async () => {
+    const project = await createProjectAction({ clientId: clientA, title: "Snapshot barrier", vatRate: 0.18 }, H(ownerCookie));
+    if (!project.ok) throw new Error("setup");
+    const item = await addProjectItemAction({ projectId: project.data.id, config: cfg, qty: 1 }, H(ownerCookie));
+    if (!item.ok) throw new Error("setup");
+    const barrier = await ownerPool.connect();
+    let pending: ReturnType<typeof createInvoiceFromProjectAction> | undefined;
+    try {
+      await barrier.query("begin");
+      const pid = (await barrier.query("select pg_backend_pid() pid")).rows[0].pid as number;
+      await barrier.query("select id from projects where id=$1 for update", [project.data.id]);
+      await barrier.query("update project_items set unit_price=123.45 where id=$1", [item.data.id]);
+      pending = createInvoiceFromProjectAction({ projectId: project.data.id, issuedAt: "2026-09-14", dueAt: "2026-09-15" }, H(ownerCookie));
+      await waitForBlocked(ownerPool, pid);
+      await barrier.query("commit");
+      const result = await pending;
+      if (!result.ok) throw new Error("snapshot failed");
+      expect((await ownerPool.query("select unit_price from invoice_lines where invoice_id=$1", [result.data.id])).rows[0].unit_price).toBe("123.45");
+    } finally { await barrier.query("rollback"); barrier.release(); await pending; }
+  });
+
+  it.each([{ systemId: "deleted-system" }, { glassId: "deleted-glass" }, { productType: "Derë" }, { manualPrice: 0.001 }])(
+    "RC-19 rejects invalid explicit selection %j", async (patch) => {
+    const project = await createProjectAction({ clientId: clientA, title: "Invalid config", vatRate: 0.18 }, H(ownerCookie));
+    if (!project.ok) throw new Error("setup");
+    expect(await addProjectItemAction({ projectId: project.data.id, config: { ...cfg, ...patch }, qty: 1 }, H(ownerCookie)))
+      .toMatchObject({ ok: false, error: { code: "VALIDATION" } });
+  });
+  it.each(["2026-02-29", "2026-04-31"])("RC-19 impossible date %s returns validation", async (date) => {
+    expect(await createManualInvoiceAction({ clientId: clientA, issuedAt: date, dueAt: date, vatRate: 0.18, lines: [{ description: "Date", qty: 1, unitPrice: 1 }] }, H(ownerCookie)))
+      .toMatchObject({ ok: false, error: { code: "VALIDATION" } });
+  });
+  it("RC-19 invoice overflow returns validation instead of unpayable debt", async () => {
+    expect(await createManualInvoiceAction({ clientId: clientA, issuedAt: "2024-02-29", dueAt: "2024-02-29", vatRate: 0.18, lines: [{ description: "Overflow", qty: 99999, unitPrice: 1_000_000 }] }, H(ownerCookie)))
+      .toMatchObject({ ok: false, error: { code: "VALIDATION" } });
+  });
+});
+
+
+it("RC-18 real authorized action failures redact ORM/customer/credential markers", async () => {
+  const sink = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const action = createAction({
+      operation: "regression.synthetic-failure", input: z.object({}),
+      handler: async () => { throw { message: "PRIVATE_CUSTOMER password TOKEN COOKIE postgres://SECRET", params: ["PRIVATE_NOTE"], cause: { code: "23514", detail: "PRIVATE_MESSAGE" } }; },
+    });
+    expect(await action({}, H(ownerCookie))).toMatchObject({ ok: false, error: { code: "INTERNAL" } });
+    expect(sink).toHaveBeenCalledWith({ event: "server_failure", operation: "regression.synthetic-failure", code: "23514" });
+    expect(JSON.stringify(sink.mock.calls)).not.toMatch(/PRIVATE_|SECRET|TOKEN|COOKIE|postgres:/);
+  } finally { sink.mockRestore(); }
+});
+
+
+it("RC-18 provider logging never emits raw messages or database arguments", () => {
+  const sink = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    auth.options.logger!.log!("error", "PRIVATE_CUSTOMER", { params: ["PRIVATE_PASSWORD"], cause: { code: "23505", message: "PRIVATE_COOKIE" } });
+    expect(sink).toHaveBeenCalledWith({ event: "server_failure", operation: "auth.provider.error", code: "23505" });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain("PRIVATE_");
+  } finally { sink.mockRestore(); }
 });

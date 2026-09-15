@@ -211,7 +211,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ invoic
         </div>
 
         <div className="mt-6 border-t border-slate-200 pt-4 text-xs text-slate-400">
-          Pagesa: 50% paradhënie në konfirmim, 50% para montimit. · {company.bank} · IBAN {company.iban}
+          {company.bank} · IBAN {company.iban}
         </div>
       </Card>
 

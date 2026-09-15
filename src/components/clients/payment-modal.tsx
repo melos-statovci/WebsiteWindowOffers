@@ -82,8 +82,9 @@ export function PaymentModal({
     >
       <div className="space-y-4">
         <div>
-          <Label>Shuma (€) *</Label>
+          <Label htmlFor="payment-amount">Shuma (€) *</Label>
           <Input
+            id="payment-amount" aria-describedby={error ? "payment-error" : undefined}
             className="mt-1.5"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
@@ -91,14 +92,14 @@ export function PaymentModal({
             inputMode="decimal"
             aria-invalid={!!error}
           />
-          {error && <p className="mt-1 text-xs text-rose-400">{error}</p>}
+          {error && <p id="payment-error" role="alert" className="mt-1 text-xs text-rose-400">{error}</p>}
         </div>
         <Field label="Data">
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
         <div>
-          <Label>Mënyra e pagesës</Label>
-          <select
+          <Label htmlFor="payment-method">Mënyra e pagesës</Label>
+          <select id="payment-method"
             value={method}
             onChange={(e) => setMethod(e.target.value)}
             className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-neutral-500"

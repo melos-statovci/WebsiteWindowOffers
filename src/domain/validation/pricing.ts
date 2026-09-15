@@ -15,7 +15,7 @@ import type { PricingCatalog } from "@/domain/pricing/types";
 
 // A price/measurement: a finite, non-negative number. Rejects NaN/Infinity and
 // negatives; 0 is allowed (a legitimately free line).
-const money = z.number().finite("Vlerë numerike e pavlefshme.").min(0, "Nuk lejohen vlera negative.");
+const money = z.number().finite("Vlerë numerike e pavlefshme.").min(0, "Nuk lejohen vlera negative.").max(1_000_000, "Vlera është tepër e madhe.");
 
 // Free-text identifiers/labels. Non-empty where the product requires a label;
 // generously capped to reject abusive payloads without constraining real data.
@@ -85,7 +85,10 @@ const paramMap = z.record(z.string().min(1).max(120), z.string().max(120));
 
 // Collection sizes are generously capped: enough for any real catalog, low
 // enough that a hostile payload can't balloon a single JSONB row.
-const list = <T extends z.ZodTypeAny>(item: T) => z.array(item).max(500);
+const list = <T extends z.ZodTypeAny>(item: T) => z.array(item).max(500).refine((rows) => {
+  const ids = rows.map((row) => (row as { id: string }).id);
+  return new Set(ids).size === ids.length;
+}, "ID-të e katalogut duhet të jenë unike.");
 
 export const pricingCatalogSchema: z.ZodType<PricingCatalog> = z.object({
   systems: list(pricingSystem),
@@ -97,7 +100,13 @@ export const pricingCatalogSchema: z.ZodType<PricingCatalog> = z.object({
   expansions: list(expansionRow),
   roletaVersions: list(roletaVersion),
   doorModels: list(doorModel),
-  accessoryParams: paramMap,
+  accessoryParams: paramMap.refine((params) =>
+    ["Llajsne bardhë (€/m)", "Llajsne color (€/m)"].every((key) => {
+      const value = params[key];
+      if (value === undefined || value.trim() === "") return true;
+      const number = Number(value.replace(",", "."));
+      return Number.isFinite(number) && number >= 0 && number <= 1_000_000;
+    }), "Çmimi i llajsnës është i pavlefshëm."),
   productionParams: paramMap,
 });
 

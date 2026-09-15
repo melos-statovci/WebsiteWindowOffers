@@ -76,10 +76,10 @@ export function RequestDemoForm({ locale }: { locale: PublicLocale }) {
           formStartedAt: startedAt,
         });
         if (!res.ok) {
-          setError(res.error.message || copy.generic);
+          setError(locale === "en" ? copy.generic : res.error.message || copy.generic);
           return;
         }
-        setSuccess(res.data.duplicate ? copy.duplicate : copy.success);
+        setSuccess(copy.success);
         setForm((current) => ({ ...current, message: "", website: "" }));
       } catch {
         setError(copy.generic);
@@ -114,8 +114,8 @@ export function RequestDemoForm({ locale }: { locale: PublicLocale }) {
           maxLength={1000}
         />
       </label>
-      {error ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600">{error}</p> : null}
-      {success ? <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-600">{success}</p> : null}
+      {error ? <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600">{error}</p> : null}
+      {success ? <p role="status" aria-live="polite" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-600">{success}</p> : null}
       <button
         type="submit"
         disabled={isPending}

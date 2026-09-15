@@ -1,6 +1,6 @@
 // Local "PDF" generation via the browser's print dialog (print-to-PDF).
 // Opens a self-contained, styled document in a new window and triggers print.
-// Uses local mock data only — never contacts any server.
+// Stored customer content is escaped at the print-document boundary.
 
 import type { Project, Invoice, CompanyProfile } from "@/domain/types";
 import { projectNet, invoiceNet, invoiceTotal } from "@/domain/finance/selectors";
@@ -8,10 +8,19 @@ import { projectNet, invoiceNet, invoiceTotal } from "@/domain/finance/selectors
 const money = (n: number) =>
   n.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
 
+export function escapePrintText(value: unknown): string {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]!);
+}
+
 function openPrint(title: string, bodyHtml: string) {
   const w = window.open("", "_blank", "width=820,height=1000");
   if (!w) return false;
-  w.document.write(`<!doctype html><html lang="sq"><head><meta charset="utf-8"><title>${title}</title>
+  // Disconnect the new same-origin document before writing any stored content.
+  w.opener = null;
+  w.onload = () => { w.setTimeout(() => w.print(), 250); };
+  w.document.write(`<!doctype html><html lang="sq"><head><meta charset="utf-8"><title>${escapePrintText(title)}</title>
   <style>
     *{box-sizing:border-box;font-family:'IBM Plex Sans',system-ui,sans-serif}
     body{margin:0;padding:40px;color:#0f172a;background:#fff;font-size:13px}
@@ -29,7 +38,6 @@ function openPrint(title: string, bodyHtml: string) {
     .terms{margin-top:28px;font-size:11px;color:#475569;border-top:1px solid #e2e8f0;padding-top:12px}
     @media print{body{padding:0}}
   </style></head><body>${bodyHtml}
-  <script>window.onload=function(){setTimeout(function(){window.print()},250)}</script>
   </body></html>`);
   w.document.close();
   return true;
@@ -41,29 +49,29 @@ export function printOffer(project: Project, company: CompanyProfile): boolean {
   const rows = project.items
     .map(
       (it, i) => `<tr>
-    <td>${String(i + 1).padStart(2, "0")}</td>
-    <td>${it.label}<div class="muted">${it.widthMm} × ${it.heightMm} mm</div></td>
-    <td class="num">${it.qty}</td>
-    <td class="num">${money(it.unitPrice)}</td>
-    <td class="num">${money(it.qty * it.unitPrice)}</td>
+    <td>${escapePrintText(String(i + 1).padStart(2, "0"))}</td>
+    <td>${escapePrintText(it.label)}<div class="muted">${escapePrintText(it.widthMm)} × ${escapePrintText(it.heightMm)} mm</div></td>
+    <td class="num">${escapePrintText(it.qty)}</td>
+    <td class="num">${escapePrintText(money(it.unitPrice))}</td>
+    <td class="num">${escapePrintText(money(it.qty * it.unitPrice))}</td>
   </tr>`,
     )
     .join("");
   const body = `
   <div class="head">
-    <div><h1>OFERTË</h1><div class="muted">${project.number}</div></div>
-    <div class="right"><strong>${company.name}</strong><div class="muted">${company.address}</div><div class="muted">${company.phone}</div><div class="muted">NUI ${company.nui}</div></div>
+    <div><h1>OFERTË</h1><div class="muted">${escapePrintText(project.number)}</div></div>
+    <div class="right"><strong>${escapePrintText(company.name)}</strong><div class="muted">${escapePrintText(company.address)}</div><div class="muted">${escapePrintText(company.phone)}</div><div class="muted">NUI ${escapePrintText(company.nui)}</div></div>
   </div>
-  <div><strong>Për klientin:</strong> ${project.clientName}</div>
-  <div class="muted">${project.profileSystem} · ${project.profileColor}</div>
+  <div><strong>Për klientin:</strong> ${escapePrintText(project.clientName)}</div>
+  <div class="muted">${escapePrintText(project.profileSystem)} · ${escapePrintText(project.profileColor)}</div>
   <table><thead><tr><th>#</th><th>Përshkrimi</th><th class="num">Sasia</th><th class="num">Çmimi</th><th class="num">Totali</th></tr></thead>
   <tbody>${rows || '<tr><td colspan="5" class="muted">Asnjë pozicion.</td></tr>'}</tbody></table>
   <div class="totals">
-    <div class="row"><span class="muted">Nëntotali</span><span>${money(net)}</span></div>
-    <div class="row"><span class="muted">TVSH (${Math.round(project.vatRate * 100)}%)</span><span>+${money(vat)}</span></div>
-    <div class="grand"><div class="row" style="padding:0"><span>TOTALI</span><span>${money(net + vat)}</span></div></div>
+    <div class="row"><span class="muted">Nëntotali</span><span>${escapePrintText(money(net))}</span></div>
+    <div class="row"><span class="muted">TVSH (${escapePrintText(Math.round(project.vatRate * 100))}%)</span><span>+${escapePrintText(money(vat))}</span></div>
+    <div class="grand"><div class="row" style="padding:0"><span>TOTALI</span><span>${escapePrintText(money(net + vat))}</span></div></div>
   </div>
-  <div class="terms">Çmimet janë në Euro (€). Matjet finale verifikohen para prodhimit. Garancia: 5 vjet për profilet, 2 vjet për mekanizmat.<br/>Pagesa: 50% paradhënie në konfirmim, 50% para montimit. · ${company.bank} · IBAN ${company.iban}</div>`;
+  <div class="terms">${escapePrintText(company.bank)} · IBAN ${escapePrintText(company.iban)}</div>`;
   return openPrint(`Oferta ${project.number}`, body);
 }
 
@@ -83,23 +91,23 @@ export function printInvoice(inv: Invoice, company: CompanyProfile): boolean {
   };
   const rows = inv.lines
     .map(
-      (l) => `<tr><td>${l.description}</td><td class="num">${l.qty}</td><td class="num">${money(l.unitPrice)}</td><td class="num">${money(l.qty * l.unitPrice)}</td></tr>`,
+      (l) => `<tr><td>${escapePrintText(l.description)}</td><td class="num">${escapePrintText(l.qty)}</td><td class="num">${escapePrintText(money(l.unitPrice))}</td><td class="num">${escapePrintText(money(l.qty * l.unitPrice))}</td></tr>`,
     )
     .join("");
   const body = `
   <div class="head">
-    <div><h1>FATURË</h1><div class="muted">${inv.number}</div><div class="muted">Ref: ${inv.reference ?? "—"}</div></div>
-    <div class="right"><strong>${issuer.name}</strong><div class="muted">${issuer.address}</div><div class="muted">NUI ${issuer.nui}</div></div>
+    <div><h1>FATURË</h1><div class="muted">${escapePrintText(inv.number)}</div><div class="muted">Ref: ${escapePrintText(inv.reference ?? "—")}</div></div>
+    <div class="right"><strong>${escapePrintText(issuer.name)}</strong><div class="muted">${escapePrintText(issuer.address)}</div><div class="muted">NUI ${escapePrintText(issuer.nui)}</div></div>
   </div>
-  <div><strong>Klienti:</strong> ${inv.clientName}</div>
-  <div class="muted">Lëshuar: ${inv.issuedAt} · Afati: ${inv.dueAt}</div>
+  <div><strong>Klienti:</strong> ${escapePrintText(inv.clientName)}</div>
+  <div class="muted">Lëshuar: ${escapePrintText(inv.issuedAt)} · Afati: ${escapePrintText(inv.dueAt)}</div>
   <table><thead><tr><th>Përshkrimi</th><th class="num">Sasia</th><th class="num">Çmimi</th><th class="num">Totali</th></tr></thead>
   <tbody>${rows}</tbody></table>
   <div class="totals">
-    <div class="row"><span class="muted">Nëntotali</span><span>${money(net)}</span></div>
-    <div class="row"><span class="muted">TVSH (${Math.round(inv.vatRate * 100)}%)</span><span>+${money(vat)}</span></div>
-    <div class="grand"><div class="row" style="padding:0"><span>TOTALI</span><span>${money(invoiceTotal(inv))}</span></div></div>
+    <div class="row"><span class="muted">Nëntotali</span><span>${escapePrintText(money(net))}</span></div>
+    <div class="row"><span class="muted">TVSH (${escapePrintText(Math.round(inv.vatRate * 100))}%)</span><span>+${escapePrintText(money(vat))}</span></div>
+    <div class="grand"><div class="row" style="padding:0"><span>TOTALI</span><span>${escapePrintText(money(invoiceTotal(inv)))}</span></div></div>
   </div>
-  <div class="terms">Pagesa: 50% paradhënie në konfirmim, 50% para montimit. · ${issuer.bank} · IBAN ${issuer.iban}</div>`;
+  <div class="terms">${escapePrintText(issuer.bank)} · IBAN ${escapePrintText(issuer.iban)}</div>`;
   return openPrint(`Fatura ${inv.number}`, body);
 }

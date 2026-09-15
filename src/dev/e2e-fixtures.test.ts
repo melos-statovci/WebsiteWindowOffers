@@ -24,6 +24,17 @@ function env(overrides: Record<string, string | undefined> = {}): NodeJS.Process
 }
 
 describe("DEV E2E fixture guard", () => {
+  it("accepts direct/pooled variants of the same endpoint", () => {
+    expect(() => readE2eFixtureConfig(env({ DATABASE_URL: runtimeUrl.replace("ep-dev-fixture.", "ep-dev-fixture-pooler.") }))).not.toThrow();
+  });
+  it("rejects another Neon branch with the same database name", () => {
+    expect(() => readE2eFixtureConfig(env({ DATABASE_URL: runtimeUrl.replace("ep-dev-fixture.", "ep-other-pooler.") }))).toThrow(/endpoint mismatch/);
+  });
+  it("refuses an owner or unexpected runtime role", () => {
+    for (const url of [ownerUrl, runtimeUrl.replace("kornizo_app", "another_role")]) {
+      expect(() => readE2eFixtureConfig(env({ DATABASE_URL: url }))).toThrow(/restricted/);
+    }
+  });
   it("requires the explicit fixture allow flag", () => {
     expect(() => readE2eFixtureConfig(env({ KORNIZO_E2E_ALLOW_DEV_FIXTURES: undefined }))).toThrow(
       /ALLOW_DEV_FIXTURES/,

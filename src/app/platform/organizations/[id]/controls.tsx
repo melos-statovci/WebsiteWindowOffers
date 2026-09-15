@@ -21,7 +21,7 @@ const fieldCls =
   "h-9 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 focus:border-violet-500 focus:outline-none";
 
 function Err({ msg }: { msg: string | null }) {
-  return msg ? <p className="mt-2 text-xs text-rose-400">{msg}</p> : null;
+  return msg ? <p role="alert" className="mt-2 text-xs text-rose-400">{msg}</p> : null;
 }
 
 export function LifecycleControl({
@@ -138,6 +138,7 @@ export function StatusControl({
       </p>
       {suspend && (
         <input
+          aria-label="Arsyeja e pezullimit"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Arsyeja (opsionale, shfaqet te tenanti)"
@@ -169,6 +170,7 @@ export function InternalNoteControl({ organizationId, note }: { organizationId: 
   return (
     <div>
       <textarea
+        aria-label="Shënim i brendshëm"
         value={value}
         onChange={(e) => { setValue(e.target.value); setSaved(false); }}
         rows={3}
@@ -192,7 +194,7 @@ export function InternalNoteControl({ organizationId, note }: { organizationId: 
         >
           {pending ? "Duke ruajtur…" : "Ruaj shënimin"}
         </Button>
-        {saved && !dirty && <span className="text-xs text-emerald-500">U ruajt.</span>}
+        {saved && !dirty && <span role="status" className="text-xs text-emerald-500">U ruajt.</span>}
       </div>
       <Err msg={err} />
     </div>

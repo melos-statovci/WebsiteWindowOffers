@@ -1,3 +1,4 @@
+import { logServerFailure } from "@/server/safe-log";
 // The reusable authorized server-action spine. Every future business mutation
 // composes through createAction:
 //
@@ -26,6 +27,7 @@ export type ActionErrorCode =
   | "NOT_FOUND"
   | "CONFLICT"
   | "RULE_VIOLATION"
+  | "ACCOUNT_NOT_READY"
   | "INTERNAL";
 
 export interface ActionError {
@@ -67,6 +69,8 @@ function fieldErrorsFrom(error: { issues: { path: PropertyKey[]; message: string
 }
 
 interface ActionConfig<I, O> {
+  /** Static operation identifier; never derived from request data. */
+  operation?: string;
   /** Shared Zod schema — re-run authoritatively here regardless of client checks. */
   input: ZodType<I>;
   /** Canonical permission required (omit for authenticated-only actions). */
@@ -110,8 +114,8 @@ export function createAction<I, O>(config: ActionConfig<I, O>) {
       if (e instanceof ActionFailure) {
         return { ok: false, error: { code: e.code, message: e.message, fieldErrors: e.fieldErrors } };
       }
-      // Unexpected: log the real error server-side ONLY; return a generic result.
-      console.error("[action] internal error:", e);
+      // Unexpected: log only the safe code and static operation; return a generic result.
+      logServerFailure(config.operation ?? "tenant.action", e);
       return { ok: false, error: { code: "INTERNAL", message: SAFE_MESSAGES.INTERNAL } };
     }
 

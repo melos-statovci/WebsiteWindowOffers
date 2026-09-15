@@ -25,6 +25,7 @@ import {
 } from "@/domain/validation/invoice";
 import { createAction, fail } from "@/server/action";
 import { can } from "@/server/authz";
+import { validCommercialTotal } from "@/domain/validation/commercial";
 import type { TenantTx } from "@/db/tenant";
 import type { InvoiceClientSnapshot, InvoiceCompanySnapshot } from "@/domain/types";
 
@@ -145,6 +146,10 @@ async function insertInvoice(
     lines: LineSnapshot[];
   },
 ): Promise<string> {
+  const net = values.lines.reduce((sum, line) => sum + Number(line.unitPrice) * line.qty, 0);
+  if (!validCommercialTotal(net * (1 + values.vatRate))) {
+    throw fail("VALIDATION", "Totali i faturës është jashtë kufirit monetar.");
+  }
   const number = await nextInvoiceNumber(tx, values.orgId);
   let invId: string;
   try {
@@ -195,6 +200,7 @@ async function insertInvoice(
 // Create — from an existing project/offer (server-authoritative money)
 // ---------------------------------------------------------------------------
 export const createInvoiceFromProjectAction = createAction({
+  operation: "createInvoiceFromProjectAction",
   input: invoiceFromProjectSchema,
   permission: { invoice: ["create"] },
   revalidate: ["/invoices", "/dashboard"],
@@ -210,7 +216,7 @@ export const createInvoiceFromProjectAction = createAction({
       })
       .from(projects)
       .where(and(eq(projects.id, input.projectId), eq(projects.organizationId, orgId)))
-      .limit(1);
+      .limit(1).for("update");
     if (projRows.length === 0) throw fail("NOT_FOUND", "Projekti nuk u gjet.");
     const project = projRows[0];
 
@@ -254,6 +260,7 @@ export const createInvoiceFromProjectAction = createAction({
 // Create — manual/ad-hoc (user-entered lines, server-validated totals)
 // ---------------------------------------------------------------------------
 export const createManualInvoiceAction = createAction({
+  operation: "createManualInvoiceAction",
   input: invoiceManualSchema,
   permission: { invoice: ["create"] },
   revalidate: ["/invoices", "/dashboard"],
@@ -289,6 +296,7 @@ export const createManualInvoiceAction = createAction({
 // Status / delete
 // ---------------------------------------------------------------------------
 export const setInvoiceStatusAction = createAction({
+  operation: "setInvoiceStatusAction",
   input: invoiceStatusSchema,
   permission: { invoice: ["update"] },
   revalidate: ["/invoices", "/dashboard"],
@@ -316,6 +324,7 @@ export const setInvoiceStatusAction = createAction({
 // remains a defensive fallback, never the intended path. Server-enforced — hiding
 // the UI button is not sufficient.
 export const deleteInvoiceAction = createAction({
+  operation: "deleteInvoiceAction",
   input: invoiceDeleteSchema,
   permission: { invoice: ["delete"] },
   revalidate: ["/invoices", "/dashboard"],

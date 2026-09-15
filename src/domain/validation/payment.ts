@@ -8,13 +8,10 @@
 // guards the shape.
 
 import { z } from "zod";
+import { isoDate, monetaryValue } from "./scalars";
 
-const isoDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Datë e pavlefshme.")
-  .refine((s) => !Number.isNaN(Date.parse(s)), "Datë e pavlefshme.");
 
-const amount = z.number().finite().positive("Shuma duhet të jetë më e madhe se zero.").max(1_000_000);
+const amount = monetaryValue.refine((n) => n >= 0.01, "Shuma minimale është 0.01.");
 const method = z.string().trim().min(1, "Zgjidhni një metodë.").max(64);
 const note = z.string().trim().max(300).optional();
 

@@ -50,3 +50,7 @@ next-env.d.ts
 temp/
 .graphifyignore
 graphify-out/
+
+# Browser regression artifacts
+playwright-report/
+test-results/

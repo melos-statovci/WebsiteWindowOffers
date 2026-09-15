@@ -24,7 +24,7 @@ export function SignInForm() {
         setError("Email ose fjalëkalim i pasaktë.");
         return;
       }
-      router.replace("/dashboard");
+      router.replace("/sign-in");
       router.refresh();
     } catch {
       setError("Diçka shkoi keq. Provoni përsëri.");
@@ -48,12 +48,12 @@ export function SignInForm() {
     >
       <form onSubmit={submit} className="space-y-4">
         <Field label="Email">
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required placeholder="ju@kompania.com" />
+          <Input aria-invalid={!!error} aria-describedby={error ? "signin-error" : undefined} type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required placeholder="ju@kompania.com" />
         </Field>
         <div>
-          <Label>Fjalëkalimi</Label>
-          <Input className="mt-1.5" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required aria-invalid={!!error} />
-          {error && <p className="mt-1 text-xs text-rose-400">{error}</p>}
+          <Label htmlFor="signin-password">Fjalëkalimi</Label>
+          <Input id="signin-password" aria-describedby={error ? "signin-error" : undefined} className="mt-1.5" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required aria-invalid={!!error} />
+          {error && <p id="signin-error" role="alert" className="mt-1 text-xs text-rose-400">{error}</p>}
         </div>
         <Button type="submit" className="w-full" disabled={loading || !email || !password}>
           {loading ? "Duke u kyçur…" : "Kyçu"}

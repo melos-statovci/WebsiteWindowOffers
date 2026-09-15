@@ -43,7 +43,7 @@ function iso(d: Date | null): string | null {
 
 /** Load the org name + current account state inside a tx; throws NOT_FOUND if the org is unknown. */
 async function loadTarget(tx: TenantTx, orgId: string) {
-  const org = await tx.execute(sql`select name from organization where id = ${orgId} limit 1`);
+  const org = await tx.execute(sql`select name from organization where id = ${orgId} limit 1 for update`);
   const orgRow = org.rows[0] as { name?: string } | undefined;
   if (!orgRow) throw fail("NOT_FOUND", "Organizata nuk u gjet.");
   const acc = await tx.execute(
@@ -61,7 +61,7 @@ async function loadTarget(tx: TenantTx, orgId: string) {
         now() as server_now
       from organization_accounts
       where organization_id = ${orgId}
-      limit 1
+      limit 1 for update
     `,
   );
   const accRow = acc.rows[0] as
@@ -78,6 +78,7 @@ async function loadTarget(tx: TenantTx, orgId: string) {
         server_now?: string | Date;
       }
     | undefined;
+  if (!accRow) throw fail("ACCOUNT_NOT_READY", "Llogaria nuk është gati. Kërkohet rikuperim i provizionimit.");
   const now = asDate(accRow?.server_now) ?? new Date();
   const commercialAccess: CommercialAccess = accRow?.commercial_access === "trial" ? "trial" : "active";
   const trialStartedAt = asDate(accRow?.trial_started_at);
@@ -101,6 +102,7 @@ async function loadTarget(tx: TenantTx, orgId: string) {
 
 /** Keep plan extensibility server-side, but launch accepts only Standard. */
 export const setPlanAction = createPlatformAction({
+  operation: "setPlanAction",
   input: setPlanSchema,
   handler: async ({ input, ctx, db }) => {
     return db.transaction(async (tx) => {
@@ -126,6 +128,7 @@ export const setPlanAction = createPlatformAction({
 
 /** Convert a trial/expired-trial organization to an active manual customer. */
 export const activateCustomerAction = createPlatformAction({
+  operation: "activateCustomerAction",
   input: activateCustomerSchema,
   handler: async ({ input, ctx, db }) => {
     return db.transaction(async (tx) => {
@@ -161,6 +164,7 @@ export const activateCustomerAction = createPlatformAction({
 
 /** Extend a trial from its current end date, or from server-now when expired. */
 export const extendTrialAction = createPlatformAction({
+  operation: "extendTrialAction",
   input: extendTrialSchema,
   handler: async ({ input, ctx, db }) => {
     return db.transaction(async (tx) => {
@@ -214,6 +218,7 @@ export const extendTrialAction = createPlatformAction({
 
 /** Suspend or reactivate an organization. Suspension stamps time+reason; reactivation clears them. Audited. */
 export const setStatusAction = createPlatformAction({
+  operation: "setStatusAction",
   input: setStatusSchema,
   handler: async ({ input, ctx, db }) => {
     return db.transaction(async (tx) => {
@@ -256,6 +261,7 @@ export const setStatusAction = createPlatformAction({
 
 /** Maintain a private control-plane note (invisible to tenant members). Audited (metadata records only whether set/cleared, never the note text). */
 export const setInternalNoteAction = createPlatformAction({
+  operation: "setInternalNoteAction",
   input: setInternalNoteSchema,
   handler: async ({ input, ctx, db }) => {
     return db.transaction(async (tx) => {

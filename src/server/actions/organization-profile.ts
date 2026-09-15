@@ -14,6 +14,7 @@ import { createAction, fail } from "@/server/action";
 type ProfileInsert = typeof organizationProfiles.$inferInsert;
 
 export const updateOrganizationProfileAction = createAction({
+  operation: "updateOrganizationProfileAction",
   input: organizationProfileUpdateSchema,
   permission: { settings: ["edit"] },
   revalidate: ["/settings"],

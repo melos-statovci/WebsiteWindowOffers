@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { authClient } from "@/auth/client";
 import { submitTrialApplication } from "@/server/acquisition.action";
+import { trialApplicationSubmitSchema } from "@/domain/validation/acquisition";
 import type { PublicLocale } from "@/lib/public-routing";
-import type { TrialApplicationRow } from "@/server/acquisition";
+import type { ApplicantTrialApplication } from "@/server/acquisition";
 
 const text = {
   sq: {
@@ -41,6 +42,7 @@ const text = {
     passwordMin: "Fjalëkalimi duhet të ketë të paktën 8 karaktere.",
     passwordMismatch: "Fjalëkalimet nuk përputhen.",
     signupFailed: "Regjistrimi nuk u krye. Nëse keni llogari, kyçuni dhe provoni përsëri.",
+    validation: "Kontrolloni të dhënat e kompanisë dhe provoni përsëri.",
     generic: "Kërkesa nuk u dërgua. Provoni përsëri.",
     success: "Kërkesa u pranua.",
   },
@@ -75,6 +77,7 @@ const text = {
     passwordMin: "Password must be at least 8 characters.",
     passwordMismatch: "Passwords do not match.",
     signupFailed: "Sign-up did not finish. If you already have an account, sign in and try again.",
+    validation: "Check the company details and try again.",
     generic: "The request was not submitted. Try again.",
     success: "Request accepted.",
   },
@@ -95,13 +98,14 @@ export function RequestTrialForm({
 }: {
   locale: PublicLocale;
   signedInUser: { name: string; email: string } | null;
-  application: TrialApplicationRow | null;
+  application: ApplicantTrialApplication | null;
   hasTenantAccess: boolean;
 }) {
   const copy = text[locale];
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [startedAt] = useState(() => Date.now());
+  const [readyUser, setReadyUser] = useState(signedInUser);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [account, setAccount] = useState({ name: "", email: "", password: "", confirm: "" });
@@ -117,7 +121,7 @@ export function RequestTrialForm({
 
   const statusHref = locale === "en" ? "/en/application-status" : "/application-status";
   const disabled = isPending || Boolean(application) || hasTenantAccess;
-  const userLabel = useMemo(() => signedInUser ? `${signedInUser.name} · ${signedInUser.email}` : "", [signedInUser]);
+  const userLabel = useMemo(() => readyUser ? `${readyUser.name} · ${readyUser.email}` : "", [readyUser]);
 
   if (hasTenantAccess) {
     return (
@@ -143,7 +147,7 @@ export function RequestTrialForm({
     e.preventDefault();
     setError("");
     setSuccess("");
-    if (!signedInUser) {
+    if (!readyUser) {
       if (account.password.length < 8) {
         setError(copy.passwordMin);
         return;
@@ -154,25 +158,7 @@ export function RequestTrialForm({
       }
     }
 
-    startTransition(async () => {
-      // The whole submission is wrapped: a server action can REJECT rather than
-      // return a typed error (browser offline, the action transport failing, the
-      // server restarting mid-submit). Without this the promise rejected inside
-      // the transition and the applicant saw nothing at all happen — the worst
-      // possible outcome on the form that starts the entire funnel.
-      try {
-        if (!signedInUser) {
-          const signUp = await authClient.signUp.email({
-            name: account.name.trim(),
-            email: account.email.trim(),
-            password: account.password,
-          });
-          if (signUp.error) {
-            setError(copy.signupFailed);
-            return;
-          }
-        }
-        const res = await submitTrialApplication({
+    const applicationInput = {
           companyName: company.companyName,
           phone: company.phone,
           country: company.country,
@@ -181,9 +167,33 @@ export function RequestTrialForm({
           message: company.message || undefined,
           website: company.website,
           formStartedAt: startedAt,
-        });
+    };
+    const parsed = trialApplicationSubmitSchema.safeParse(applicationInput);
+    if (!parsed.success) { setError(copy.validation); return; }
+
+    startTransition(async () => {
+      // The whole submission is wrapped: a server action can REJECT rather than
+      // return a typed error (browser offline, the action transport failing, the
+      // server restarting mid-submit). Without this the promise rejected inside
+      // the transition and the applicant saw nothing at all happen — the worst
+      // possible outcome on the form that starts the entire funnel.
+      try {
+        if (!readyUser) {
+          // A previous signup may have committed despite a lost response.
+          const current = await authClient.getSession();
+          if (current.data?.user) {
+            setReadyUser(current.data.user);
+          } else {
+            const signUp = await authClient.signUp.email({
+              name: account.name.trim(), email: account.email.trim(), password: account.password,
+            });
+            if (signUp.error) { setError(copy.signupFailed); return; }
+            setReadyUser(signUp.data.user);
+          }
+        }
+        const res = await submitTrialApplication(parsed.data);
         if (!res.ok) {
-          setError(res.error.message || copy.generic);
+          setError(locale === "en" ? (res.error.code === "VALIDATION" ? copy.validation : copy.generic) : res.error.message || copy.generic);
           return;
         }
         if (res.data.ignored) {
@@ -211,7 +221,7 @@ export function RequestTrialForm({
         aria-hidden="true"
         name="website"
       />
-      {!signedInUser ? (
+      {!readyUser ? (
         <fieldset className="grid min-w-0 gap-4">
           <legend className="font-heading text-base font-bold text-slate-950">{copy.account}</legend>
           <TextInput label={copy.name} value={account.name} onChange={(v) => setAccount((s) => ({ ...s, name: v }))} autoComplete="name" required />
@@ -257,8 +267,8 @@ export function RequestTrialForm({
           />
         </label>
       </fieldset>
-      {error ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600">{error}</p> : null}
-      {success ? <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-600">{success}</p> : null}
+      {error ? <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600">{error}</p> : null}
+      {success ? <p role="status" aria-live="polite" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-600">{success}</p> : null}
       <button
         type="submit"
         disabled={disabled}

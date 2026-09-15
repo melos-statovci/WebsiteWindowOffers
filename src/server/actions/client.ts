@@ -24,6 +24,7 @@ import { createAction, fail } from "@/server/action";
 const clientDeleteSchema = z.object({ id: z.string().uuid("ID e pavlefshme.") });
 
 export const createClientAction = createAction({
+  operation: "createClientAction",
   input: clientCreateSchema,
   permission: { client: ["write"] },
   revalidate: ["/clients"],
@@ -49,6 +50,7 @@ export const createClientAction = createAction({
 });
 
 export const updateClientAction = createAction({
+  operation: "updateClientAction",
   input: clientUpdateSchema,
   permission: { client: ["write"] },
   revalidate: ["/clients"],
@@ -79,6 +81,7 @@ export const updateClientAction = createAction({
 });
 
 export const deleteClientAction = createAction({
+  operation: "deleteClientAction",
   input: clientDeleteSchema,
   permission: { client: ["delete"] },
   revalidate: ["/clients"],

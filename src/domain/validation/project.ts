@@ -13,6 +13,7 @@
 // through the shared calculator server-side.
 
 import { z } from "zod";
+import { monetaryValue } from "./scalars";
 
 const PRODUCT_TYPES = ["Dritare", "Derë Hyrje", "Derë", "Rreshqitëse", "Roletë"] as const;
 const MODEL_TYPES = [
@@ -44,7 +45,7 @@ export const windowConfigSchema = z.object({
   heightMm: z.number().int().min(DIM_MIN).max(DIM_MAX),
   systemId: z.string().min(1).max(64),
   color: z.enum(PROFILE_COLORS),
-  mechanismId: z.string().min(1).max(64),
+  mechanismId: z.string().refine((value) => ["Roto NX", "Roto Patio", "Vorne Kip"].includes(value), "Mekanizëm i pavlefshëm."),
   glassId: z.string().min(1).max(64),
   glassDesc: z.string().max(200).optional(),
   roleta: z.boolean(),
@@ -55,9 +56,9 @@ export const windowConfigSchema = z.object({
   // JSON object keys are strings (pane index). The calculator reads
   // openings?.[i] which coerces the numeric index to the string key.
   openings: z.record(z.string(), z.enum(OPENING_TYPES)),
-  doorModel: z.string().max(64).optional(),
-  sashComposition: z.string().max(64).optional(),
-  manualPrice: z.number().finite().min(0).max(1_000_000).optional(),
+  doorModel: z.string().refine((value) => ["ARIES", "CARINA", "CONNA"].includes(value), "Model dere i pavlefshëm.").optional(),
+  sashComposition: z.string().refine((value) => ["panel", "glass"].includes(value), "Përbërje e pavlefshme.").optional(),
+  manualPrice: monetaryValue.optional(),
 });
 
 export type WindowConfigInput = z.infer<typeof windowConfigSchema>;

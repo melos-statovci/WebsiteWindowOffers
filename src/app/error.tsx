@@ -4,8 +4,7 @@
 // the recovery actions must work for a logged-out visitor: "Dashboard" alone
 // was a dead end, because the proxy redirects it to /sign-in without a session.
 //
-// The real error is logged to the server console only. Nothing about it reaches
-// the page — no message, no stack, no Next.js `digest`.
+// Emit only a fixed diagnostic category; exception contents may contain private data.
 
 import { useEffect } from "react";
 import Link from "next/link";
@@ -18,7 +17,7 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    console.error({ event: "page_error", code: "UNEXPECTED" });
   }, [error]);
 
   return (

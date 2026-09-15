@@ -1,3 +1,4 @@
+import { logServerFailure } from "@/server/safe-log";
 // The PLATFORM action spine — the control-plane analogue of createAction.
 //
 // It deliberately does NOT reuse the tenant createAction: that spine resolves
@@ -47,6 +48,8 @@ function fieldErrorsFrom(error: { issues: { path: PropertyKey[]; message: string
 }
 
 interface PlatformActionConfig<I, O> {
+  /** Static operation identifier; never derived from request data. */
+  operation?: string;
   input: ZodType<I>;
   revalidate?: string[];
   handler: (args: { input: I; ctx: PlatformAdminContext; db: AppDatabase }) => Promise<O>;
@@ -76,7 +79,7 @@ export function createPlatformAction<I, O>(config: PlatformActionConfig<I, O>) {
       if (e instanceof ActionFailure) {
         return { ok: false, error: { code: e.code, message: e.message, fieldErrors: e.fieldErrors } };
       }
-      console.error("[platform-action] internal error:", e);
+      logServerFailure(config.operation ?? "platform.action", e);
       return { ok: false, error: { code: "INTERNAL", message: SAFE.INTERNAL } };
     }
 

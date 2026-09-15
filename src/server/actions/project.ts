@@ -42,6 +42,7 @@ import { parsePricingCatalog } from "@/domain/validation/pricing";
 import { ensureActivePriceList } from "@/server/pricing-init";
 import { createAction, fail } from "@/server/action";
 import { can } from "@/server/authz";
+import { catalogSelectionError, validCommercialTotal } from "@/domain/validation/commercial";
 import type { TenantTx } from "@/db/tenant";
 import type { OfferItem, ProductType, WindowConfig } from "@/domain/types";
 import type { ProjectItemCalcSnapshot } from "@/domain/configurator/calc-snapshot";
@@ -71,7 +72,7 @@ async function requireProject(tx: TenantTx, orgId: string, projectId: string): P
     .select({ status: projects.status })
     .from(projects)
     .where(and(eq(projects.id, projectId), eq(projects.organizationId, orgId)))
-    .limit(1);
+    .limit(1).for("update");
   if (rows.length === 0) throw fail("NOT_FOUND", "Projekti nuk u gjet.");
   return rows[0].status;
 }
@@ -139,7 +140,10 @@ async function priceItem(
   }
 
   const catalog = parsePricingCatalog(active.catalog);
+  const selectionError = catalogSelectionError(config, catalog);
+  if (selectionError) throw fail("VALIDATION", selectionError);
   const unit = computePrice(config, catalog);
+  if (!validCommercialTotal(unit)) throw fail("VALIDATION", "Çmimi i llogaritur është jashtë kufirit monetar.");
   const materials = computeMaterials(config);
 
   const snapshot: ProjectItemCalcSnapshot = {
@@ -165,6 +169,17 @@ async function priceItem(
   };
 }
 
+async function assertProjectTotal(tx: TenantTx, projectId: string, unit: number, qty: number, replacingId?: string, vatRate?: number) {
+  const existing = await tx.select({ id: projectItems.id, qty: projectItems.qty, unitPrice: projectItems.unitPrice })
+    .from(projectItems).where(eq(projectItems.projectId, projectId));
+  const project = await tx.select({ vatRate: projects.vatRate }).from(projects).where(eq(projects.id, projectId));
+  const net = existing.filter((row) => row.id !== replacingId)
+    .reduce((sum, row) => sum + Number(row.unitPrice) * row.qty, unit * qty);
+  if (!validCommercialTotal(net * (1 + (vatRate ?? Number(project[0].vatRate))))) {
+    throw fail("VALIDATION", "Totali i ofertës është jashtë kufirit monetar.");
+  }
+}
+
 /** Serialize per-project item ordering / numbering with a transaction lock. */
 async function nextSortOrder(tx: TenantTx, projectId: string): Promise<number> {
   const rows = await tx
@@ -178,11 +193,15 @@ async function nextSortOrder(tx: TenantTx, projectId: string): Promise<number> {
 // Projects
 // ---------------------------------------------------------------------------
 export const createProjectAction = createAction({
+  operation: "createProjectAction",
   input: projectCreateSchema,
   permission: { project: ["write"] },
   revalidate: ["/projects", "/dashboard"],
   handler: async ({ input, ctx, tx }) => {
     const orgId = ctx.organizationId;
+    if (input.status === "Pranuar" && !can(ctx.role, { project: ["accept"] })) {
+      throw fail("FORBIDDEN", "Nuk keni leje për të pranuar oferta.");
+    }
 
     // Tenant-safe, collision-free numbering: serialize per-org, then take the
     // next suffix for the current year. UNIQUE(org, number) is the hard backstop.
@@ -230,12 +249,14 @@ export const createProjectAction = createAction({
 });
 
 export const updateProjectAction = createAction({
+  operation: "updateProjectAction",
   input: projectUpdateSchema,
   permission: { project: ["write"] },
   revalidate: ["/projects", "/dashboard"],
   handler: async ({ input, ctx, tx }) => {
     // Frozen while accepted (commercial fields incl. vatRate change the value).
     assertEditable(await requireProject(tx, ctx.organizationId, input.id));
+    await assertProjectTotal(tx, input.id, 0, 0, undefined, input.vatRate);
     const rows = await tx
       .update(projects)
       .set({
@@ -253,10 +274,12 @@ export const updateProjectAction = createAction({
 });
 
 export const setProjectStatusAction = createAction({
+  operation: "setProjectStatusAction",
   input: projectStatusSchema,
   permission: { project: ["write"] },
   revalidate: ["/projects", "/dashboard"],
   handler: async ({ input, ctx, tx }) => {
+    await requireProject(tx, ctx.organizationId, input.id);
     // Accepting an offer is a distinct capability: operators may edit but not
     // accept. Other status changes only need project:write.
     if (input.status === "Pranuar" && !can(ctx.role, { project: ["accept"] })) {
@@ -273,6 +296,7 @@ export const setProjectStatusAction = createAction({
 });
 
 export const archiveProjectAction = createAction({
+  operation: "archiveProjectAction",
   input: projectArchiveSchema,
   permission: { project: ["archive"] },
   revalidate: ["/projects", "/dashboard"],
@@ -288,6 +312,7 @@ export const archiveProjectAction = createAction({
 });
 
 export const deleteProjectAction = createAction({
+  operation: "deleteProjectAction",
   input: projectDeleteSchema,
   permission: { project: ["delete"] },
   revalidate: ["/projects", "/dashboard"],
@@ -303,6 +328,7 @@ export const deleteProjectAction = createAction({
 });
 
 export const setProjectOptionAction = createAction({
+  operation: "setProjectOptionAction",
   input: projectOptionSchema,
   permission: { project: ["write"] },
   revalidate: ["/projects"],
@@ -311,7 +337,7 @@ export const setProjectOptionAction = createAction({
       .select({ options: projects.options, status: projects.status })
       .from(projects)
       .where(and(eq(projects.id, input.id), eq(projects.organizationId, ctx.organizationId)))
-      .limit(1);
+      .limit(1).for("update");
     if (rows.length === 0) throw fail("NOT_FOUND", "Projekti nuk u gjet.");
     assertEditable(rows[0].status);
     const options = { ...((rows[0].options ?? {}) as Record<string, boolean>), [input.key]: input.value };
@@ -327,6 +353,7 @@ export const setProjectOptionAction = createAction({
 // Project items
 // ---------------------------------------------------------------------------
 export const addProjectItemAction = createAction({
+  operation: "addProjectItemAction",
   input: itemAddSchema,
   permission: { project: ["write"] },
   revalidate: ["/projects", "/dashboard"],
@@ -334,6 +361,7 @@ export const addProjectItemAction = createAction({
     const orgId = ctx.organizationId;
     assertEditable(await requireProject(tx, orgId, input.projectId));
     const priced = await priceItem(tx, orgId, ctx.userId, input.config as WindowConfig, input.previewedPriceListVersion);
+    await assertProjectTotal(tx, input.projectId, Number(priced.unitPrice), input.qty);
     const sortOrder = await nextSortOrder(tx, input.projectId);
     const rows = await tx
       .insert(projectItems)
@@ -359,6 +387,7 @@ export const addProjectItemAction = createAction({
 });
 
 export const updateProjectItemAction = createAction({
+  operation: "updateProjectItemAction",
   input: itemUpdateSchema,
   permission: { project: ["write"] },
   revalidate: ["/projects", "/dashboard"],
@@ -368,6 +397,7 @@ export const updateProjectItemAction = createAction({
     // Re-quote: recompute against the CURRENT active pricing and record the new
     // version/snapshot (deliberate edit=reprice rule).
     const priced = await priceItem(tx, orgId, ctx.userId, input.config as WindowConfig, input.previewedPriceListVersion);
+    await assertProjectTotal(tx, input.projectId, Number(priced.unitPrice), input.qty, input.itemId);
     const rows = await tx
       .update(projectItems)
       .set({
@@ -398,6 +428,7 @@ export const updateProjectItemAction = createAction({
 });
 
 export const duplicateProjectItemAction = createAction({
+  operation: "duplicateProjectItemAction",
   input: itemRefSchema,
   permission: { project: ["write"] },
   revalidate: ["/projects", "/dashboard"],
@@ -420,6 +451,7 @@ export const duplicateProjectItemAction = createAction({
     // A duplicate is a NEW item created now -> priced against current active
     // pricing (never copies the source's possibly-stale money).
     const priced = await priceItem(tx, orgId, ctx.userId, config, undefined);
+    await assertProjectTotal(tx, input.projectId, Number(priced.unitPrice), src[0].qty);
     const sortOrder = await nextSortOrder(tx, input.projectId);
     const rows = await tx
       .insert(projectItems)
@@ -445,6 +477,7 @@ export const duplicateProjectItemAction = createAction({
 });
 
 export const deleteProjectItemAction = createAction({
+  operation: "deleteProjectItemAction",
   input: itemRefSchema,
   permission: { project: ["write"] },
   revalidate: ["/projects", "/dashboard"],

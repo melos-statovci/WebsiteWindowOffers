@@ -94,6 +94,15 @@ export function readE2eFixtureConfig(env: NodeJS.ProcessEnv = process.env): E2eF
     throw new Error("DATABASE_MIGRATION_URL and DATABASE_URL point at different database names.");
   }
 
+  const endpoint = (host: string) => host.toLowerCase().replace(/-pooler(?=\.)/, "");
+  if (endpoint(ownerIdentity.hostname) !== endpoint(runtimeIdentity.hostname) ||
+      (ownerIdentity.port || "5432") !== (runtimeIdentity.port || "5432")) {
+    throw new Error("Owner/runtime Neon endpoint mismatch. Refusing fixture writes.");
+  }
+  if (runtimeIdentity.username !== "kornizo_app" || ownerIdentity.username === runtimeIdentity.username) {
+    throw new Error("Fixtures require a distinct owner and restricted kornizo_app runtime role.");
+  }
+
   const platformEmail = normalizeEmail(requiredEnv(env, "KORNIZO_E2E_PLATFORM_EMAIL"));
   const tenantEmail = normalizeEmail(requiredEnv(env, "KORNIZO_E2E_TENANT_EMAIL"));
   const applicantEmail = normalizeEmail(requiredEnv(env, "KORNIZO_E2E_APPLICANT_EMAIL"));

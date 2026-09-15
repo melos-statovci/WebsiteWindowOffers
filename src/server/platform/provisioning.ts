@@ -1,3 +1,4 @@
+import { logServerFailure } from "@/server/safe-log";
 // Application-level provisioning orchestration (Milestone 4).
 //
 // Turns ONE approved trial application into ONE new Kornizo tenant. This is the
@@ -270,7 +271,7 @@ export async function provisionApprovedTrialApplication(
       slug,
     });
   } catch (e) {
-    console.error("[provisioning] organization create/adopt failed:", e);
+    logServerFailure("[provisioning] organization create/adopt failed:", e);
     return markFailed(applicationId, row.company_name, null, "ORGANIZATION_CREATE_FAILED", attempt, actor);
   }
 
@@ -289,7 +290,7 @@ export async function provisionApprovedTrialApplication(
       return markFailed(applicationId, row.company_name, null, "LINK_CONFLICT", attempt, actor);
     }
   } catch (e) {
-    console.error("[provisioning] organization linkage failed:", e);
+    logServerFailure("[provisioning] organization linkage failed:", e);
     return markFailed(applicationId, row.company_name, null, "LINK_CONFLICT", attempt, actor);
   }
 
@@ -302,7 +303,7 @@ export async function provisionApprovedTrialApplication(
       ownerUserId: row.user_id,
     });
   } catch (e) {
-    console.error("[provisioning] completion steps failed:", e);
+    logServerFailure("[provisioning] completion steps failed:", e);
     verification = await verifyOrganizationProvisioning(organization.organizationId, row.user_id).catch(() => null);
     if (!verification) {
       return markFailed(applicationId, row.company_name, organization.organizationId, "UNEXPECTED", attempt, actor);

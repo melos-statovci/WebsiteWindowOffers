@@ -8,6 +8,8 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import pg from "pg";
+import { waitForBlocked } from "@/db/testing/lock-barrier";
+import { signInDestination } from "@/auth/sign-in-destination";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { auth } from "@/auth";
 import * as schema from "@/db/schema";
@@ -512,5 +514,64 @@ describe("platform admins page data", () => {
   it("the ownerB tenant user is NOT among platform admins", async () => {
     const admins = await listPlatformAdmins();
     expect(admins.some((a) => a.userId === ownerBUserId)).toBe(false);
+  });
+});
+
+
+describe("release lifecycle regressions", () => {
+  it("RC-08 activation wins before a waiting extension without downgrade", async () => {
+    await setTrial(orgA, "now() + interval '14 days'");
+    const barrier = await ownerPool.connect();
+    let activate: ReturnType<typeof activateCustomerAction> | undefined;
+    let extend: ReturnType<typeof extendTrialAction> | undefined;
+    try {
+      await barrier.query("begin");
+      const pid = (await barrier.query("select pg_backend_pid() pid")).rows[0].pid as number;
+      await barrier.query("select organization_id from organization_accounts where organization_id=$1 for update", [orgA]);
+      activate = activateCustomerAction({ organizationId: orgA }, H(adminCookie));
+      await waitForBlocked(ownerPool, pid);
+      extend = extendTrialAction({ organizationId: orgA, days: 7 }, H(adminCookie));
+      await waitForBlocked(ownerPool, pid, 2);
+      await barrier.query("commit");
+      expect(await activate).toMatchObject({ ok: true });
+      expect(await extend).toMatchObject({ ok: false, error: { code: "RULE_VIOLATION" } });
+      expect((await accountOf(orgA)).commercialAccess).toBe("active");
+    } finally { await barrier.query("rollback"); barrier.release(); await Promise.all([activate, extend]); }
+  });
+  it("RC-08 two extensions serialize and audit actual predecessors", async () => {
+    await setTrial(orgA, "now() + interval '14 days'");
+    const before = (await accountOf(orgA)).trialEndsAt!.getTime();
+    const barrier = await ownerPool.connect();
+    const pending: ReturnType<typeof extendTrialAction>[] = [];
+    try {
+      await barrier.query("begin");
+      const pid = (await barrier.query("select pg_backend_pid() pid")).rows[0].pid as number;
+      await barrier.query("select organization_id from organization_accounts where organization_id=$1 for update", [orgA]);
+      pending.push(extendTrialAction({ organizationId: orgA, days: 7 }, H(adminCookie)));
+      await waitForBlocked(ownerPool, pid);
+      pending.push(extendTrialAction({ organizationId: orgA, days: 7 }, H(adminCookie)));
+      await waitForBlocked(ownerPool, pid, 2);
+      await barrier.query("commit");
+      expect((await Promise.all(pending)).every((res) => res.ok)).toBe(true);
+      expect((await accountOf(orgA)).trialEndsAt!.getTime() - before).toBe(14 * 86400000);
+      const events = await ownerPool.query("select metadata from platform_audit_events where organization_id=$1 and action='TRIAL_EXTENDED' order by created_at desc limit 2", [orgA]);
+      expect(new Date(events.rows[0].metadata.oldTrialEndsAt).getTime()).toBe(before + 7 * 86400000);
+      expect(new Date(events.rows[1].metadata.oldTrialEndsAt).getTime()).toBe(before);
+    } finally { await barrier.query("rollback"); barrier.release(); await Promise.all(pending); }
+  });
+  it("RC-13 missing account fails truthfully and remains unusable", async () => {
+    await ownerPool.query("delete from organization_accounts where organization_id=$1", [orgB]);
+    try {
+      expect(await activateCustomerAction({ organizationId: orgB }, H(adminCookie))).toMatchObject({ ok: false, error: { code: "ACCOUNT_NOT_READY" } });
+      expect(await getAuthContext(H(ownerBCookie))).toEqual({ ok: false, reason: "ACCOUNT_NOT_READY" });
+      expect((await ownerPool.query("select 1 from organization_accounts where organization_id=$1", [orgB])).rows).toHaveLength(0);
+    } finally { await setTrial(orgB, "now() + interval '14 days'"); }
+  });
+  it("RC-24 platform-only, dual-role and tenant-only destinations stay separate", async () => {
+    const platformOnly = await signUp("platform-only-landing");
+    await grantPlatformAdmin(platformOnly.userId, "platform-only-landing");
+    expect(await signInDestination(platformOnly.userId)).toBe("/platform");
+    expect(await signInDestination(adminUserId)).toBe("/platform");
+    expect(await signInDestination(ownerBUserId)).toBe("/dashboard");
   });
 });

@@ -347,8 +347,10 @@ export function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label>{label}</Label>
-      {children ?? <Input />}
+      <label className="block space-y-1.5">
+        <span className="text-xs font-semibold tracking-wide text-slate-400 uppercase">{label}</span>
+        {children ?? <Input />}
+      </label>
       {hint && <p className="text-xs text-slate-400">{hint}</p>}
     </div>
   );

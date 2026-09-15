@@ -15,6 +15,7 @@ import { noteCreateSchema, noteDeleteSchema } from "@/domain/validation/note";
 import { createAction, fail } from "@/server/action";
 
 export const createNoteAction = createAction({
+  operation: "createNoteAction",
   input: noteCreateSchema,
   permission: { client: ["write"] },
   revalidate: ["/clients"],
@@ -37,6 +38,7 @@ export const createNoteAction = createAction({
 });
 
 export const deleteNoteAction = createAction({
+  operation: "deleteNoteAction",
   input: noteDeleteSchema,
   permission: { client: ["write"] },
   revalidate: ["/clients"],

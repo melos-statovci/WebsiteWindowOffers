@@ -32,6 +32,7 @@ const savePricingSchema = z.object({
 export type SavePricingInput = z.infer<typeof savePricingSchema>;
 
 export const savePricingAction = createAction({
+  operation: "savePricingAction",
   input: savePricingSchema,
   permission: { pricing: ["edit"] },
   revalidate: ["/pricing"],

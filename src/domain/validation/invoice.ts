@@ -15,6 +15,7 @@
 // matching the existing InvoiceLine/Invoice shape.
 
 import { z } from "zod";
+import { isoDate, monetaryValue } from "./scalars";
 
 // Manual/settable statuses. Two states are intentionally absent because they are
 // DERIVED, never set by hand: "Paguar" (from payments) and "Vonesë" (overdue =
@@ -22,10 +23,6 @@ import { z } from "zod";
 // would let them go stale / disagree with the money.
 export const INVOICE_SETTABLE_STATUSES = ["Draft", "Dërguar", "Anuluar"] as const;
 
-const isoDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Datë e pavlefshme.")
-  .refine((s) => !Number.isNaN(Date.parse(s)), "Datë e pavlefshme.");
 
 const invoiceLineSchema = z.object({
   description: z.preprocess(
@@ -35,7 +32,7 @@ const invoiceLineSchema = z.object({
   qty: z.number().int().min(1).max(99999),
   // Manual line price: legitimate user input, but bounded and finite. Line + grand
   // totals are always recomputed server-side.
-  unitPrice: z.number().finite().min(0).max(1_000_000),
+  unitPrice: monetaryValue,
 });
 
 /** Common date pair with dueAt >= issuedAt. */

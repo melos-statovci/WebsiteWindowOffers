@@ -6,6 +6,7 @@
 // 2FA OFF, social/passkeys/SSO OFF. IDs are uuid (matches Phase 1 schema).
 
 import { betterAuth } from "better-auth";
+import { logServerFailure } from "@/server/safe-log";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
@@ -20,6 +21,13 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(db, { provider: "pg", schema }),
+  logger: {
+    // Provider messages/arguments can contain ORM parameters or credentials too.
+    log: (level, _message, ...args: unknown[]) => {
+      const error = args.find((arg) => arg !== null && typeof arg === "object");
+      logServerFailure(`auth.provider.${level}`, error);
+    },
+  },
   emailAndPassword: {
     enabled: true,
   },
@@ -33,6 +41,7 @@ export const auth = betterAuth({
       ac,
       roles,
       allowUserToCreateOrganization: false,
+      disableOrganizationDeletion: true,
       // New organizations get a business profile row. Best-effort here (the org
       // may not be visible to a separate tenant transaction yet); the app shell
       // re-ensures it authoritatively on first load.

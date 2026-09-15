@@ -50,6 +50,7 @@ function outcomeOf(result: ProvisioningResult): ProvisioningOutcome {
  * and the operator gets an explicit Retry — no silent success, no auto-retry.
  */
 export const reviewTrialApplicationAction = createPlatformAction({
+  operation: "reviewTrialApplicationAction",
   input: reviewTrialApplicationSchema,
   handler: async ({ input, ctx, db }) => {
     const decided = await db.transaction(async (tx) => {
@@ -111,6 +112,7 @@ export const reviewTrialApplicationAction = createPlatformAction({
  * contract as the approval path: it can never produce a second organization.
  */
 export const retryTrialApplicationProvisioningAction = createPlatformAction({
+  operation: "retryTrialApplicationProvisioningAction",
   input: retryTrialApplicationProvisioningSchema,
   handler: async ({ input, ctx }) => {
     const result = await provisionApprovedTrialApplication(input.id, {
@@ -129,6 +131,7 @@ export const retryTrialApplicationProvisioningAction = createPlatformAction({
 });
 
 export const setContactRequestStatusAction = createPlatformAction({
+  operation: "setContactRequestStatusAction",
   input: setContactRequestStatusSchema,
   handler: async ({ input, ctx, db }) => {
     return db.transaction(async (tx) => {

@@ -1,3 +1,4 @@
+import { logServerFailure } from "@/server/safe-log";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db/client";
@@ -49,6 +50,26 @@ export interface TrialApplicationRow {
   provisioningErrorCode: string | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** Applicant data crosses an untrusted browser boundary. Never spread a platform row. */
+export interface ApplicantTrialApplication {
+  id: string;
+  userId: string;
+  email: string;
+  companyName: string;
+  status: TrialApplicationStatus;
+  organizationId: string | null;
+  provisioningStatus: TrialProvisioningStatus;
+  createdAt: Date;
+}
+
+export function applicantTrialApplication(row: TrialApplicationRow): ApplicantTrialApplication {
+  return {
+    id: row.id, userId: row.userId, email: row.email, companyName: row.companyName,
+    status: row.status, organizationId: row.organizationId,
+    provisioningStatus: row.provisioningStatus, createdAt: row.createdAt,
+  };
 }
 
 export interface ContactRequestRow {
@@ -179,7 +200,7 @@ export async function getTrialApplicationByNormalizedEmail(normalizedEmail: stri
 
 export async function getCurrentTrialApplication(reqHeaders: Headers): Promise<{
   session: Awaited<ReturnType<typeof auth.api.getSession>>;
-  application: TrialApplicationRow | null;
+  application: ApplicantTrialApplication | null;
   hasTenantAccess: boolean;
 }> {
   const session = await auth.api.getSession({ headers: reqHeaders });
@@ -188,7 +209,7 @@ export async function getCurrentTrialApplication(reqHeaders: Headers): Promise<{
     getTrialApplicationByUserId(session.user.id),
     userHasTenantMembership(session.user.id),
   ]);
-  return { session, application, hasTenantAccess };
+  return { session, application: application ? applicantTrialApplication(application) : null, hasTenantAccess };
 }
 
 /**
@@ -229,7 +250,7 @@ export async function activateProvisionedOrganizationAction(
   try {
     await auth.api.setActiveOrganization({ headers: reqHeaders, body: { organizationId } });
   } catch (e) {
-    console.error("[acquisition] active organization activation failed:", e);
+    logServerFailure("[acquisition] active organization activation failed:", e);
     return { ok: false, error: { code: "INTERNAL", message: "Nuk u aktivizua. Provoni përsëri." } };
   }
   return { ok: true, data: { organizationId } };
@@ -244,7 +265,7 @@ export async function noOrganizationDestination(userId: string, locale: PublicLo
 export async function submitTrialApplicationAction(
   rawInput: unknown,
   reqHeaders: Headers,
-): Promise<PublicActionResult<{ application: TrialApplicationRow | null; duplicate: boolean; ignored?: boolean }>> {
+): Promise<PublicActionResult<{ application: ApplicantTrialApplication | null; duplicate: boolean; ignored?: boolean }>> {
   const parsed = trialApplicationSubmitSchema.safeParse(rawInput);
   if (!parsed.success) {
     return {
@@ -266,7 +287,7 @@ export async function submitTrialApplicationAction(
 
   const normalizedEmail = normalizeEmail(session.user.email);
   const existing = (await getTrialApplicationByUserId(session.user.id)) ?? (await getTrialApplicationByNormalizedEmail(normalizedEmail));
-  if (existing) return { ok: true, data: { application: existing, duplicate: true } };
+  if (existing) return { ok: true, data: { application: applicantTrialApplication(existing), duplicate: true } };
 
   try {
     const rows = await db
@@ -284,20 +305,16 @@ export async function submitTrialApplicationAction(
         message: input.message ?? null,
       })
       .returning();
-    return { ok: true, data: { application: trialRow(rows[0]), duplicate: false } };
+    return { ok: true, data: { application: applicantTrialApplication(trialRow(rows[0])), duplicate: false } };
   } catch (e) {
     const duplicate = await getTrialApplicationByUserId(session.user.id);
-    if (duplicate) return { ok: true, data: { application: duplicate, duplicate: true } };
-    console.error("[acquisition] trial application submit failed:", e);
+    if (duplicate) return { ok: true, data: { application: applicantTrialApplication(duplicate), duplicate: true } };
+    logServerFailure("[acquisition] trial application submit failed:", e);
     return { ok: false, error: { code: "INTERNAL", message: "Kërkesa nuk u ruajt. Provoni përsëri." } };
   }
 }
 
-export type ContactRequestSubmitResult = PublicActionResult<{
-  request: ContactRequestRow | null;
-  duplicate: boolean;
-  ignored?: boolean;
-}>;
+export type ContactRequestSubmitResult = PublicActionResult<{ accepted: true }>;
 
 /** An OPEN request from the same email with the same intent, if one exists. */
 async function findOpenContactRequest(
@@ -344,10 +361,10 @@ async function createContactRequest(input: {
 }): Promise<ContactRequestSubmitResult> {
   const normalizedEmail = normalizeEmail(input.email);
   const existing = await findOpenContactRequest(normalizedEmail, input.intent);
-  if (existing) return { ok: true, data: { request: existing, duplicate: true } };
+  if (existing) return { ok: true, data: { accepted: true } };
 
   try {
-    const rows = await db
+    await db
       .insert(contactRequests)
       .values({
         intent: input.intent,
@@ -360,13 +377,13 @@ async function createContactRequest(input: {
         message: input.message,
       })
       .returning();
-    return { ok: true, data: { request: contactRow(rows[0]), duplicate: false } };
+    return { ok: true, data: { accepted: true } };
   } catch (e) {
     // Lost the race against a concurrent identical submission: the partial
     // unique index rejected it, so the visitor's request IS on file.
     const raced = await findOpenContactRequest(normalizedEmail, input.intent);
-    if (raced) return { ok: true, data: { request: raced, duplicate: true } };
-    console.error("[acquisition] contact request submit failed:", e);
+    if (raced) return { ok: true, data: { accepted: true } };
+    logServerFailure("[acquisition] contact request submit failed:", e);
     return { ok: false, error: { code: "INTERNAL", message: "Kërkesa nuk u ruajt. Provoni përsëri." } };
   }
 }
@@ -381,7 +398,7 @@ export async function submitDemoContactRequestAction(rawInput: unknown): Promise
     };
   }
   const input: DemoContactRequestInput = parsed.data;
-  if (isLikelyBot(input)) return { ok: true, data: { request: null, duplicate: false, ignored: true } };
+  if (isLikelyBot(input)) return { ok: true, data: { accepted: true } };
 
   return createContactRequest({
     intent: "demo",
@@ -404,7 +421,7 @@ export async function submitGeneralContactRequestAction(rawInput: unknown): Prom
     };
   }
   const input: GeneralContactRequestInput = parsed.data;
-  if (isLikelyBot(input)) return { ok: true, data: { request: null, duplicate: false, ignored: true } };
+  if (isLikelyBot(input)) return { ok: true, data: { accepted: true } };
 
   return createContactRequest({
     intent: "general",

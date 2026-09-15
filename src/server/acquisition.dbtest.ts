@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { isUuid } from "@/auth/organization";
 import { getAuthContext } from "@/auth/session";
 import {
+  getContactRequest,
   submitDemoContactRequestAction,
   submitGeneralContactRequestAction,
   submitTrialApplicationAction,
@@ -189,6 +190,12 @@ describe("contact acquisition remains accountless", () => {
   const demoEmail = `acq-${suffix}-demo@example.test`;
   const generalEmail = `acq-${suffix}-general@example.test`;
 
+  async function storedContact(address: string, intent: "demo" | "general") {
+    const rows = await ownerPool.query("select id from contact_requests where normalized_email=$1 and intent=$2 order by created_at desc", [address.toLowerCase(), intent]);
+    expect(rows.rows.length).toBeGreaterThan(0);
+    return (await getContactRequest(rows.rows[0].id))!;
+  }
+
   async function tenancyFootprint(address: string) {
     const res = await ownerPool.query<{ users: string; members: string; orgs: string; apps: string }>(
       `select
@@ -219,8 +226,10 @@ describe("contact acquisition remains accountless", () => {
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    demoRequestId = res.data.request!.id;
-    expect(res.data.request!.intent).toBe("demo");
+    const stored = await storedContact(demoEmail, "demo");
+    expect(res).toEqual({ ok: true, data: { accepted: true } });
+    demoRequestId = stored.id;
+    expect(stored.intent).toBe("demo");
 
     // No Better Auth user, no membership, no trial application.
     const after = await tenancyFootprint(demoEmail);
@@ -239,13 +248,15 @@ describe("contact acquisition remains accountless", () => {
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    generalRequestId = res.data.request!.id;
-    expect(res.data.request!.intent).toBe("general");
+    const stored = await storedContact(generalEmail, "general");
+    expect(res).toEqual({ ok: true, data: { accepted: true } });
+    generalRequestId = stored.id;
+    expect(stored.intent).toBe("general");
     // Company and phone are genuinely optional for a general question.
-    expect(res.data.request!.companyName).toBeNull();
-    expect(res.data.request!.phone).toBeNull();
-    expect(res.data.request!.country).toBeNull();
-    expect(res.data.request!.message).toContain("synthetic general question");
+    expect(stored.companyName).toBeNull();
+    expect(stored.phone).toBeNull();
+    expect(stored.country).toBeNull();
+    expect(stored.message).toContain("synthetic general question");
 
     const after = await tenancyFootprint(generalEmail);
     expect(after.users).toBe(0);
@@ -298,7 +309,7 @@ describe("contact acquisition remains accountless", () => {
       formStartedAt: Date.now(),
     });
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.data.ignored).toBe(true);
+    expect(res).toEqual({ ok: true, data: { accepted: true } });
     const rows = await ownerPool.query(`select count(*)::int n from contact_requests where normalized_email=$1`, [
       fastEmail,
     ]);
@@ -316,8 +327,8 @@ describe("contact acquisition remains accountless", () => {
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.data.duplicate).toBe(true);
-    expect(res.data.request?.id).toBe(demoRequestId);
+    expect(res).toEqual({ ok: true, data: { accepted: true } });
+    expect((await storedContact(demoEmail, "demo")).id).toBe(demoRequestId);
   });
 
   it("lets the SAME person send a general question despite an open demo request", async () => {
@@ -331,9 +342,10 @@ describe("contact acquisition remains accountless", () => {
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.data.duplicate).toBe(false);
-    expect(res.data.request!.intent).toBe("general");
-    expect(res.data.request!.id).not.toBe(demoRequestId);
+    expect(res).toEqual({ ok: true, data: { accepted: true } });
+    const stored = await storedContact(demoEmail, "general");
+    expect(stored.intent).toBe("general");
+    expect(stored.id).not.toBe(demoRequestId);
   });
 
   it("lets a CLOSED conversation be reopened with a new request", async () => {
@@ -348,7 +360,7 @@ describe("contact acquisition remains accountless", () => {
     });
     expect(first.ok).toBe(true);
     if (!first.ok) return;
-    const firstId = first.data.request!.id;
+    const firstId = (await storedContact(closedEmail, "general")).id;
 
     // While OPEN, a repeat is suppressed.
     const blocked = await submitGeneralContactRequestAction({
@@ -358,7 +370,8 @@ describe("contact acquisition remains accountless", () => {
       formStartedAt: Date.now() - 5000,
     });
     expect(blocked.ok).toBe(true);
-    if (blocked.ok) expect(blocked.data.duplicate).toBe(true);
+    expect(blocked).toEqual(first);
+    expect((await storedContact(closedEmail, "general")).id).toBe(firstId);
 
     await setContactRequestStatusAction({ id: firstId, status: "closed" }, H(platformCookie));
 
@@ -370,8 +383,8 @@ describe("contact acquisition remains accountless", () => {
     });
     expect(reopened.ok).toBe(true);
     if (!reopened.ok) return;
-    expect(reopened.data.duplicate).toBe(false);
-    expect(reopened.data.request!.id).not.toBe(firstId);
+    expect(reopened).toEqual(first);
+    expect((await storedContact(closedEmail, "general")).id).not.toBe(firstId);
   });
 });
 

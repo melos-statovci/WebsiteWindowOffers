@@ -90,6 +90,7 @@ async function setInvoiceStatus(tx: TenantTx, orgId: string, invoiceId: string, 
 // Record a payment against a specific invoice
 // ---------------------------------------------------------------------------
 export const recordInvoicePaymentAction = createAction({
+  operation: "recordInvoicePaymentAction",
   input: recordInvoicePaymentSchema,
   permission: { payment: ["record"] },
   revalidate: ["/invoices", "/dashboard"],
@@ -136,6 +137,7 @@ export const recordInvoicePaymentAction = createAction({
 // Mark an invoice paid — IDEMPOTENT settle-the-remaining
 // ---------------------------------------------------------------------------
 export const markInvoicePaidAction = createAction({
+  operation: "markInvoicePaidAction",
   input: markInvoicePaidSchema,
   permission: { payment: ["record"] },
   revalidate: ["/invoices", "/dashboard"],
@@ -172,6 +174,7 @@ export const markInvoicePaidAction = createAction({
 // Record an unlinked advance/credit payment for a client
 // ---------------------------------------------------------------------------
 export const recordAdvancePaymentAction = createAction({
+  operation: "recordAdvancePaymentAction",
   input: advancePaymentSchema,
   permission: { payment: ["record"] },
   revalidate: ["/dashboard"],
@@ -204,6 +207,7 @@ export const recordAdvancePaymentAction = createAction({
 // Delete a payment
 // ---------------------------------------------------------------------------
 export const deletePaymentAction = createAction({
+  operation: "deletePaymentAction",
   input: paymentDeleteSchema,
   permission: { payment: ["delete"] },
   revalidate: ["/invoices", "/dashboard"],
