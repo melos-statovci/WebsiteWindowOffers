@@ -13,6 +13,7 @@ import { nextCookies } from "better-auth/next-js";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { ac, roles } from "@/auth/permissions";
+import { getTrustedProvisioningIdentity } from "@/auth/provisioning-identity";
 import { ensureOrganizationProfile } from "@/auth/organization";
 import { ensureDefaultPricing } from "@/server/pricing-init";
 import { ensureOrganizationAccount } from "@/server/platform/accounts";
@@ -42,6 +43,40 @@ export const auth = betterAuth({
       roles,
       allowUserToCreateOrganization: false,
       disableOrganizationDeletion: true,
+      schema: {
+        organization: {
+          additionalFields: {
+            provisioningApplicationId: {
+              type: "string",
+              required: false,
+              input: false,
+              returned: false,
+            },
+            provisioningOwnerId: {
+              type: "string",
+              required: false,
+              input: false,
+              returned: false,
+            },
+          },
+        },
+      },
+      organizationHooks: {
+        beforeCreateOrganization: async ({ organization: org, user }) => {
+          const identity = getTrustedProvisioningIdentity();
+          if (!identity) return;
+          if (user.id !== identity.ownerUserId) {
+            throw new Error("Trusted provisioning owner does not match organization creator.");
+          }
+
+          // Better Auth 1.6.27 passes this object directly to its organization
+          // adapter. Mutating only these input-disabled fields keeps the
+          // server-only userId control out of organization data while ensuring
+          // the immutable identity is present in the initial INSERT.
+          org.provisioningApplicationId = identity.applicationId;
+          org.provisioningOwnerId = identity.ownerUserId;
+        },
+      },
       // New organizations get a business profile row. Best-effort here (the org
       // may not be visible to a separate tenant transaction yet); the app shell
       // re-ensures it authoritatively on first load.

@@ -1,14 +1,14 @@
 # Pass 1 decisions
 
-## RC-06/07 provisioning design proposed for approval
+## RC-06/07 provisioning design — approved and implemented
 
 Preserve Better Auth as the organization/membership provider, existing Platform Admin approval and restricted runtime/RLS. Add nullable organization columns `provisioning_application_id` (unique) and `provisioning_owner_id`. They are provider schema fields with client input disabled, and are set at initial organization insertion by the supported beforeCreateOrganization hook only after verifying the approved application belongs to the server-supplied user. Public organization creation remains disabled. Display slug/metadata edits cannot change these dedicated fields.
 
 Retry first validates an existing application.organization_id against both immutable columns. Without a link, it searches by the unique application reference, never adopts by display slug, and creates through the trusted provider only if absent. A slug collision with unrelated data fails safely. The unique reference makes parallel creation converge even before application linkage. Completion repairs a missing intended-owner membership only when the immutable reference/owner match the approved application; a conflicting existing role/owner fails rather than transferring ownership. Add unique member(organization_id,user_id) after checking existing duplicates; do not silently delete/deduplicate existing memberships.
 
-Forward migration 0022 backfills only already-linked approved applications, adds the nullable columns and unique membership index; no historical migration edits, role changes, BYPASSRLS or SECURITY DEFINER. Unlinked legacy crash rows without an immutable reference require explicit review and are not silently adopted by slug. Apply only to guarded Neon DEVELOPMENT after inspecting generated SQL. Tests cover all requested failure windows and direct attempts to forge/update immutable fields.
+Forward migration 0022 backfills only already-linked approved applications, adds the nullable columns, partial unique application-reference index and unique membership index; no historical migration edits, role changes, BYPASSRLS or SECURITY DEFINER. Preflight found zero duplicate membership pairs and zero unlinked legacy crash rows in guarded DEVELOPMENT. The reviewed SQL was applied only to guarded Neon DEVELOPMENT. Tests cover all requested failure windows and direct attempts to forge/update immutable fields.
 
-The provider-supported `disableOrganizationDeletion:true` is already independently authorized and applied in code. Proposed additional lifecycle hooks would gate organization updates/membership/invitations using existing account state; these are not applied. Adapter transaction support will be enabled and tested as supported by the installed provider; it is not assumed to make an entire organization-create route atomic, hence durable identity/recovery remains necessary.
+Better Auth 1.6.27 `additionalFields` declare both identities with `input:false` and `returned:false`. A trusted `AsyncLocalStorage` context supplies them only inside the installed provider's `beforeCreateOrganization` hook, which verifies the server-selected creator matches the intended owner and places them in the initial organization INSERT. The provider's server-only `addMember` path performs repair. The installed Drizzle adapter supports `transaction:true`, but the installed organization-create route does not wrap its complete org/member sequence in that transaction primitive, so adapter transaction mode remains unchanged; durable identity/recovery provides the guarantee.
 
 ## RC-11 evidence and product choice
 
@@ -47,4 +47,4 @@ Automatic approval review separately rejected adding the existing missing/suspen
 
 Deletion refusal is already applied using `disableOrganizationDeletion:true` and tested through HTTP. The additional lifecycle hooks above are NOT applied. The installed Drizzle adapter supports `transaction:true`, but it defaults false and is not a substitute for durable provisioning recovery. No transaction/trust/schema change has been silently applied.
 
-All three automatically rejected designs require explicit design approval before implementation. RC-11 separately needs the product choice to disable unsupported editors or supply authoritative pricing semantics. A usage-limit reset/continue instruction does not answer these design choices.
+RC-06/07 received explicit approval and are implemented. RC-02 broader lifecycle hooks and RC-12 payment receipts remain unapplied decisions. RC-11 separately needs the product choice to disable unsupported editors or supply authoritative pricing semantics.

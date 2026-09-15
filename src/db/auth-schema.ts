@@ -101,8 +101,18 @@ export const organization = pgTable(
     logo: text("logo"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     metadata: text("metadata"),
+    // Server-only, immutable identity for Trial Application provisioning.
+    // These are deliberately not display metadata and are hidden from Better
+    // Auth client input/output in src/auth/index.ts.
+    provisioningApplicationId: uuid("provisioning_application_id"),
+    provisioningOwnerId: uuid("provisioning_owner_id"),
   },
-  (table) => [uniqueIndex("organization_slug_uidx").on(table.slug)],
+  (table) => [
+    uniqueIndex("organization_slug_uidx").on(table.slug),
+    uniqueIndex("organization_provisioning_application_uidx")
+      .on(table.provisioningApplicationId)
+      .where(sql`${table.provisioningApplicationId} is not null`),
+  ],
 );
 
 export const member = pgTable(
@@ -123,6 +133,7 @@ export const member = pgTable(
   (table) => [
     index("member_organizationId_idx").on(table.organizationId),
     index("member_userId_idx").on(table.userId),
+    uniqueIndex("member_organization_user_uidx").on(table.organizationId, table.userId),
   ],
 );
 

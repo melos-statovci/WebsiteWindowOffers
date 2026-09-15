@@ -11,8 +11,9 @@
 // The functions are split into RESUMABLE PHASES so a partially provisioned
 // tenant can be driven to completion instead of being recreated:
 //
-//   1. createOrAdoptOrganization  — exactly-once org creation, keyed on a
-//      caller-supplied stable slug (organization.slug is UNIQUE).
+//   1. createOrAdoptApplicationOrganization — exactly-once Trial Application
+//      organization creation, keyed on immutable provisioning_application_id.
+//      The legacy slug-keyed helper remains only for non-application fixtures.
 //   2. completeOrganizationProvisioning — idempotent profile + account +
 //      pricing, then a verification read.
 //
@@ -28,6 +29,7 @@ import { ensureOrganizationProfile } from "@/auth/organization";
 import { ensureDefaultPricing } from "@/server/pricing-init";
 import { ensureOrganizationAccount } from "@/server/platform/accounts";
 import { organizationSlugBase, stableProvisioningSlug } from "@/lib/provisioning-slug";
+import { runWithTrustedProvisioningIdentity } from "@/auth/provisioning-identity";
 
 export interface TrustedOrganizationProvisioningInput {
   userId: string;
@@ -41,6 +43,71 @@ function slugify(name: string): string {
 }
 
 export { stableProvisioningSlug };
+
+export class ProvisioningIdentityConflictError extends Error {
+  constructor(message = "Provisioning organization identity conflicts with the application.") {
+    super(message);
+    this.name = "ProvisioningIdentityConflictError";
+  }
+}
+
+export class ProvisioningOwnerMembershipConflictError extends Error {
+  constructor(message = "Provisioning owner membership is incompatible with safe repair.") {
+    super(message);
+    this.name = "ProvisioningOwnerMembershipConflictError";
+  }
+}
+
+export interface ProvisioningOrganization {
+  id: string;
+  name: string;
+  slug: string;
+  provisioningApplicationId: string;
+  provisioningOwnerId: string;
+}
+
+function assertProvisioningIdentity(
+  organization: ProvisioningOrganization,
+  applicationId: string,
+  ownerUserId: string,
+): ProvisioningOrganization {
+  if (
+    organization.provisioningApplicationId !== applicationId ||
+    organization.provisioningOwnerId !== ownerUserId
+  ) {
+    throw new ProvisioningIdentityConflictError();
+  }
+  return organization;
+}
+
+async function findProvisioningOrganizationById(
+  organizationId: string,
+): Promise<ProvisioningOrganization | null> {
+  const res = await db.execute(sql`
+    select id, name, slug,
+           provisioning_application_id as "provisioningApplicationId",
+           provisioning_owner_id as "provisioningOwnerId"
+    from organization
+    where id = ${organizationId}
+    limit 1
+  `);
+  return (res.rows[0] as unknown as ProvisioningOrganization | undefined) ?? null;
+}
+
+export async function findOrganizationByProvisioningApplicationId(
+  applicationId: string,
+): Promise<ProvisioningOrganization | null> {
+  const res = await db.execute(sql`
+    select id, name, slug,
+           provisioning_application_id as "provisioningApplicationId",
+           provisioning_owner_id as "provisioningOwnerId"
+    from organization
+    where provisioning_application_id = ${applicationId}
+    limit 2
+  `);
+  if (res.rows.length > 1) throw new ProvisioningIdentityConflictError();
+  return (res.rows[0] as unknown as ProvisioningOrganization | undefined) ?? null;
+}
 
 /** Look up an organization by its unique slug. Trusted, non-RLS read. */
 export async function findOrganizationBySlug(
@@ -62,6 +129,121 @@ export async function isOrganizationOwner(orgId: string, userId: string): Promis
   return row?.role === "owner";
 }
 
+interface OwnerMembershipState {
+  intendedRole: string | null;
+  intendedCount: number;
+  unrelatedOwnerCount: number;
+}
+
+async function readOwnerMembershipState(
+  organizationId: string,
+  ownerUserId: string,
+): Promise<OwnerMembershipState> {
+  const res = await db.execute(sql`
+    select
+      count(*) filter (where user_id = ${ownerUserId})::int as intended_count,
+      max(role) filter (where user_id = ${ownerUserId}) as intended_role,
+      count(*) filter (
+        where user_id <> ${ownerUserId}
+          and 'owner' = any(string_to_array(replace(role, ' ', ''), ','))
+      )::int as unrelated_owner_count
+    from member
+    where organization_id = ${organizationId}
+  `);
+  const row = res.rows[0] as {
+    intended_count: number;
+    intended_role: string | null;
+    unrelated_owner_count: number;
+  };
+  return {
+    intendedCount: Number(row.intended_count),
+    intendedRole: row.intended_role,
+    unrelatedOwnerCount: Number(row.unrelated_owner_count),
+  };
+}
+
+function roleContainsOwner(role: string | null): boolean {
+  return role?.split(",").some((value) => value.trim() === "owner") ?? false;
+}
+
+/**
+ * Repair only the intended applicant's missing canonical Better Auth member.
+ * The application link and both immutable organization fields are re-checked
+ * immediately before the provider's server-only addMember path is used.
+ */
+export async function repairProvisioningOwnerMembership(input: {
+  applicationId: string;
+  organizationId: string;
+  ownerUserId: string;
+}): Promise<{ repaired: boolean }> {
+  const authoritative = await db.execute(sql`
+    select t.status, t.user_id, t.organization_id,
+           o.provisioning_application_id, o.provisioning_owner_id
+    from trial_applications t
+    join organization o on o.id = ${input.organizationId}
+    where t.id = ${input.applicationId}
+    limit 1
+  `);
+  const row = authoritative.rows[0] as {
+    status: string;
+    user_id: string;
+    organization_id: string | null;
+    provisioning_application_id: string | null;
+    provisioning_owner_id: string | null;
+  } | undefined;
+  if (
+    !row ||
+    row.status !== "approved" ||
+    row.user_id !== input.ownerUserId ||
+    row.organization_id !== input.organizationId ||
+    row.provisioning_application_id !== input.applicationId ||
+    row.provisioning_owner_id !== input.ownerUserId
+  ) {
+    throw new ProvisioningIdentityConflictError();
+  }
+
+  const before = await readOwnerMembershipState(input.organizationId, input.ownerUserId);
+  if (before.intendedCount > 1) throw new ProvisioningOwnerMembershipConflictError();
+  if (before.intendedCount === 1) {
+    if (!roleContainsOwner(before.intendedRole)) throw new ProvisioningOwnerMembershipConflictError();
+    return { repaired: false };
+  }
+  if (before.unrelatedOwnerCount > 0) throw new ProvisioningOwnerMembershipConflictError();
+
+  try {
+    await auth.api.addMember({
+      body: {
+        organizationId: input.organizationId,
+        userId: input.ownerUserId,
+        role: "owner",
+      },
+    });
+  } catch (error) {
+    // Concurrent repairs converge on the UNIQUE (organization_id,user_id)
+    // backstop. Treat the losing provider call as success only after re-reading
+    // the exact intended owner state.
+    const raced = await readOwnerMembershipState(input.organizationId, input.ownerUserId);
+    if (
+      raced.intendedCount === 1 &&
+      roleContainsOwner(raced.intendedRole) &&
+      raced.unrelatedOwnerCount === 0
+    ) {
+      return { repaired: false };
+    }
+    throw error;
+  }
+
+  const after = await readOwnerMembershipState(input.organizationId, input.ownerUserId);
+  if (
+    after.intendedCount !== 1 ||
+    !roleContainsOwner(after.intendedRole) ||
+    after.unrelatedOwnerCount > 0
+  ) {
+    throw new ProvisioningOwnerMembershipConflictError();
+  }
+  return { repaired: true };
+}
+
 export interface CreateOrAdoptResult {
   organizationId: string;
   name: string;
@@ -71,7 +253,64 @@ export interface CreateOrAdoptResult {
 }
 
 /**
- * PHASE 1 — get the organization for `slug`, creating it exactly once.
+ * Resolve the authoritative organization for one approved Trial Application.
+ *
+ * A persisted application link wins and is validated first. Without a link,
+ * the immutable UNIQUE application reference is the only adoption key. The
+ * display slug is passed only when creating a brand-new organization and is
+ * never used to identify or adopt an existing provisioned tenant.
+ */
+export async function createOrAdoptApplicationOrganization(input: {
+  applicationId: string;
+  ownerUserId: string;
+  linkedOrganizationId: string | null;
+  name: string;
+  slug: string;
+}): Promise<CreateOrAdoptResult> {
+  const name = input.name.trim();
+  if (name.length < 2) throw new Error("Provisioning requires an organization name.");
+
+  if (input.linkedOrganizationId) {
+    const linked = await findProvisioningOrganizationById(input.linkedOrganizationId);
+    if (!linked) throw new ProvisioningIdentityConflictError("Linked provisioning organization is missing.");
+    const valid = assertProvisioningIdentity(linked, input.applicationId, input.ownerUserId);
+    return { organizationId: valid.id, name: valid.name, slug: valid.slug, created: false };
+  }
+
+  const existing = await findOrganizationByProvisioningApplicationId(input.applicationId);
+  if (existing) {
+    const valid = assertProvisioningIdentity(existing, input.applicationId, input.ownerUserId);
+    return { organizationId: valid.id, name: valid.name, slug: valid.slug, created: false };
+  }
+
+  try {
+    await runWithTrustedProvisioningIdentity(
+      { applicationId: input.applicationId, ownerUserId: input.ownerUserId },
+      () => auth.api.createOrganization({
+        body: { name, slug: input.slug, userId: input.ownerUserId },
+      }),
+    );
+  } catch (error) {
+    // A concurrent attempt may have won the immutable unique-key race, or the
+    // organization INSERT may have committed before a later provider step
+    // failed. Only the immutable reference is eligible for adoption.
+    const adopted = await findOrganizationByProvisioningApplicationId(input.applicationId);
+    if (adopted) {
+      const valid = assertProvisioningIdentity(adopted, input.applicationId, input.ownerUserId);
+      return { organizationId: valid.id, name: valid.name, slug: valid.slug, created: false };
+    }
+    throw error;
+  }
+
+  const created = await findOrganizationByProvisioningApplicationId(input.applicationId);
+  if (!created) throw new ProvisioningIdentityConflictError("Created organization has no provisioning identity.");
+  const valid = assertProvisioningIdentity(created, input.applicationId, input.ownerUserId);
+  return { organizationId: valid.id, name: valid.name, slug: valid.slug, created: true };
+}
+
+/**
+ * Legacy fixture helper — get the organization for `slug`, creating it once.
+ * Trial Application provisioning must use createOrAdoptApplicationOrganization.
  *
  * Ordering is deliberate: look up FIRST (so a resumed attempt adopts the
  * organization an earlier crashed attempt created), then create, then look up

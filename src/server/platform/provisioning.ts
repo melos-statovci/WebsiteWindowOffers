@@ -12,20 +12,18 @@ import { logServerFailure } from "@/server/safe-log";
 // organization. The guarantees below are what close that window.
 //
 // EXACTLY-ONCE ORGANIZATION (the important one)
-//   The claim transaction persists `provisioning_slug` — derived from the
-//   application id — BEFORE Better Auth is ever called, and commits. Because
-//   `organization.slug` is UNIQUE, any later attempt for this application either
-//   finds that organization and adopts it, or creates it. There is no input
-//   under which two organizations can exist for one application, even if the
-//   process dies immediately after Better Auth commits.
+//   organization.provisioning_application_id is an immutable UNIQUE key written
+//   in Better Auth's initial organization INSERT. A persisted application link
+//   is checked first; without one, retry adopts only by that immutable key.
+//   Display slug/name/metadata never identify an existing provisioning tenant.
 //
 // CONCURRENCY
 //   The claim runs `SELECT ... FOR UPDATE` on the application row, so two
 //   simultaneous approvals serialize. The loser sees `in_progress` and is
 //   rejected with PROVISIONING_IN_PROGRESS instead of racing. The stale-claim
 //   window below still lets a crashed attempt be retried; correctness never
-//   depends on that window, only operator ergonomics — the slug key is what
-//   makes even a wrongly-concurrent attempt converge.
+//   depends on that window, only operator ergonomics — the immutable application
+//   key makes even a wrongly-concurrent attempt converge.
 //
 // RETRY SEMANTICS
 //   Retry is safe from `failed` and from a stale `in_progress`. Every completion
@@ -44,7 +42,10 @@ import { getAccountState } from "@/server/platform/accounts";
 import { recordAuditEvent } from "@/server/platform/audit";
 import {
   completeOrganizationProvisioning,
-  createOrAdoptOrganization,
+  createOrAdoptApplicationOrganization,
+  ProvisioningIdentityConflictError,
+  ProvisioningOwnerMembershipConflictError,
+  repairProvisioningOwnerMembership,
   stableProvisioningSlug,
   verifyOrganizationProvisioning,
 } from "@/server/provisioning";
@@ -61,6 +62,8 @@ export type ProvisioningStatus = "not_started" | "in_progress" | "provisioned" |
 export type ProvisioningErrorCode =
   | "ORGANIZATION_CREATE_FAILED"
   | "LINK_CONFLICT"
+  | "PROVISIONING_IDENTITY_CONFLICT"
+  | "OWNER_MEMBERSHIP_CONFLICT"
   | "OWNER_MEMBERSHIP_MISSING"
   | "PROFILE_MISSING"
   | "ACCOUNT_MISSING"
@@ -247,37 +250,42 @@ export async function provisionApprovedTrialApplication(
 
   const { row, slug, attempt } = claim;
 
-  if (claim.alreadyProvisioned) {
-    const organizationId = row.organization_id!;
-    const account = await getAccountState(organizationId);
-    const org = await db.execute(sql`select name, slug from organization where id = ${organizationId} limit 1`);
-    const orgRow = org.rows[0] as { name?: string; slug?: string } | undefined;
-    return {
-      ok: true,
-      organizationId,
-      organizationName: orgRow?.name ?? row.company_name,
-      organizationSlug: orgRow?.slug ?? slug,
-      trialEndsAt: account.trialEndsAt,
-      alreadyProvisioned: true,
-    };
-  }
-
-  // 1. Exactly-once organization (create, or adopt one a prior attempt made).
+  // 1. Resolve the authoritative linked organization first. Without a link,
+  //    create/adopt only by immutable provisioning_application_id.
   let organization: { organizationId: string; name: string; slug: string };
   try {
-    organization = await createOrAdoptOrganization({
-      userId: row.user_id,
+    organization = await createOrAdoptApplicationOrganization({
+      applicationId,
+      ownerUserId: row.user_id,
+      linkedOrganizationId: row.organization_id,
       name: row.company_name,
       slug,
     });
   } catch (e) {
+    if (e instanceof ProvisioningIdentityConflictError) {
+      return markFailed(
+        applicationId,
+        row.company_name,
+        row.organization_id,
+        "PROVISIONING_IDENTITY_CONFLICT",
+        attempt,
+        actor,
+      );
+    }
     logServerFailure("[provisioning] organization create/adopt failed:", e);
-    return markFailed(applicationId, row.company_name, null, "ORGANIZATION_CREATE_FAILED", attempt, actor);
+    return markFailed(
+      applicationId,
+      row.company_name,
+      row.organization_id,
+      "ORGANIZATION_CREATE_FAILED",
+      attempt,
+      actor,
+    );
   }
 
   // 2. Record the linkage IMMEDIATELY, so a crash in step 3 still leaves the
-  //    organization discoverable through the application (belt and braces —
-  //    the slug alone would already find it).
+  //    application authoritative. A pre-link crash is recovered through the
+  //    immutable provisioning_application_id on the organization itself.
   try {
     const linked = await db.execute(sql`
       update trial_applications
@@ -294,15 +302,40 @@ export async function provisionApprovedTrialApplication(
     return markFailed(applicationId, row.company_name, null, "LINK_CONFLICT", attempt, actor);
   }
 
-  // 3. Idempotent completion: profile + account (starts the 14-day trial) +
-  //    default pricing, then verify all four invariants.
+  // 3. Repair only the validated intended owner membership, then idempotently
+  //    complete profile + account/trial + default pricing and verify all four.
   let verification;
   try {
+    await repairProvisioningOwnerMembership({
+      applicationId,
+      organizationId: organization.organizationId,
+      ownerUserId: row.user_id,
+    });
     verification = await completeOrganizationProvisioning({
       organizationId: organization.organizationId,
       ownerUserId: row.user_id,
     });
   } catch (e) {
+    if (e instanceof ProvisioningIdentityConflictError) {
+      return markFailed(
+        applicationId,
+        row.company_name,
+        organization.organizationId,
+        "PROVISIONING_IDENTITY_CONFLICT",
+        attempt,
+        actor,
+      );
+    }
+    if (e instanceof ProvisioningOwnerMembershipConflictError) {
+      return markFailed(
+        applicationId,
+        row.company_name,
+        organization.organizationId,
+        "OWNER_MEMBERSHIP_CONFLICT",
+        attempt,
+        actor,
+      );
+    }
     logServerFailure("[provisioning] completion steps failed:", e);
     verification = await verifyOrganizationProvisioning(organization.organizationId, row.user_id).catch(() => null);
     if (!verification) {
@@ -323,8 +356,19 @@ export async function provisionApprovedTrialApplication(
     return markFailed(applicationId, row.company_name, organization.organizationId, missing, attempt, actor);
   }
 
-  // 4. Mark provisioned + audit atomically.
   const account = await getAccountState(organization.organizationId);
+  if (claim.alreadyProvisioned) {
+    return {
+      ok: true,
+      organizationId: organization.organizationId,
+      organizationName: organization.name,
+      organizationSlug: organization.slug,
+      trialEndsAt: account.trialEndsAt,
+      alreadyProvisioned: true,
+    };
+  }
+
+  // 4. Mark provisioned + audit atomically.
   await db.transaction(async (tx) => {
     await tx.execute(sql`
       update trial_applications

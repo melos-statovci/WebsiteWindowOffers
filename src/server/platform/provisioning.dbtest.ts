@@ -25,7 +25,12 @@ import {
   reviewTrialApplicationAction,
 } from "@/server/platform/actions/applications";
 import { provisionApprovedTrialApplication } from "@/server/platform/provisioning";
-import { findOrganizationBySlug, stableProvisioningSlug } from "@/server/provisioning";
+import {
+  createOrAdoptApplicationOrganization,
+  findOrganizationByProvisioningApplicationId,
+  repairProvisioningOwnerMembership,
+  stableProvisioningSlug,
+} from "@/server/provisioning";
 import { createProvisionedTestOrganization, TestCleanup, testRunId } from "@/db/testing/fixtures";
 
 const ownerPool = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL });
@@ -68,6 +73,20 @@ async function newApplicant(who: string, company: string) {
   if (!res.ok || !res.data.application) throw new Error(`could not submit application for ${who}`);
   applicationIds.push(res.data.application.id);
   return { ...applicant, applicationId: res.data.application.id };
+}
+
+async function approveAndGetOrganization(
+  applicant: Awaited<ReturnType<typeof newApplicant>>,
+): Promise<string> {
+  const approved = await reviewTrialApplicationAction(
+    { id: applicant.applicationId, decision: "approved", internalReviewNote: "" },
+    H(platform.cookie),
+  );
+  expect(approved.ok).toBe(true);
+  if (!approved.ok || approved.data.provisioning?.state !== "provisioned") {
+    throw new Error("test application did not provision");
+  }
+  return approved.data.provisioning.organizationId!;
 }
 
 const applicationIds: string[] = [];
@@ -218,9 +237,15 @@ describe("approval provisions exactly one new organization", () => {
   });
 
   it("shows the organization through canonical platform account data", async () => {
-    const org = await ownerPool.query(`select name, slug from organization where id=$1`, [organizationId]);
+    const org = await ownerPool.query(
+      `select name, slug, provisioning_application_id, provisioning_owner_id
+       from organization where id=$1`,
+      [organizationId],
+    );
     expect(org.rows[0].name).toBe(`Prov Success ${suffix}`);
     expect(org.rows[0].slug).toBe(stableProvisioningSlug(`Prov Success ${suffix}`, applicant.applicationId));
+    expect(org.rows[0].provisioning_application_id).toBe(applicant.applicationId);
+    expect(org.rows[0].provisioning_owner_id).toBe(applicant.userId);
   });
 
   it("re-approving a provisioned application is refused", async () => {
@@ -248,6 +273,22 @@ describe("approval provisions exactly one new organization", () => {
       applicant.applicationId,
     ]);
     expect(app.rows[0].organization_id).toBe(organizationId);
+    const control = await ownerPool.query(
+      `select
+         (select count(*)::int from member where organization_id=$1 and user_id=$2 and role='owner') as owners,
+         (select count(*)::int from organization_accounts where organization_id=$1) as accounts,
+         (select count(*)::int from trial_applications where id=$3 and organization_id=$1) as links`,
+      [organizationId, applicant.userId, applicant.applicationId],
+    );
+    expect(control.rows[0]).toMatchObject({ owners: 1, accounts: 1, links: 1 });
+    const tenant = await runWithOrg(db, organizationId, (tx) =>
+      tx.execute(sql`
+        select
+          (select count(*)::int from organization_profiles where organization_id=${organizationId}) as profiles,
+          (select count(*)::int from price_lists where organization_id=${organizationId} and is_active) as active_pricing
+      `),
+    );
+    expect(tenant.rows[0]).toMatchObject({ profiles: 1, active_pricing: 1 });
   });
 
   it("isolates the new tenant from an existing tenant under RLS", async () => {
@@ -320,9 +361,9 @@ describe("exactly-once organization under crash and concurrency", () => {
       await ownerPool.query(`select organization_id from trial_applications where id=$1`, [applicant.applicationId])
     ).rows[0].organization_id as string;
 
-    // Simulate the dangerous window: Better Auth committed the organization, but
-    // the process died before the linkage/completion was recorded. The slug row
-    // is deliberately left in place — that is the recovery key.
+    // Simulate the dangerous window: Better Auth committed the organization,
+    // but the process died before linkage/completion was recorded. Immutable
+    // provisioning_application_id — never display slug — is the recovery key.
     await ownerPool.query(
       `update trial_applications
        set organization_id = null, provisioning_status = 'failed',
@@ -345,10 +386,8 @@ describe("exactly-once organization under crash and concurrency", () => {
     expect(app.rows[0].organization_id).toBe(firstOrg);
     expect(app.rows[0].provisioning_status).toBe("provisioned");
 
-    const bySlug = await findOrganizationBySlug(
-      stableProvisioningSlug(`Prov Crash ${suffix}`, applicant.applicationId),
-    );
-    expect(bySlug?.id).toBe(firstOrg);
+    const byApplication = await findOrganizationByProvisioningApplicationId(applicant.applicationId);
+    expect(byApplication?.id).toBe(firstOrg);
   });
 
   it("converges to one valid tenant when provisioning is retried after a partial failure", async () => {
@@ -436,6 +475,359 @@ describe("exactly-once organization under crash and concurrency", () => {
       tx.execute(sql`select count(*) filter (where is_active)::int as active from price_lists where organization_id = ${orgId}`),
     );
     expect(Number((pricing.rows[0] as { active: number }).active)).toBe(1);
+  });
+});
+
+describe("RC-06/07 immutable identity and recovery", () => {
+  it("uses the same linked organization after its display slug changes through Better Auth", async () => {
+    const applicant = await newApplicant("slug-rename", `Prov Slug Rename ${suffix}`);
+    const organizationId = await approveAndGetOrganization(applicant);
+    const renamedSlug = `prov-renamed-${suffix}`;
+
+    await auth.api.updateOrganization({
+      headers: H(applicant.cookie),
+      body: { organizationId, data: { slug: renamedSlug } },
+    });
+    await ownerPool.query(
+      `update trial_applications
+       set provisioning_status='failed', provisioned_at=null, provisioning_error_code='UNEXPECTED'
+       where id=$1`,
+      [applicant.applicationId],
+    );
+
+    const before = await ownerPool.query(`select count(*)::int as n from organization`);
+    const retried = await retryTrialApplicationProvisioningAction(
+      { id: applicant.applicationId },
+      H(platform.cookie),
+    );
+    expect(retried.ok).toBe(true);
+    if (retried.ok) expect(retried.data.provisioning.state).toBe("provisioned");
+    const after = await ownerPool.query(`select count(*)::int as n from organization`);
+    expect(after.rows[0].n).toBe(before.rows[0].n);
+
+    const state = await ownerPool.query(
+      `select t.organization_id, t.provisioning_status, o.slug,
+              o.provisioning_application_id, o.provisioning_owner_id
+       from trial_applications t join organization o on o.id=t.organization_id
+       where t.id=$1`,
+      [applicant.applicationId],
+    );
+    expect(state.rows[0]).toMatchObject({
+      organization_id: organizationId,
+      provisioning_status: "provisioned",
+      slug: renamedSlug,
+      provisioning_application_id: applicant.applicationId,
+      provisioning_owner_id: applicant.userId,
+    });
+  });
+
+  it("repairs a missing intended owner membership on the same organization", async () => {
+    const applicant = await newApplicant("owner-repair", `Prov Owner Repair ${suffix}`);
+    const organizationId = await approveAndGetOrganization(applicant);
+    await ownerPool.query(`delete from member where organization_id=$1 and user_id=$2`, [
+      organizationId,
+      applicant.userId,
+    ]);
+
+    const orgsBefore = await ownerPool.query(`select count(*)::int as n from organization`);
+    const retried = await retryTrialApplicationProvisioningAction(
+      { id: applicant.applicationId },
+      H(platform.cookie),
+    );
+    expect(retried.ok).toBe(true);
+    if (retried.ok) expect(retried.data.provisioning.state).toBe("provisioned");
+    const orgsAfter = await ownerPool.query(`select count(*)::int as n from organization`);
+    expect(orgsAfter.rows[0].n).toBe(orgsBefore.rows[0].n);
+
+    const members = await ownerPool.query(
+      `select user_id, role from member where organization_id=$1`,
+      [organizationId],
+    );
+    expect(members.rows).toEqual([{ user_id: applicant.userId, role: "owner" }]);
+  });
+
+  it("repairs a missing linked organization profile", async () => {
+    const applicant = await newApplicant("profile-repair", `Prov Profile Repair ${suffix}`);
+    const organizationId = await approveAndGetOrganization(applicant);
+    await runWithOrg(db, organizationId, (tx) =>
+      tx.execute(sql`delete from organization_profiles where organization_id=${organizationId}`),
+    );
+
+    const retried = await retryTrialApplicationProvisioningAction(
+      { id: applicant.applicationId },
+      H(platform.cookie),
+    );
+    expect(retried.ok).toBe(true);
+    const profile = await runWithOrg(db, organizationId, (tx) =>
+      tx.execute(sql`select count(*)::int as n from organization_profiles where organization_id=${organizationId}`),
+    );
+    expect(Number((profile.rows[0] as { n: number }).n)).toBe(1);
+  });
+
+  it("repairs a missing linked organization account and preserves a single trial state", async () => {
+    const applicant = await newApplicant("account-repair", `Prov Account Repair ${suffix}`);
+    const organizationId = await approveAndGetOrganization(applicant);
+    await ownerPool.query(`delete from organization_accounts where organization_id=$1`, [organizationId]);
+
+    const retried = await retryTrialApplicationProvisioningAction(
+      { id: applicant.applicationId },
+      H(platform.cookie),
+    );
+    expect(retried.ok).toBe(true);
+    const account = await ownerPool.query(
+      `select count(*)::int as n,
+              max(extract(epoch from (trial_ends_at-trial_started_at)))::int as window_s
+       from organization_accounts where organization_id=$1`,
+      [organizationId],
+    );
+    expect(account.rows[0].n).toBe(1);
+    expect(account.rows[0].window_s).toBe(14 * 24 * 60 * 60);
+  });
+
+  it("repairs missing default pricing on the linked organization", async () => {
+    const applicant = await newApplicant("pricing-repair", `Prov Pricing Repair ${suffix}`);
+    const organizationId = await approveAndGetOrganization(applicant);
+    await ownerPool.query(`delete from price_lists where organization_id=$1`, [organizationId]);
+
+    const retried = await retryTrialApplicationProvisioningAction(
+      { id: applicant.applicationId },
+      H(platform.cookie),
+    );
+    expect(retried.ok).toBe(true);
+    const pricing = await runWithOrg(db, organizationId, (tx) =>
+      tx.execute(sql`
+        select count(*)::int as total, count(*) filter (where is_active)::int as active
+        from price_lists where organization_id=${organizationId}
+      `),
+    );
+    expect(pricing.rows[0]).toMatchObject({ total: 1, active: 1 });
+  });
+
+  it("adopts an unlinked organization only by immutable application reference", async () => {
+    const applicant = await newApplicant("immutable-adopt", `Prov Immutable Adopt ${suffix}`);
+    const organizationId = await approveAndGetOrganization(applicant);
+    await ownerPool.query(
+      `update trial_applications
+       set organization_id=null, provisioning_status='failed', provisioned_at=null,
+           provisioning_error_code='UNEXPECTED'
+       where id=$1`,
+      [applicant.applicationId],
+    );
+
+    const retried = await retryTrialApplicationProvisioningAction(
+      { id: applicant.applicationId },
+      H(platform.cookie),
+    );
+    expect(retried.ok).toBe(true);
+    const linked = await ownerPool.query(
+      `select organization_id from trial_applications where id=$1`,
+      [applicant.applicationId],
+    );
+    expect(linked.rows[0].organization_id).toBe(organizationId);
+  });
+
+  it("never adopts an unrelated organization that owns the old provisioning slug", async () => {
+    const applicant = await newApplicant("slug-unrelated", `Prov Slug Unrelated ${suffix}`);
+    const slug = stableProvisioningSlug(`Prov Slug Unrelated ${suffix}`, applicant.applicationId);
+    const unrelatedId = await createProvisionedTestOrganization(
+      auth,
+      cleanup,
+      H(outsider.cookie),
+      `Unrelated ${suffix}`,
+      slug,
+    );
+    await ownerPool.query(
+      `update trial_applications
+       set status='approved', reviewed_at=now(), reviewed_by_user_id=$2,
+           reviewed_by_email=$3, provisioning_slug=$4, provisioning_status='failed'
+       where id=$1`,
+      [applicant.applicationId, platform.userId, platform.email, slug],
+    );
+
+    const result = await retryTrialApplicationProvisioningAction(
+      { id: applicant.applicationId },
+      H(platform.cookie),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.provisioning).toMatchObject({
+        state: "failed",
+        errorCode: "ORGANIZATION_CREATE_FAILED",
+      });
+    }
+    const app = await ownerPool.query(
+      `select organization_id from trial_applications where id=$1`,
+      [applicant.applicationId],
+    );
+    expect(app.rows[0].organization_id).toBeNull();
+    const unrelated = await ownerPool.query(
+      `select provisioning_application_id, provisioning_owner_id from organization where id=$1`,
+      [unrelatedId],
+    );
+    expect(unrelated.rows[0]).toEqual({
+      provisioning_application_id: null,
+      provisioning_owner_id: null,
+    });
+  });
+
+  it("converges parallel immutable-identity creation attempts with different display slugs", async () => {
+    const applicant = await newApplicant("identity-race", `Prov Identity Race ${suffix}`);
+    await ownerPool.query(
+      `update trial_applications
+       set status='approved', reviewed_at=now(), reviewed_by_user_id=$2, reviewed_by_email=$3
+       where id=$1`,
+      [applicant.applicationId, platform.userId, platform.email],
+    );
+    const before = await ownerPool.query(`select count(*)::int as n from organization`);
+    const base = {
+      applicationId: applicant.applicationId,
+      ownerUserId: applicant.userId,
+      linkedOrganizationId: null,
+      name: `Prov Identity Race ${suffix}`,
+    };
+    const [a, b] = await Promise.all([
+      createOrAdoptApplicationOrganization({ ...base, slug: `identity-race-a-${suffix}` }),
+      createOrAdoptApplicationOrganization({ ...base, slug: `identity-race-b-${suffix}` }),
+    ]);
+    expect(a.organizationId).toBe(b.organizationId);
+    const after = await ownerPool.query(`select count(*)::int as n from organization`);
+    expect(after.rows[0].n - before.rows[0].n).toBe(1);
+
+    await ownerPool.query(
+      `update trial_applications set organization_id=$2, provisioning_status='failed' where id=$1`,
+      [applicant.applicationId, a.organizationId],
+    );
+    const completed = await retryTrialApplicationProvisioningAction(
+      { id: applicant.applicationId },
+      H(platform.cookie),
+    );
+    expect(completed.ok).toBe(true);
+    if (completed.ok) expect(completed.data.provisioning.state).toBe("provisioned");
+  });
+
+  it("converges parallel owner-membership repair to exactly one row", async () => {
+    const applicant = await newApplicant("member-race", `Prov Member Race ${suffix}`);
+    const organizationId = await approveAndGetOrganization(applicant);
+    await ownerPool.query(`delete from member where organization_id=$1 and user_id=$2`, [
+      organizationId,
+      applicant.userId,
+    ]);
+
+    await Promise.all([
+      repairProvisioningOwnerMembership({
+        applicationId: applicant.applicationId,
+        organizationId,
+        ownerUserId: applicant.userId,
+      }),
+      repairProvisioningOwnerMembership({
+        applicationId: applicant.applicationId,
+        organizationId,
+        ownerUserId: applicant.userId,
+      }),
+    ]);
+    const members = await ownerPool.query(
+      `select count(*)::int as n, max(role) as role
+       from member where organization_id=$1 and user_id=$2`,
+      [organizationId, applicant.userId],
+    );
+    expect(members.rows[0]).toMatchObject({ n: 1, role: "owner" });
+  });
+
+  it("fails without promoting an incompatible existing intended membership", async () => {
+    const applicant = await newApplicant("member-conflict", `Prov Member Conflict ${suffix}`);
+    const organizationId = await approveAndGetOrganization(applicant);
+    await ownerPool.query(
+      `update member set role='member' where organization_id=$1 and user_id=$2`,
+      [organizationId, applicant.userId],
+    );
+
+    const result = await retryTrialApplicationProvisioningAction(
+      { id: applicant.applicationId },
+      H(platform.cookie),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.provisioning).toMatchObject({
+        state: "failed",
+        errorCode: "OWNER_MEMBERSHIP_CONFLICT",
+      });
+    }
+    const membership = await ownerPool.query(
+      `select count(*)::int as n, max(role) as role
+       from member where organization_id=$1 and user_id=$2`,
+      [organizationId, applicant.userId],
+    );
+    expect(membership.rows[0]).toMatchObject({ n: 1, role: "member" });
+  });
+
+  it("rejects public creation and ignores immutable fields on ordinary display updates", async () => {
+    const applicant = await newApplicant("client-fields", `Prov Client Fields ${suffix}`);
+    const organizationId = await approveAndGetOrganization(applicant);
+    const forgedApplicationId = "00000000-0000-4000-8000-000000000001";
+    const forgedOwnerId = "00000000-0000-4000-8000-000000000002";
+
+    await expect(
+      auth.api.createOrganization({
+        headers: H(applicant.cookie),
+        body: {
+          name: "Forged Provisioning Org",
+          slug: `forged-provisioning-${suffix}`,
+          provisioningApplicationId: forgedApplicationId,
+          provisioningOwnerId: forgedOwnerId,
+        } as never,
+      }),
+    ).rejects.toThrow();
+
+    const updated = await auth.api.updateOrganization({
+      headers: H(applicant.cookie),
+      body: {
+        organizationId,
+        data: {
+          slug: `client-fields-renamed-${suffix}`,
+          provisioningApplicationId: forgedApplicationId,
+          provisioningOwnerId: forgedOwnerId,
+        },
+      } as never,
+    });
+    expect(JSON.stringify(updated)).not.toContain("provisioningApplicationId");
+    expect(JSON.stringify(updated)).not.toContain("provisioningOwnerId");
+
+    const identity = await ownerPool.query(
+      `select slug, provisioning_application_id, provisioning_owner_id
+       from organization where id=$1`,
+      [organizationId],
+    );
+    expect(identity.rows[0]).toEqual({
+      slug: `client-fields-renamed-${suffix}`,
+      provisioning_application_id: applicant.applicationId,
+      provisioning_owner_id: applicant.userId,
+    });
+  });
+
+  it("fails explicitly when provisioning_owner_id conflicts with the applicant", async () => {
+    const applicant = await newApplicant("owner-conflict", `Prov Owner Conflict ${suffix}`);
+    const organizationId = await approveAndGetOrganization(applicant);
+    await ownerPool.query(`update organization set provisioning_owner_id=$2 where id=$1`, [
+      organizationId,
+      outsider.userId,
+    ]);
+
+    const result = await retryTrialApplicationProvisioningAction(
+      { id: applicant.applicationId },
+      H(platform.cookie),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.provisioning).toMatchObject({
+        state: "failed",
+        errorCode: "PROVISIONING_IDENTITY_CONFLICT",
+      });
+    }
+    const member = await ownerPool.query(
+      `select user_id, role from member where organization_id=$1 order by user_id`,
+      [organizationId],
+    );
+    expect(member.rows).toEqual([{ user_id: applicant.userId, role: "owner" }]);
   });
 });
 
